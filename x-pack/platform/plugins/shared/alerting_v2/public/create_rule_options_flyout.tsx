@@ -226,6 +226,9 @@ const CreateRuleOptionsFlyoutInner = ({
         size="s"
         ownFocus
         onClose={onClose}
+        aria-label={i18n.translate('xpack.alertingV2.createAlertFlyout.loadingFlyoutAriaLabel', {
+          defaultMessage: 'Create rule',
+        })}
         data-test-subj="createAlertFlyoutLoading"
       >
         <EuiFlyoutBody>
@@ -265,6 +268,8 @@ const CreateRuleOptionsFlyoutInner = ({
           builderType="threshold"
           onCreateRule={handleCreateRule}
           isSaving={isSaving}
+          initialQuery={query}
+          esqlVariables={esqlVariables}
         />
       </Context.Provider>
     );
@@ -278,13 +283,15 @@ const CreateRuleOptionsFlyoutInner = ({
   }
 
   return (
-    <RuleCreateOptionsFlyout
-      onClose={onClose}
-      onCreateEsqlRule={() => setStep({ type: 'esql' })}
-      onCreateWithAgent={navigateToAgentBuilder}
-      onCreateThresholdAlert={() => setStep({ type: 'threshold' })}
-      legacyRuleTypes={legacyPanelItems}
-    />
+    <Context.Provider value={services.container}>
+      <RuleCreateOptionsFlyout
+        onClose={onClose}
+        onCreateEsqlRule={() => setStep({ type: 'esql' })}
+        onCreateWithAgent={navigateToAgentBuilder}
+        onCreateThresholdRule={() => setStep({ type: 'threshold' })}
+        legacyRuleTypes={legacyPanelItems}
+      />
+    </Context.Provider>
   );
 };
 

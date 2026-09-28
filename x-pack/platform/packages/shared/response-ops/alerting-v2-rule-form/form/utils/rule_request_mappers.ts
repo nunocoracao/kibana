@@ -5,13 +5,29 @@
  * 2.0.
  */
 
-import type { RuleResponse, CreateRuleData, Query, UpdateRuleData } from '@kbn/alerting-v2-schemas';
-import { DELAY_MODE } from '../types';
-import type { FormValues, StateTransition, RuleQuery } from '../types';
+import type {
+  RuleResponse,
+  CreateRuleData,
+  NoData,
+  Query,
+  Recovery,
+  StateTransition,
+  UpdateRuleData,
+} from '@kbn/alerting-v2-schemas';
+import type { FormValues } from '../types';
 import {
+  apiStateTransitionToFormStateTransition,
+  buildStateTransitionRequest,
   deriveAlertDelayModeFromStateTransition,
   deriveRecoveryDelayModeFromStateTransition,
-} from '../types';
+} from './state_transition_helpers';
+import { ruleQueryToApiQuery, apiQueryToFormQuery } from './query_mappers';
+import {
+  apiNoDataToFormNoData,
+  apiRecoveryToFormRecovery,
+  formNoDataToApiNoData,
+  formRecoveryToApiRecovery,
+} from './lifecycle_mappers';
 import {
   mapArtifacts,
   mergeArtifactsByType,
@@ -26,7 +42,6 @@ import {
 const mapMetadata = (metadata: FormValues['metadata']) => ({
   name: metadata.name,
   description: metadata.description,
-  owner: metadata.owner,
   ...(metadata.tags?.length ? { tags: metadata.tags } : {}),
 });
 
@@ -35,101 +50,40 @@ const mapSchedule = (schedule: FormValues['schedule']) => ({
   lookback: schedule.lookback,
 });
 
-const mapQuery = (query: RuleQuery): Query => {
-  if (query.format === 'composed') {
-    return {
-      format: 'composed',
-      base: query.base,
-      breach: { segment: query.breach.segment },
-      ...(query.recovery ? { recovery: { segment: query.recovery.segment } } : {}),
-    };
-  }
-  return {
-    format: 'standalone',
-    breach: { query: query.breach.query },
-    ...(query.recovery ? { recovery: { query: query.recovery.query } } : {}),
-  };
-};
-
 const mapGrouping = (grouping: FormValues['grouping']) =>
   grouping?.fields?.length ? { fields: grouping.fields } : undefined;
-
-const mapStateTransition = (formValues: FormValues) => {
-  const { kind, stateTransition } = formValues;
-  if (kind !== 'alert') return undefined;
-
-  const alertMode =
-    formValues.stateTransitionAlertDelayMode ??
-    deriveAlertDelayModeFromStateTransition(stateTransition);
-  const recoveryMode =
-    formValues.stateTransitionRecoveryDelayMode ??
-    deriveRecoveryDelayModeFromStateTransition(stateTransition);
-
-  const out: NonNullable<RuleRequestCommon['state_transition']> = {};
-
-  if (alertMode === DELAY_MODE.immediate) {
-    out.pending_count = 0;
-  } else if (alertMode === DELAY_MODE.breaches && stateTransition?.pendingCount != null) {
-    out.pending_count = stateTransition.pendingCount;
-  } else if (alertMode === DELAY_MODE.duration) {
-    if (stateTransition?.pendingTimeframe != null) {
-      out.pending_timeframe = stateTransition.pendingTimeframe;
-    }
-    if (stateTransition?.pendingCount != null) {
-      out.pending_count = stateTransition.pendingCount;
-    }
-  }
-
-  if (recoveryMode === DELAY_MODE.immediate) {
-    out.recovering_count = 0;
-  } else if (recoveryMode !== DELAY_MODE.duration && stateTransition?.recoveringCount != null) {
-    out.recovering_count = stateTransition.recoveringCount;
-  } else if (recoveryMode === DELAY_MODE.duration) {
-    if (stateTransition?.recoveringTimeframe != null) {
-      out.recovering_timeframe = stateTransition.recoveringTimeframe;
-    }
-    if (stateTransition?.recoveringCount != null) {
-      out.recovering_count = stateTransition.recoveringCount;
-    }
-  }
-
-  if (Object.keys(out).length === 0) return undefined;
-  return out;
-};
 
 /**
  * Common rule request shape shared between create and update payloads.
  * Contains all fields except `kind` (only required for create).
  */
 export interface RuleRequestCommon {
-  metadata: { name: string; description?: string; owner?: string; tags?: string[] };
+  metadata: { name: string; description?: string; tags?: string[] };
   time_field: string;
   schedule: { every: string; lookback?: string };
   query: Query;
-  recovery_strategy?: 'query';
+  recovery?: Recovery;
+  no_data?: NoData;
   grouping?: { fields: string[] };
-  state_transition?: {
-    pending_count?: number;
-    pending_timeframe?: string;
-    recovering_count?: number;
-    recovering_timeframe?: string;
-  };
+  state_transition?: StateTransition;
   artifacts?: RuleArtifactPayload;
 }
 
 export const mapFormValuesToRuleRequest = (formValues: FormValues): RuleRequestCommon => {
   const { metadata, timeField, schedule, query, grouping } = formValues;
   const mappedArtifacts = mapArtifacts(mergeArtifactsByType(formValues));
-  const hasRecovery = query.recovery != null;
+  const recovery = formRecoveryToApiRecovery(formValues);
+  const noData = formNoDataToApiNoData(formValues);
 
   return {
     metadata: mapMetadata(metadata),
     time_field: timeField,
     schedule: mapSchedule(schedule),
-    query: mapQuery(query),
-    ...(hasRecovery ? { recovery_strategy: 'query' as const } : {}),
+    query: ruleQueryToApiQuery(query),
+    ...(recovery ? { recovery } : {}),
+    ...(noData ? { no_data: noData } : {}),
     grouping: mapGrouping(grouping),
-    state_transition: mapStateTransition(formValues),
+    state_transition: buildStateTransitionRequest(formValues),
     ...(mappedArtifacts ? { artifacts: mappedArtifacts } : {}),
   };
 };
@@ -154,36 +108,8 @@ export const mapFormValuesToUpdateRequest = (formValues: FormValues): UpdateRule
 // API response → FormValues
 // ---------------------------------------------------------------------------
 
-const apiQueryToRuleQuery = (
-  q: RuleResponse['query'],
-  recoveryStrategy?: RuleResponse['recovery_strategy']
-): RuleQuery => {
-  if (q.format === 'composed') {
-    return {
-      format: 'composed',
-      base: q.base,
-      breach: { segment: q.breach.segment },
-      ...(recoveryStrategy === 'query' && q.recovery
-        ? { recovery: { segment: q.recovery.segment } }
-        : {}),
-    };
-  }
-  return {
-    format: 'standalone',
-    breach: { query: q.breach.query },
-    ...(recoveryStrategy === 'query' && q.recovery
-      ? { recovery: { query: q.recovery.query } }
-      : {}),
-  };
-};
-
 export const mapRuleResponseToFormValues = (rule: RuleResponse): Partial<FormValues> => {
-  const stateTransition: StateTransition = {
-    pendingCount: rule.state_transition?.pending_count ?? null,
-    pendingTimeframe: rule.state_transition?.pending_timeframe ?? null,
-    recoveringCount: rule.state_transition?.recovering_count ?? null,
-    recoveringTimeframe: rule.state_transition?.recovering_timeframe ?? null,
-  };
+  const stateTransition = apiStateTransitionToFormStateTransition(rule.state_transition);
 
   return {
     kind: rule.kind,
@@ -191,7 +117,6 @@ export const mapRuleResponseToFormValues = (rule: RuleResponse): Partial<FormVal
       name: rule.metadata.name,
       description: rule.metadata.description,
       enabled: rule.enabled,
-      owner: rule.metadata.owner,
       tags: rule.metadata.tags,
     },
     timeField: rule.time_field,
@@ -199,7 +124,9 @@ export const mapRuleResponseToFormValues = (rule: RuleResponse): Partial<FormVal
       every: rule.schedule.every,
       lookback: rule.schedule.lookback ?? '1m',
     },
-    query: apiQueryToRuleQuery(rule.query, rule.recovery_strategy),
+    query: apiQueryToFormQuery(rule.query),
+    recovery: apiRecoveryToFormRecovery(rule.recovery),
+    noData: apiNoDataToFormNoData(rule.no_data),
     ...(rule.grouping ? { grouping: { fields: rule.grouping.fields } } : {}),
     stateTransition,
     stateTransitionAlertDelayMode: deriveAlertDelayModeFromStateTransition(stateTransition),

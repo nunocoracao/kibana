@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import type { AnyAction, Store } from 'redux';
+import type { AnyAction, Store } from 'redux-v4';
 import type { ReactWrapper } from 'enzyme';
 import { mount } from 'enzyme';
 import type { History as HistoryPackageHistoryInterface } from 'history';
@@ -112,16 +112,6 @@ export class Simulator {
     this.store = createMockStore(
       {
         ...mockGlobalState,
-        sourcerer: {
-          ...mockGlobalState.sourcerer,
-          sourcererScopes: {
-            ...mockGlobalState.sourcerer.sourcererScopes,
-            analyzer: {
-              ...mockGlobalState.sourcerer.sourcererScopes.default,
-              selectedPatterns: indices,
-            },
-          },
-        },
         analyzer: {
           [resolverComponentInstanceID]: EMPTY_RESOLVER,
         },
@@ -253,6 +243,17 @@ export class Simulator {
    * Yield the result of `mapper` over and over, once per event-loop cycle.
    * After 10 times, quit.
    * Use this to continually check a value. See `toYieldEqualTo`.
+   *
+   * Each iteration waits for a `setTimeout(0)` callback that calls
+   * `forceAutoSizerOpen()` and `wrapper.update()`. These are wrapped in a
+   * try-catch so that a stale or mid-unmount wrapper cannot leave the
+   * returned Promise unresolved and cause a `beforeEach` hook to time out.
+   *
+   * When the consumer breaks from the iteration early (e.g., `toYieldEqualTo`
+   * finds a match and exits its `for await...of` loop), the generator is
+   * terminated at the `yield` point via `generator.return()`. Because the
+   * termination happens before the code after `yield` runs, no `setTimeout`
+   * is registered and no cleanup is required.
    */
   public async *map<R>(mapper: (() => Promise<R>) | (() => R)): AsyncIterable<R> {
     let timeoutCount = 0;

@@ -13,7 +13,7 @@ import { dataViewMock } from '@kbn/discover-utils/src/__mocks__';
 import { AppMenuActionId } from '@kbn/discover-utils';
 import { BehaviorSubject } from 'rxjs';
 import { triggersActionsUiMock } from '@kbn/triggers-actions-ui-plugin/public/mocks';
-import { useTopNavLinks } from './use_top_nav_links';
+import { useTopNavLinks, type UseTopNavLinksParams } from './use_top_nav_links';
 import { getDiscoverInternalStateMock } from '../../../../__mocks__/discover_state.mock';
 import { createDiscoverServicesMock } from '../../../../__mocks__/services';
 import { DiscoverToolkitTestProvider } from '../../../../__mocks__/test_provider';
@@ -21,12 +21,7 @@ import { internalStateActions } from '../../state_management/redux';
 import { ENABLE_ESQL } from '@kbn/esql-utils';
 import { sharePluginMock } from '@kbn/share-plugin/public/mocks';
 import type { DiscoverServices } from '../../../../build_services';
-import type {
-  AlertsLegacyRuleType,
-  AppMenuExtension,
-  AppMenuExtensionParams,
-  Profile,
-} from '../../../../context_awareness/types';
+import type { AppMenuExtension, AppMenuExtensionParams } from '../../../../context_awareness/types';
 import { useProfileAccessor } from '../../../../context_awareness/hooks/use_profile_accessor';
 import * as getAlerts from './app_menu_actions/get_alerts';
 
@@ -48,13 +43,14 @@ jest.mock('../../../../context_awareness/hooks/use_profile_accessor', () => ({
   useProfileAccessor: jest.fn((accessorId: string) => jest.fn((baseImpl) => baseImpl)),
 }));
 
-const mockUseProfileAccessor = useProfileAccessor as jest.MockedFunction<typeof useProfileAccessor>;
+const mockUseProfileAccessor = jest.mocked(useProfileAccessor);
 
 const createTestServices = (overrides: Partial<DiscoverServices> = {}): DiscoverServices => {
   const services = createDiscoverServicesMock();
   const uiSettingsGetMock = services.uiSettings.get;
 
   services.share = sharePluginMock.createStartContract();
+  jest.mocked(services.share.availableIntegrations).mockReturnValue([]);
   services.application.currentAppId$ = new BehaviorSubject('discover');
   services.capabilities.discover_v2 = {
     save: true,
@@ -63,7 +59,7 @@ const createTestServices = (overrides: Partial<DiscoverServices> = {}): Discover
   services.capabilities.management = {
     ...services.capabilities.management,
     insightsAndAlerting: {
-      triggersActions: true,
+      triggersActionsRules: true,
     },
   };
   services.uiSettings.get = <T,>(key: string) => {
@@ -71,6 +67,12 @@ const createTestServices = (overrides: Partial<DiscoverServices> = {}): Discover
   };
 
   services.settings.globalClient.get = <T,>(_key: string) => true as T;
+  services.core.application.capabilities = {
+    ...services.core.application.capabilities,
+    alerting_v2_rules: {
+      all: true,
+    },
+  };
 
   // Apply overrides
   return {
@@ -84,7 +86,7 @@ const createTestServices = (overrides: Partial<DiscoverServices> = {}): Discover
 };
 
 describe('useTopNavLinks', () => {
-  const setup = async (hookAttrs: Partial<Parameters<typeof useTopNavLinks>[0]> = {}) => {
+  const setup = async (hookAttrs: Partial<UseTopNavLinksParams> = {}) => {
     const services = hookAttrs.services ?? createTestServices();
     const toolkit = getDiscoverInternalStateMock({ services });
     const testDataView = hookAttrs.dataView ?? dataViewMock;
@@ -111,7 +113,6 @@ describe('useTopNavLinks', () => {
           hasUnsavedChanges: false,
           isEsqlMode: false,
           adHocDataViews: [],
-          hasShareIntegration: false,
           persistedDiscoverSession: undefined,
           ...hookAttrs,
           onOpenSaveModal: hookAttrs.onOpenSaveModal ?? jest.fn(),
@@ -122,7 +123,7 @@ describe('useTopNavLinks', () => {
           <DiscoverToolkitTestProvider toolkit={toolkit}>{children}</DiscoverToolkitTestProvider>
         ),
       }
-    ).result.current;
+    ).result.current.menu;
   };
 
   it('should return results', async () => {
@@ -176,7 +177,7 @@ describe('useTopNavLinks', () => {
       expect(switchLanguageModeItem).toBeDefined();
       expect(switchLanguageModeItem?.label).toBe('Query in ES|QL');
       expect(switchLanguageModeItem?.tooltipContent).toBe(
-        'Search, transform, join, and aggregate your data with ES|QL or PromQL'
+        'Search, transform, join and aggregate your data with ES|QL or PromQL'
       );
     });
   });
@@ -187,7 +188,7 @@ describe('useTopNavLinks', () => {
 
       jest.spyOn(services.share!, 'availableIntegrations').mockReturnValue([]);
 
-      const appMenuConfig = await setup({ hasShareIntegration: true, services });
+      const appMenuConfig = await setup({ services });
 
       expect(appMenuConfig.items).toBeDefined();
 
@@ -216,17 +217,118 @@ describe('useTopNavLinks', () => {
           return [];
         });
 
-      const appMenuConfig = await setup({ hasShareIntegration: true, services });
+      const appMenuConfig = await setup({ services });
 
       const exportItem = appMenuConfig.items?.find((item) => item.id === 'export');
       expect(exportItem).toBeDefined();
-      expect(exportItem?.label).toBe('Export tab results');
+      expect(exportItem?.label).toBe('Export');
 
-      expect(exportItem?.items).toBeDefined();
-      expect(exportItem?.items?.length).toBeGreaterThan(0);
+      const exportJsonItems = exportItem?.items?.filter(({ id }) => id === 'exportJson');
+      expect(exportJsonItems).toHaveLength(1);
+      expect(exportJsonItems?.[0]).toEqual(
+        expect.objectContaining({
+          label: 'Export JSON',
+          testId: 'exportMenuItem-JSON',
+          iconType: 'code',
+          order: 3,
+          run: expect.any(Function),
+        })
+      );
 
       const shareItem = appMenuConfig.items?.find((item) => item.id === 'share');
       expect(shareItem).toBeDefined();
+    });
+
+    it('should include unknown export integrations with fallback presentation', async () => {
+      const services = createTestServices();
+
+      jest
+        .spyOn(services.share!, 'availableIntegrations')
+        .mockImplementation((_objectType, groupId) => {
+          if (groupId === 'exportDerivatives') {
+            return [
+              {
+                id: 'newIntegration',
+                shareType: 'integration' as const,
+                groupId: 'exportDerivatives',
+                config: () => Promise.resolve({}),
+              },
+            ];
+          }
+          return [];
+        });
+
+      const appMenuConfig = await setup({ services });
+
+      const exportItem = appMenuConfig.items?.find((item) => item.id === 'export');
+      const fallbackItem = exportItem?.items?.find(({ id }) => id === 'newIntegration');
+
+      expect(fallbackItem).toBeDefined();
+      expect(fallbackItem?.label).toBe('newIntegration');
+      expect(fallbackItem?.testId).toBe('exportMenuItem-newIntegration');
+      expect(fallbackItem?.order).toBe(100);
+    });
+
+    it('includes Schedule export when CSV reporting is available', async () => {
+      const services = createTestServices();
+
+      jest
+        .spyOn(services.share!, 'availableIntegrations')
+        .mockImplementation((_objectType, groupId) => {
+          if (groupId === 'export') {
+            return [
+              {
+                id: 'csvReports',
+                shareType: 'integration' as const,
+                groupId: 'export',
+                config: () => Promise.resolve({}),
+              },
+            ];
+          }
+          if (groupId === 'exportDerivatives') {
+            return [
+              {
+                id: 'scheduledReports',
+                shareType: 'integration' as const,
+                groupId: 'exportDerivatives',
+                config: () => Promise.resolve({}),
+              },
+            ];
+          }
+          return [];
+        });
+
+      const appMenuConfig = await setup({ services });
+
+      const exportItem = appMenuConfig.items?.find((item) => item.id === 'export');
+      expect(exportItem?.items?.map((item) => item.id)).toEqual(
+        expect.arrayContaining(['csvReports', 'scheduledReports', 'exportJson'])
+      );
+    });
+
+    it('hides Schedule export when CSV reporting is not available', async () => {
+      const services = createTestServices();
+
+      jest
+        .spyOn(services.share!, 'availableIntegrations')
+        .mockImplementation((_objectType, groupId) => {
+          if (groupId === 'exportDerivatives') {
+            return [
+              {
+                id: 'scheduledReports',
+                shareType: 'integration' as const,
+                groupId: 'exportDerivatives',
+                config: () => Promise.resolve({}),
+              },
+            ];
+          }
+          return [];
+        });
+
+      const appMenuConfig = await setup({ services });
+
+      const exportItem = appMenuConfig.items?.find((item) => item.id === 'export');
+      expect(exportItem?.items?.map((item) => item.id)).not.toContain('scheduledReports');
     });
   });
 
@@ -374,7 +476,7 @@ describe('useTopNavLinks', () => {
 
   describe('alerting v2 rules menu', () => {
     const setupWithAlertingV2 = async (
-      hookAttrs: Partial<Parameters<typeof useTopNavLinks>[0]> = {},
+      hookAttrs: Partial<UseTopNavLinksParams> = {},
       alertingV2Enabled = true
     ) => {
       const baseMock = createDiscoverServicesMock();
@@ -388,16 +490,20 @@ describe('useTopNavLinks', () => {
           management: {
             ...baseMock.capabilities.management,
             insightsAndAlerting: {
-              triggersActions: true,
+              triggersActionsRules: true,
             },
           },
-          ...(alertingV2Enabled ? { alertingVTwo: {} } : {}),
         },
         alertingVTwo: alertingV2Enabled ? baseMock.alertingVTwo : undefined,
         triggersActionsUi: triggersActionsUiMock.createStart(),
       });
 
       v2Services.settings.globalClient.get = <T,>(_key: string) => alertingV2Enabled as T;
+      if (!alertingV2Enabled) {
+        const { alerting_v2_rules: _alertingV2Rules, ...capabilitiesWithoutRules } =
+          v2Services.core.application.capabilities;
+        v2Services.core.application.capabilities = capabilitiesWithoutRules;
+      }
 
       const toolkit = getDiscoverInternalStateMock({ services: v2Services });
       await toolkit.initializeTabs();
@@ -427,7 +533,6 @@ describe('useTopNavLinks', () => {
             hasUnsavedChanges: false,
             isEsqlMode: true,
             adHocDataViews: [],
-            hasShareIntegration: false,
             persistedDiscoverSession: undefined,
             ...hookAttrs,
             onOpenSaveModal: hookAttrs.onOpenSaveModal ?? jest.fn(),
@@ -438,20 +543,10 @@ describe('useTopNavLinks', () => {
             <DiscoverToolkitTestProvider toolkit={toolkit}>{children}</DiscoverToolkitTestProvider>
           ),
         }
-      ).result.current;
+      ).result.current.menu;
     };
 
-    it('should include the alerts menu as a direct action when alerting v2 is enabled', async () => {
-      const appMenuConfig = await setupWithAlertingV2({ isEsqlMode: true }, true);
-
-      const alertsItem = appMenuConfig.items?.find((item) => item.id === AppMenuActionId.alerts);
-      expect(alertsItem).toBeDefined();
-      expect(alertsItem?.label).toBe('Create alert rule');
-      expect(alertsItem?.run).toBeDefined();
-      expect(alertsItem?.items).toBeUndefined();
-    });
-
-    it('should show the v2 selector flyout only in ES|QL mode and fall back to v1 popover in classic mode', async () => {
+    it('should use the v2 selector flyout in ES|QL mode and the v1 popover in classic mode', async () => {
       const esqlConfig = await setupWithAlertingV2({ isEsqlMode: true }, true);
       const classicConfig = await setupWithAlertingV2({ isEsqlMode: false }, true);
 
@@ -459,10 +554,12 @@ describe('useTopNavLinks', () => {
       const classicAlerts = classicConfig.items?.find((item) => item.id === AppMenuActionId.alerts);
 
       expect(esqlAlerts).toBeDefined();
+      expect(esqlAlerts?.label).toBe('Create alert rule');
+      expect(esqlAlerts?.run).toBeDefined();
       expect(esqlAlerts?.items).toBeUndefined();
       expect(classicAlerts).toBeDefined();
       expect(classicAlerts?.items).toBeDefined();
-      expect(classicAlerts?.items!.length).toBeGreaterThan(0);
+      expect(classicAlerts?.items?.length).toBeGreaterThan(0);
     });
 
     it('should fall back to v1 popover items when alerting v2 is disabled', async () => {
@@ -471,26 +568,29 @@ describe('useTopNavLinks', () => {
       const alertsItem = appMenuConfig.items?.find((item) => item.id === AppMenuActionId.alerts);
       expect(alertsItem).toBeDefined();
       expect(alertsItem?.items).toBeDefined();
-      expect(alertsItem?.items!.length).toBeGreaterThan(0);
+      expect(alertsItem?.items?.length).toBeGreaterThan(0);
     });
 
-    describe('getAlertsLegacyRuleTypes', () => {
-      const profileLegacyRule: AlertsLegacyRuleType = {
-        id: 'custom-threshold-rule',
-        label: 'Create custom threshold rule',
-        render: jest.fn(() => null),
-      };
-
+    describe('profile alerts popover items', () => {
       beforeEach(() => {
         mockUseProfileAccessor.mockImplementation((accessorId) => {
           if (accessorId === 'getAppMenu') {
-            return jest.fn((baseImpl) => {
-              const getAppMenu = baseImpl as Profile['getAppMenu'];
+            return jest.fn(() => {
+              return (params: AppMenuExtensionParams): AppMenuExtension => {
+                return {
+                  appMenuRegistry: (registry) => {
+                    registry.registerPopoverItem(AppMenuActionId.alerts, {
+                      id: 'custom-threshold-rule',
+                      order: 2,
+                      label: 'Create custom threshold rule',
+                      testId: 'discoverAppMenuCustomThresholdRule',
+                      render: jest.fn(() => null),
+                    });
 
-              return (params: AppMenuExtensionParams): AppMenuExtension => ({
-                ...getAppMenu(params),
-                getAlertsLegacyRuleTypes: () => [profileLegacyRule],
-              });
+                    return registry;
+                  },
+                };
+              };
             });
           }
 
@@ -502,32 +602,35 @@ describe('useTopNavLinks', () => {
         mockUseProfileAccessor.mockImplementation((accessorId) => jest.fn((baseImpl) => baseImpl));
       });
 
-      it('should pass profile legacy rule types to getAlertsAppMenuItem in ES|QL mode', async () => {
-        const getAlertsSpy = jest.spyOn(getAlerts, 'getAlertsAppMenuItem');
+      it('should apply profile popover items before replacing the ES|QL alerts menu', async () => {
+        const getCreateRuleOptionsSpy = jest.spyOn(getAlerts, 'getCreateRuleOptionsAppMenuItem');
 
-        await setupWithAlertingV2({ isEsqlMode: true }, true);
+        try {
+          await setupWithAlertingV2({ isEsqlMode: true }, true);
+          const classicConfig = await setupWithAlertingV2({ isEsqlMode: false }, true);
 
-        expect(getAlertsSpy).toHaveBeenCalledWith(
-          expect.objectContaining({
-            showCreateRuleV2: true,
-            additionalLegacyRuleTypes: expect.arrayContaining([
-              expect.objectContaining({
-                id: 'custom-threshold-rule',
-                label: 'Create custom threshold rule',
-              }),
-            ]),
-          })
-        );
+          const [{ alertsPopoverItems }] = getCreateRuleOptionsSpy.mock.calls[0];
+          expect(
+            alertsPopoverItems.map(({ id, label, testId }) => ({ id, label, testId }))
+          ).toContainEqual({
+            id: 'custom-threshold-rule',
+            label: 'Create custom threshold rule',
+            testId: 'discoverAppMenuCustomThresholdRule',
+          });
 
-        getAlertsSpy.mockRestore();
-      });
+          const alertsItem = classicConfig.items?.find(
+            (item) => item.id === AppMenuActionId.alerts
+          );
+          const classicPopoverItems = alertsItem?.items?.map(({ id, label }) => ({ id, label }));
 
-      it('should not expose getAlertsLegacyRuleTypes through the v2 flyout in classic mode', async () => {
-        const appMenuConfig = await setupWithAlertingV2({ isEsqlMode: false }, true);
-
-        const alertsItem = appMenuConfig.items?.find((item) => item.id === AppMenuActionId.alerts);
-        expect(alertsItem?.run).toBeUndefined();
-        expect(alertsItem?.items).toBeDefined();
+          expect(alertsItem?.run).toBeUndefined();
+          expect(classicPopoverItems).toContainEqual({
+            id: 'custom-threshold-rule',
+            label: 'Create custom threshold rule',
+          });
+        } finally {
+          getCreateRuleOptionsSpy.mockRestore();
+        }
       });
     });
   });
@@ -535,7 +638,7 @@ describe('useTopNavLinks', () => {
   describe('alerts menu when only alerting v2 capability is granted', () => {
     /**
      * Users with v2 access but no v1 rule-type authorization should still see
-     * the Alerts menu (containing only the v2 ES|QL rule entry) when in ES|QL
+     * the Alerts menu as a direct v2 action when in ES|QL
      * mode. Verifies the parent gate considers v2 access independently.
      */
     const setupV2OnlyServices = (
@@ -550,18 +653,22 @@ describe('useTopNavLinks', () => {
             save: true,
             storeSearchSession: true,
           },
-          // No v1 management.insightsAndAlerting.triggersActions capability.
+          // No v1 management.insightsAndAlerting.triggersActionsRules capability.
           management: {
             ...baseMock.capabilities.management,
             insightsAndAlerting: {},
           },
-          ...(alertingVTwoEnabled ? { alertingVTwo: {} } : {}),
         },
         alertingVTwo: alertingVTwoEnabled ? baseMock.alertingVTwo : undefined,
         triggersActionsUi: triggersActionsUiMock.createStart(),
       });
 
       v2OnlyServices.settings.globalClient.get = <T,>(_key: string) => alertingVTwoEnabled as T;
+      if (!alertingVTwoEnabled) {
+        const { alerting_v2_rules: _alertingV2Rules, ...capabilitiesWithoutRules } =
+          v2OnlyServices.core.application.capabilities;
+        v2OnlyServices.core.application.capabilities = capabilitiesWithoutRules;
+      }
 
       return v2OnlyServices;
     };
@@ -587,29 +694,7 @@ describe('useTopNavLinks', () => {
 
     it('should show the v2 selector flyout as a direct action when only alerting v2 is granted', async () => {
       const services = setupV2OnlyServices();
-      const toolkit = getDiscoverInternalStateMock({ services });
-      await toolkit.initializeTabs();
-      await toolkit.initializeSingleTab({ tabId: toolkit.getCurrentTab().id });
-
-      const appMenuConfig = renderHook(
-        () =>
-          useTopNavLinks({
-            dataView: dataViewMock,
-            services,
-            hasUnsavedChanges: false,
-            isEsqlMode: true,
-            adHocDataViews: [],
-            hasShareIntegration: false,
-            persistedDiscoverSession: undefined,
-            onOpenSaveModal: jest.fn(),
-            onOpenSaveAsModal: jest.fn(),
-          }),
-        {
-          wrapper: ({ children }) => (
-            <DiscoverToolkitTestProvider toolkit={toolkit}>{children}</DiscoverToolkitTestProvider>
-          ),
-        }
-      ).result.current;
+      const appMenuConfig = await setup({ services, isEsqlMode: true });
 
       const alertsItem = appMenuConfig.items?.find((item) => item.id === AppMenuActionId.alerts);
       expect(alertsItem).toBeDefined();
@@ -619,29 +704,7 @@ describe('useTopNavLinks', () => {
 
     it('should NOT include the alerts menu when neither v1 nor v2 access is granted', async () => {
       const services = setupV2OnlyServices({ alertingVTwoEnabled: false });
-      const toolkit = getDiscoverInternalStateMock({ services });
-      await toolkit.initializeTabs();
-      await toolkit.initializeSingleTab({ tabId: toolkit.getCurrentTab().id });
-
-      const appMenuConfig = renderHook(
-        () =>
-          useTopNavLinks({
-            dataView: dataViewMock,
-            services,
-            hasUnsavedChanges: false,
-            isEsqlMode: true,
-            adHocDataViews: [],
-            hasShareIntegration: false,
-            persistedDiscoverSession: undefined,
-            onOpenSaveModal: jest.fn(),
-            onOpenSaveAsModal: jest.fn(),
-          }),
-        {
-          wrapper: ({ children }) => (
-            <DiscoverToolkitTestProvider toolkit={toolkit}>{children}</DiscoverToolkitTestProvider>
-          ),
-        }
-      ).result.current;
+      const appMenuConfig = await setup({ services, isEsqlMode: true });
 
       const alertsItem = appMenuConfig.items?.find((item) => item.id === AppMenuActionId.alerts);
       expect(alertsItem).toBeUndefined();
@@ -652,9 +715,7 @@ describe('useTopNavLinks', () => {
     it('should add the separator above the first tab-scoped app menu item', async () => {
       const services = createTestServices();
 
-      jest.spyOn(services.share!, 'availableIntegrations').mockReturnValue([]);
-
-      let appMenuConfig = await setup({ hasShareIntegration: true, services });
+      let appMenuConfig = await setup({ services });
 
       let exportItem = appMenuConfig.items?.find((item) => item.id === AppMenuActionId.export);
       let inspectItem = appMenuConfig.items?.find((item) => item.id === AppMenuActionId.inspect);
@@ -662,12 +723,13 @@ describe('useTopNavLinks', () => {
       expect(exportItem?.separator).toBe('above');
       expect(inspectItem?.separator).toBeUndefined();
 
-      appMenuConfig = await setup({ services });
+      const servicesWithoutShare = createTestServices({ share: undefined });
+      appMenuConfig = await setup({ services: servicesWithoutShare });
 
       exportItem = appMenuConfig.items?.find((item) => item.id === AppMenuActionId.export);
       inspectItem = appMenuConfig.items?.find((item) => item.id === AppMenuActionId.inspect);
 
-      expect(exportItem?.separator).toBeUndefined();
+      expect(exportItem).toBeUndefined();
       expect(inspectItem?.separator).toBe('above');
     });
   });

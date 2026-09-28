@@ -55,8 +55,15 @@ describe('resumeWorkflowExecutionTool', () => {
       'exec-1',
       'default',
       { approved: true },
-      mockContext.request
+      mockContext.request,
+      { channel: 'agent_builder' }
     );
+    expect(getExecutionState).toHaveBeenCalledWith({
+      executionId: 'exec-1',
+      spaceId: 'default',
+      workflowApi: wm.management,
+      request: mockContext.request,
+    });
   });
 
   it('should return resumed state on success', async () => {
