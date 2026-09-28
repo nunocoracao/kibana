@@ -18,7 +18,6 @@ import {
   formatWorkerSettingsIssues,
   getCompleteWorkerSettingsSchema,
   getWorkerSettingsDeclaration,
-  projectStoredAutonomyLevel,
   type WorkerSettings,
 } from '@kbn/alertzero-common';
 import type { ManagedWorkflowTemplateValues } from '@kbn/workflows/managed';
@@ -45,7 +44,7 @@ const WORKER_SETTINGS_VERSIONS: Record<RegisteredWorkerId, number> = {
  * Template values mirror the settings API: shared fields flat (with the legacy `autonomyLevel`
  * key the YAML templates read), Worker-specific fields nested under `extras`.
  */
-const toTemplateValues = (
+export const toTemplateValues = (
   workerId: RegisteredWorkerId,
   settings: WorkerSettings
 ): ManagedWorkflowTemplateValues => ({
@@ -59,9 +58,8 @@ const toTemplateValues = (
 
 /**
  * Reads persisted template values. Missing schedule and extras keys are filled from the current
- * defaults first; a present value is left as stored, so an out-of-range value still fails here
- * and the Worker projects as unavailable. Autonomy is projected when the Worker no longer offers
- * the stored level.
+ * defaults first; a present value is left as stored, so an out-of-range or disallowed value still
+ * fails here and the Worker projects as unavailable.
  */
 const parseWorkerValues = (
   workerId: RegisteredWorkerId,
@@ -86,7 +84,7 @@ const parseWorkerValues = (
 
   const candidate = {
     workerId,
-    autonomy: projectStoredAutonomyLevel(getWorkerSettingsDeclaration(workerId), autonomyLevel),
+    autonomy: autonomyLevel,
     ...(scheduleInterval === undefined ? {} : { scheduleInterval }),
     ...(extras === undefined ? {} : { extras }),
   };
