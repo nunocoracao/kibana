@@ -129,6 +129,7 @@ export const memoryOptimizeStepDefinition = ({
               logger,
               getAgentBuilder,
               connectorId: context.input.connector_id,
+              conversationId: context.input.conversation_id,
             }),
           OPTIMIZE_TIMEOUT_MS,
           `Memory optimize timed out after ${OPTIMIZE_TIMEOUT_MS}ms`

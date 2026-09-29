@@ -582,7 +582,7 @@ const liveOverlapPages = ({
   const seen = new Set<string>();
   const out: MemoryPage[] = [];
   const push = (page: MemoryPage | undefined) => {
-    if (!page || page.status === 'archived' || seen.has(page.id)) {
+    if (!page || page.archived || seen.has(page.id)) {
       return;
     }
     seen.add(page.id);
@@ -648,6 +648,8 @@ export const applyMemoryEdits = async ({
   extractions,
   mergeTargets = [],
   context,
+  agentId,
+  conversationId,
   synthesizeMemoryGroup,
   now = () => Date.now() / 1000,
   logger,
@@ -660,6 +662,9 @@ export const applyMemoryEdits = async ({
   mergeTargets?: string[][];
   /** Current user task — stored on new pages as the recall key. */
   context?: string;
+  /** Provenance stamped on new pages. Metadata only. */
+  agentId?: string;
+  conversationId?: string;
   synthesizeMemoryGroup?: SynthesizeMemoryGroup;
   now?: () => number;
   logger: Logger;
@@ -740,7 +745,7 @@ export const applyMemoryEdits = async ({
 
     const exactId = toMemoryKiId(extra.slug);
     const exactPage = await store.get(exactId);
-    if (exactPage?.status === 'archived') {
+    if (exactPage?.archived) {
       logger.debug(`Skipped extraction "${extra.slug}" — exact slug is archived`);
       consumedExtracts.add(index);
       continue;
@@ -820,6 +825,8 @@ export const applyMemoryEdits = async ({
       extract: group.extract,
       canonicalId: group.canonicalId,
       task,
+      agentId,
+      conversationId,
       synthesizeMemoryGroup,
       now,
       logger,
@@ -845,7 +852,8 @@ export const applyMemoryEdits = async ({
         tags: extra.tags,
         categories: extra.categories,
         references: [],
-        status: 'tentative',
+        agent_id: agentId,
+        conversation_id: conversationId,
         user: 'nightshift-optimizer',
       });
       summary.standaloneUpsertCount += 1;
@@ -855,7 +863,7 @@ export const applyMemoryEdits = async ({
     } catch (err) {
       if (isElasticsearchWriteConflict(err)) {
         const winner = await store.get(toMemoryKiId(extra.slug));
-        if (winner?.status === 'archived') {
+        if (winner?.archived) {
           logger.debug(`Skipped extraction "${extra.slug}" — race winner is archived`);
           continue;
         }
@@ -867,6 +875,8 @@ export const applyMemoryEdits = async ({
             extract: extra,
             canonicalId: winner.id,
             task,
+            agentId,
+            conversationId,
             synthesizeMemoryGroup,
             now,
             logger,
@@ -906,6 +916,8 @@ const mergeMemoryGroup = async ({
   extract,
   canonicalId: initialCanonicalId,
   task,
+  agentId,
+  conversationId,
   synthesizeMemoryGroup,
   now,
   logger,
@@ -915,6 +927,8 @@ const mergeMemoryGroup = async ({
   extract?: MemoryExtractProposal;
   canonicalId?: string;
   task: string;
+  agentId?: string;
+  conversationId?: string;
   synthesizeMemoryGroup: SynthesizeMemoryGroup;
   now: () => number;
   logger: Logger;
@@ -933,9 +947,7 @@ const mergeMemoryGroup = async ({
     const sourceSnapshots = await Promise.all(
       requiredSourceIds.map(async (id) => store.getVersioned(id))
     );
-    const unavailableIndex = sourceSnapshots.findIndex(
-      (source) => !source || source.page.status === 'archived'
-    );
+    const unavailableIndex = sourceSnapshots.findIndex((source) => !source || source.page.archived);
     if (unavailableIndex !== -1) {
       logger.debug(
         `Memory merge aborted — required source ${requiredSourceIds[unavailableIndex]} is missing or archived`
@@ -1037,11 +1049,10 @@ const mergeMemoryGroup = async ({
         extract?.categories
       ),
       references: unionStrings(currentSources.flatMap((page) => page.references)),
-      status: currentSources.some((page) => page.status === 'established')
-        ? ('established' as const)
-        : ('tentative' as const),
       source: `Merged from memories: ${mergedFrom.join(', ')}`,
       merged_from: mergedFrom,
+      agent_id: agentId,
+      conversation_id: conversationId,
       telemetry: {
         impressions,
         conversions,
@@ -1058,7 +1069,7 @@ const mergeMemoryGroup = async ({
       requiredSourceIds.map(async (id) => store.getVersioned(id))
     );
     const unavailableAfterSynthesisIndex = validatedSources.findIndex(
-      (source) => !source || source.page.status === 'archived'
+      (source) => !source || source.page.archived
     );
     if (unavailableAfterSynthesisIndex !== -1) {
       logger.debug(
@@ -1140,6 +1151,8 @@ export const optimizeMemory = async ({
   synthesizeMemoryGroup,
   userMessage,
   assistantMessage,
+  agentId,
+  conversationId,
   logger,
 }: {
   store: MemoryPageStore;
@@ -1149,6 +1162,9 @@ export const optimizeMemory = async ({
   synthesizeMemoryGroup?: SynthesizeMemoryGroup;
   userMessage: string;
   assistantMessage: string;
+  /** Provenance stamped on pages this run writes. Metadata only. */
+  agentId?: string;
+  conversationId?: string;
   logger: Logger;
 }): Promise<MemoryOptimizeSummary> => {
   logger.debug(
@@ -1246,6 +1262,8 @@ export const optimizeMemory = async ({
     extractions,
     mergeTargets,
     context: task,
+    agentId,
+    conversationId,
     synthesizeMemoryGroup,
     logger,
   });

@@ -70,6 +70,7 @@ export const runMemoryOptimize = async ({
   getAgentBuilder,
   logger,
   connectorId: requestedConnectorId,
+  conversationId,
 }: {
   request: KibanaRequest;
   agentId?: string;
@@ -82,6 +83,8 @@ export const runMemoryOptimize = async ({
   getAgentBuilder: () => AgentBuilderPluginStart | undefined;
   logger: Logger;
   connectorId?: string;
+  /** Provenance for the pages this run writes. */
+  conversationId?: string;
 }): Promise<MemoryOptimizeSummary | undefined> => {
   logger.debug(
     `Memory optimize wiring space=${spaceId} agent=${agentId} ` +
@@ -113,6 +116,8 @@ export const runMemoryOptimize = async ({
     }),
     userMessage,
     assistantMessage,
+    agentId,
+    conversationId,
     logger,
   });
 };

@@ -157,7 +157,7 @@ const renderPage = (page: MemoryPage, nowSec: number): string => {
     `---`,
     `title: ${page.title}`,
     `id: ${page.id}`,
-    `status: ${page.status}`,
+    `archived: ${page.archived}`,
     `usefulness: ${usefulnessPct}%`,
     `impressions: ${Math.round(display.impressions)}x`,
     `confidence: ${display.confidence.toFixed(2)}`,
@@ -298,7 +298,7 @@ export const materializeMemory = async ({
       continue;
     }
     const existing = await store.get(entry.id);
-    if (!existing || existing.status === 'archived') {
+    if (!existing || existing.archived) {
       continue;
     }
     carried.push(priorById.get(entry.id) ?? entry);

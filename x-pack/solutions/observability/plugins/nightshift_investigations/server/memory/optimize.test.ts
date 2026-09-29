@@ -33,7 +33,7 @@ const page = (id: string, title = id, content = 'body'): MemoryPage => ({
   title,
   content,
   tags: ['memory'],
-  status: 'established',
+  archived: false,
   categories: [],
   references: [],
   created_at: '2026-01-01T00:00:00.000Z',
@@ -367,7 +367,6 @@ describe('applyMemoryEdits', () => {
       expect.objectContaining({
         slug: 'checkout-kafka-lag',
         context: 'checkout latency kafka consumer lag',
-        status: 'established',
         source:
           'Merged from memories: memory_kafka-lag, memory_original-kafka-lag, memory_checkout-kafka',
         merged_from: ['memory_kafka-lag', 'memory_original-kafka-lag', 'memory_checkout-kafka'],
@@ -482,7 +481,7 @@ describe('applyMemoryEdits', () => {
       ],
       synthesizeMemoryGroup: async () => {
         current = {
-          page: { ...source, status: 'archived', archive_reason: 'harmful' },
+          page: { ...source, archived: true, archive_reason: 'harmful' },
           seqNo: 2,
           primaryTerm: 1,
         };
@@ -690,7 +689,7 @@ describe('applyMemoryEdits', () => {
       archiveVersioned.mock.invocationCallOrder[0]
     );
     expect(liveSource).toBe(newerSource);
-    expect(liveSource.status).toBe('established');
+    expect(liveSource.archived).toBe(false);
     expect(store.archive).not.toHaveBeenCalled();
     expect(summary).toEqual(
       expect.objectContaining({
@@ -1109,7 +1108,7 @@ describe('applyMemoryEdits', () => {
 
   it('does not resurrect an archived exact slug', async () => {
     const archived = page('memory_checkout-redis', 'Checkout Redis');
-    archived.status = 'archived';
+    archived.archived = true;
     const store = createStore({ get: jest.fn().mockResolvedValue(archived) });
 
     await applyMemoryEdits({
@@ -1336,7 +1335,7 @@ describe('optimizeMemory', () => {
     expect(store.create).toHaveBeenCalledWith(
       expect.objectContaining({
         slug: 'checkout-redis',
-        status: 'tentative',
+
         context: 'why is checkout slow?',
       })
     );

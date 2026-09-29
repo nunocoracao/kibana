@@ -13,6 +13,7 @@ import type { WorkflowsServerPluginSetup } from '@kbn/workflows-management-plugi
 import type { NightshiftInvestigationsClient } from '../client/investigations_client';
 import type { CortexPageStore } from '../cortex/page_store';
 import type { DecisionTreeStore } from '../decision_trees/store';
+import type { MemoryPageStore } from '../memory/page_store';
 import type { GetTriggerEmitter } from '../types';
 
 export type GetInvestigationsClient = (
@@ -33,6 +34,13 @@ export type GetCortexPageStore = (request: KibanaRequest) => CortexPageStore;
 
 export type GetDecisionTreeStore = (request: KibanaRequest) => DecisionTreeStore;
 
+/**
+ * Deliberately not request-scoped: the Semantic Memory index is hidden and has
+ * no end-user index privileges, so these routes read through Kibana's internal
+ * client while still deriving Space tenancy from the request.
+ */
+export type GetMemoryPageStore = (request: KibanaRequest) => MemoryPageStore;
+
 export interface NightshiftInvestigationsRouteHandlerResources
   extends DefaultRouteHandlerResources {
   getInvestigationsClient: GetInvestigationsClient;
@@ -44,4 +52,6 @@ export interface NightshiftInvestigationsRouteHandlerResources
   isCortexEnabled: () => boolean;
   getDecisionTreeStore: GetDecisionTreeStore;
   isDecisionTreesEnabled: () => boolean;
+  getMemoryPageStore: GetMemoryPageStore;
+  isMemoryEnabled: () => boolean;
 }

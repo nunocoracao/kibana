@@ -110,6 +110,7 @@ describe('memoryOptimizeStepDefinition', () => {
       logger: expect.anything(),
       getAgentBuilder,
       connectorId: undefined,
+      conversationId: 'conv-1',
     });
     expect(getMemoryEsClient).toHaveBeenCalledTimes(1);
     expect(getScopedEsClient).not.toHaveBeenCalled();
