@@ -12,12 +12,12 @@ import {
   SYSTEM_SECURITY_WORKER_FLOOR_ALERT_TRIAGE_ID,
   SYSTEM_SECURITY_WORKER_FLOOR_ATTACK_DISCOVERY_ID,
   SYSTEM_SECURITY_WORKER_FORENSICS_ENDPOINT_ANALYSIS_ID,
-  applyMissingWorkerSettingDefaults,
   applyWorkerSettingsWrite,
   createDefaultWorkerSettings,
   formatWorkerSettingsIssues,
   getCompleteWorkerSettingsSchema,
   getWorkerSettingsDeclaration,
+  upgradeStoredWorkerSettings,
   type WorkerSettings,
 } from '@kbn/alertzero-common';
 import type { ManagedWorkflowTemplateValues } from '@kbn/workflows/managed';
@@ -57,15 +57,15 @@ export const toTemplateValues = (
 });
 
 /**
- * Reads persisted template values. Missing schedule and extras keys are filled from the current
- * defaults first; a present value is left as stored, so an out-of-range or disallowed value still
- * fails here and the Worker projects as unavailable.
+ * Reads persisted template values after the same upgrade the startup pass writes back, so the
+ * settings page and the running workflow see the same values. Anything else present is left as
+ * stored, so an out-of-range value still fails here and the Worker projects as unavailable.
  */
 const parseWorkerValues = (
   workerId: RegisteredWorkerId,
   stored: Record<string, unknown>
 ): WorkerSettings => {
-  const raw = applyMissingWorkerSettingDefaults(getWorkerSettingsDeclaration(workerId), stored);
+  const raw = upgradeStoredWorkerSettings(getWorkerSettingsDeclaration(workerId), stored);
   const currentVersion = WORKER_SETTINGS_VERSIONS[workerId];
   const { settingsVersion, autonomyLevel, scheduleInterval, extras, ...unsupported } = raw;
   if (settingsVersion !== undefined && settingsVersion !== currentVersion) {
@@ -103,8 +103,8 @@ export const createWorkerSettingsRegistration = (
   workerId: RegisteredWorkerId
 ): WorkerSettingsRegistration => ({
   createDefaultValues: () => toTemplateValues(workerId, createDefaultWorkerSettings(workerId)),
-  withMissingDefaults: (raw) =>
-    applyMissingWorkerSettingDefaults(getWorkerSettingsDeclaration(workerId), raw),
+  upgradeStoredValues: (raw) =>
+    upgradeStoredWorkerSettings(getWorkerSettingsDeclaration(workerId), raw),
   applyPatch: (raw, patch) => {
     const next = applyWorkerSettingsWrite(parseWorkerValues(workerId, raw), patch);
     const result = getCompleteWorkerSettingsSchema(workerId).safeParse(next);

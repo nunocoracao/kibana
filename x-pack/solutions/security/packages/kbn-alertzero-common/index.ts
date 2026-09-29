@@ -164,7 +164,6 @@ export {
   FP_RATE_THRESHOLD_PCT_MIN,
   RULE_TUNING_DEFAULT_EXTRAS,
   WORKER_SETTINGS_DECLARATIONS,
-  applyMissingWorkerSettingDefaults,
   applyWorkerSettingsWrite,
   createDefaultWorkerSettings,
   diffWorkerSettings,
@@ -172,7 +171,9 @@ export {
   getAllowedAutonomyLevels,
   getCompleteWorkerSettingsSchema,
   getWorkerSettingsDeclaration,
+  nearestLowerAutonomyLevel,
   touchesWorkerSettings,
+  upgradeStoredWorkerSettings,
 } from './impl/worker_settings';
 export type { WorkerSettingsDeclaration } from './impl/worker_settings';
 export type {
