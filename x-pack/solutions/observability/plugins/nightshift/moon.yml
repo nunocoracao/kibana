@@ -26,7 +26,6 @@ dependsOn:
   - '@kbn/core'
   - '@kbn/core-chrome-app-menu-components'
   - '@kbn/core-http-browser'
-  - '@kbn/core-security-server'
   - '@kbn/data-plugin'
   - '@kbn/data-views-plugin'
   - '@kbn/deeplinks-analytics'

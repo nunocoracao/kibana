@@ -7,7 +7,6 @@
 
 import { SIGNIFICANT_EVENT_KI_TYPE } from '@kbn/agent-builder-elastic-ai-index-ki-types';
 import { DEFAULT_APP_CATEGORIES } from '@kbn/core/server';
-import { ApiPrivileges } from '@kbn/core-security-server';
 import { NIGHTSHIFT_APP_ID, SIGNIFICANT_EVENTS_APP_ID } from '@kbn/deeplinks-observability';
 import type { FeaturesPluginSetup } from '@kbn/features-plugin/server';
 import { i18n } from '@kbn/i18n';
@@ -21,10 +20,10 @@ import {
 
 // Nightshift investigations live in the shared `agenticInvestigations` and `proposals` plugins,
 // whose routes require these API privileges. Cross-plugin server imports are forbidden, so the
-// values are derived the same way their owners derive them.
-const AGENTIC_INVESTIGATIONS_API_PRIVILEGE_MANAGE = ApiPrivileges.manage('investigations');
-const PROPOSALS_API_PRIVILEGE_READ = ApiPrivileges.read('proposals');
-const PROPOSALS_API_PRIVILEGE_MANAGE = ApiPrivileges.manage('proposals');
+// values are spelled out; the test pins them to the owners' strings.
+const AGENTIC_INVESTIGATIONS_API_PRIVILEGE_MANAGE = 'manage_investigations';
+const PROPOSALS_API_PRIVILEGE_READ = 'read_proposals';
+const PROPOSALS_API_PRIVILEGE_MANAGE = 'manage_proposals';
 
 export function registerNightshiftFeature(features: FeaturesPluginSetup): void {
   features.registerKibanaFeature({
