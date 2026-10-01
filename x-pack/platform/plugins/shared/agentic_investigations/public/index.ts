@@ -62,3 +62,11 @@ export {
   LazyConnectedCloseInvestigationModal,
   LazyConnectedEscalationModal,
 } from './components/lazy_connected_components';
+
+export { LazyEvidenceView, type EvidenceViewProps } from './evidence';
+export {
+  registerInvestigationAttachmentRenderer,
+  type InvestigationAttachmentContentProps,
+  type InvestigationAttachmentRenderer,
+  type InvestigationAttachmentVariant,
+} from './investigation_attachments';
