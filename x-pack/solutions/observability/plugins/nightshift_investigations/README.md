@@ -22,4 +22,6 @@ The `agenticInvestigations` and `proposals` routes require the `manage_investiga
 | `all` | `manage_investigations`, `read_proposals`, `manage_proposals` |
 | `read` | `read_proposals` |
 
+These API privileges are not scoped to Nightshift: they cover every agentic investigation and proposal in the space, including those created by other solutions, plus the investigation routes that share `manage_investigations` (status, assignment, impact, user profile suggestions).
+
 `agenticInvestigations` has no read-only investigations privilege yet, so a user with Nightshift `read` cannot use its investigation routes. UI capabilities are scoped to the feature that owns them, so capabilities like `agenticInvestigations.showInvestigations` and `proposals.showProposals` still need the `agenticInvestigations` and `proposals` features. Opening the investigation conversation in Agent Builder still needs the Agent Builder feature privileges.

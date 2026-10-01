@@ -54,6 +54,7 @@ export function registerNightshiftFeature(features: FeaturesPluginSetup): void {
         app: [NIGHTSHIFT_APP_ID, SIGNIFICANT_EVENTS_APP_ID],
         // `agenticInvestigations` has no read-only investigations privilege yet, so read-only
         // Nightshift users cannot use its investigation routes.
+        // TODO(ns-1619 s3): grant the read investigations API privilege added by the query API.
         api: [NIGHTSHIFT_API_PRIVILEGES.read, PROPOSALS_API_PRIVILEGE_READ],
         ui: [NIGHTSHIFT_UI_PRIVILEGES.show],
         aiIndex: { read: [SIGNIFICANT_EVENT_KI_TYPE] },
