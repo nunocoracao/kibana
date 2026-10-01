@@ -11,7 +11,7 @@ xpack.agenticInvestigations.enabled: true
 xpack.proposals.enabled: true
 ```
 
-Observability Complete serverless projects enable both in `config/serverless.oblt.complete.yml`. For local development, add them to `config/kibana.dev.yml`.
+They are **not** enabled in any serverless or stateful default config yet. Enabling them adds visible surface (Kibana features in role management, workflow step types, the proposals managed workflow), so that waits until the shared investigation experience is ready. Until then, environments that run Nightshift (for example customer zero) enable both in their own config, and local development adds them to `config/kibana.dev.yml`. When either plugin is disabled, Nightshift investigations report themselves unavailable.
 
 ### Privileges
 
