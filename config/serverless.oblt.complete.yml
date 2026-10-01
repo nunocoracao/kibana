@@ -10,6 +10,9 @@ xpack.uptime.enabled: true
 xpack.significantEvents.enabled: true
 xpack.nightshiftSources.enabled: true
 xpack.nightshift_investigations.enabled: true
+### Nightshift investigations are stored as agentic investigations; their proposed actions are proposals.
+xpack.agenticInvestigations.enabled: true
+xpack.proposals.enabled: true
 
 xpack.features.overrides:
   infrastructure.name: 'Infrastructure'
@@ -33,7 +36,9 @@ xpack.features.overrides:
   ### Context Engine should match Agent Builder for role management (avoid orphan Kibana category).
   contextEngine.category: 'observability'
   ### Agentic investigations should be moved from Analytics category to the Observability one.
-  # agenticInvestigations.category: 'observability' # TODO: uncomment when agentic investigations plugin is enabled
+  agenticInvestigations.category: 'observability'
+  ### Proposed actions should be moved from Analytics category to the Observability one.
+  proposals.category: 'observability'
   
 # Elastic Managed LLMs
 xpack.actions.preconfigured:
