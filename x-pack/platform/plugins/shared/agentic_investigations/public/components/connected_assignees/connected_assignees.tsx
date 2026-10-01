@@ -6,11 +6,9 @@
  */
 
 import React, { memo, useCallback, useMemo } from 'react';
-import type { AssigneesSlotRenderProps } from '@kbn/agentic-investigations-common';
-import {
-  useAssignEscalation,
-  useAssignInvestigation,
-} from '@kbn/agentic-investigations-plugin/public';
+import { AssignToUsers, type AssigneesSlotRenderProps } from '@kbn/agentic-investigations-common';
+import { useAssignEscalation } from '../../escalations/hooks/use_escalations_api';
+import { useAssignInvestigation } from '../../investigations/hooks/use_investigations_api';
 import { CONNECTED_ASSIGNEES_LABELS } from './translations';
 import { useAssigneePickers } from './use_assignee_pickers';
 import { useAgenticInvestigationsCapabilities } from '../../hooks/use_agentic_investigations_capabilities';
@@ -18,11 +16,11 @@ import { useAgenticInvestigationsCapabilities } from '../../hooks/use_agentic_in
 /**
  * Connected assignee picker for the investigation and escalation flyout headers.
  *
- * This component lives in alertzero's plugin (not the shared package) so it can use
+ * This component lives in this plugin (not the shared package) so it can use
  * `useKibana`, HTTP mutation hooks, and capability checks — none of which are available
  * inside the Agent Builder flyout's isolated React root.
  *
- * At registration time the plugin wraps this in `KibanaContextProvider` +
+ * At registration time the template UI wraps this in `KibanaContextProvider` +
  * `QueryClientProvider`, so all hooks below have the context they need.
  */
 const ConnectedAssigneesInner = ({
@@ -61,7 +59,7 @@ const ConnectedAssigneesInner = ({
     [conversationId, stableUids]
   );
 
-  const renderPicker = useAssigneePickers({
+  const getPickerProps = useAssigneePickers({
     items,
     getRowKey: (item) => item.conversationId,
     getTargetId: (item) => item.conversationId,
@@ -73,7 +71,7 @@ const ConnectedAssigneesInner = ({
     buttonIconSize,
   });
 
-  return <>{renderPicker(items[0])}</>;
+  return <AssignToUsers {...getPickerProps(items[0])} />;
 };
 
 ConnectedAssigneesInner.displayName = 'ConnectedAssignees';

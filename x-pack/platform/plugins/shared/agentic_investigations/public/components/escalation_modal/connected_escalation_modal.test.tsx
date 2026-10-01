@@ -15,21 +15,23 @@ import {
   useListEscalations,
   useCreateEscalation,
   useAttachToEscalation,
-  useCurrentUserProfile,
-  useSuggestUserProfiles,
   useEscalationsForInvestigation,
-} from '@kbn/agentic-investigations-plugin/public';
+} from '../../escalations/hooks/use_escalations_api';
+import { useCurrentUserProfile, useSuggestUserProfiles } from '../../user_profiles';
 import { useKibana } from '@kbn/kibana-react-plugin/public';
 import { useOpenInChat } from '../../hooks/use_open_in_chat';
 import { ConnectedEscalationModal } from './connected_escalation_modal';
 
-jest.mock('@kbn/agentic-investigations-plugin/public', () => ({
+jest.mock('../../escalations/hooks/use_escalations_api', () => ({
   useListEscalations: jest.fn(),
   useCreateEscalation: jest.fn(),
   useAttachToEscalation: jest.fn(),
+  useEscalationsForInvestigation: jest.fn(),
+}));
+
+jest.mock('../../user_profiles', () => ({
   useCurrentUserProfile: jest.fn(),
   useSuggestUserProfiles: jest.fn(),
-  useEscalationsForInvestigation: jest.fn(),
 }));
 
 jest.mock('../../hooks/use_agentic_investigations_capabilities', () => ({

@@ -5,15 +5,19 @@
  * 2.0.
  */
 
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import type React from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { UserProfileWithAvatar } from '@kbn/user-profile-components';
 import { useKibana } from '@kbn/kibana-react-plugin/public';
 import type { CoreStart } from '@kbn/core/public';
-import { AssignToUsers } from '@kbn/agentic-investigations-common';
-import { useUserProfiles, useSuggestUserProfiles } from '@kbn/agentic-investigations-plugin/public';
+import type { AssignToUsers } from '@kbn/agentic-investigations-common';
+import { useUserProfiles, useSuggestUserProfiles } from '../../user_profiles';
 import { assigneeSignal } from './assignee_overrides';
 import { useAssigneeSignal } from './use_assignee_signal';
 import { indexProfiles, toSelectedProfiles } from './to_selected_profiles';
+
+/** Props for `AssignToUsers` from `@kbn/agentic-investigations-common`. */
+export type AssigneePickerProps = React.ComponentProps<typeof AssignToUsers>;
 
 export interface UseAssigneePickersOptions<T> {
   /** All items currently displayed; used for bulk profile fetch and to gate signal-driven refreshes. */
@@ -50,7 +54,9 @@ export interface UseAssigneePickersOptions<T> {
  *
  * Handles the full lifecycle: optimistic pending state, bulk profile resolution,
  * suggestion search, the mutation, cross-boundary sync via `assigneeSignal`, and
- * pending-state cleanup. Returns a `renderPicker(item)` render prop.
+ * pending-state cleanup. Returns a `getPickerProps(item)` function; callers render
+ * `<AssignToUsers {...getPickerProps(item)} />`, which keeps the picker component out of this
+ * plugin's page load bundle.
  *
  * Signal handling:
  * - Self-bumps (bumps this hook sent during `handleChange`) are suppressed so `refresh`
@@ -70,7 +76,7 @@ export function useAssigneePickers<T>({
   isReadOnly,
   labels,
   buttonIconSize,
-}: UseAssigneePickersOptions<T>): (item: T) => React.ReactNode {
+}: UseAssigneePickersOptions<T>): (item: T) => AssigneePickerProps {
   const {
     services: { notifications },
   } = useKibana<CoreStart>();
@@ -176,7 +182,7 @@ export function useAssigneePickers<T>({
   );
 
   return useCallback(
-    (item: T): React.ReactNode => {
+    (item: T): AssigneePickerProps => {
       const rowKey = getRowKeyRef.current(item);
       const targetId = getTargetIdRef.current(item);
       const isUpdating = pendingAssignees.has(rowKey);
@@ -186,24 +192,23 @@ export function useAssigneePickers<T>({
         ? pendingAssignees.get(rowKey) ?? []
         : toSelectedProfiles(getAssigneeUidsRef.current(item), profilesByUid);
 
-      return (
-        <AssignToUsers
-          conversationId={rowKey}
-          selected={selected}
-          suggestions={suggestQuery.data ?? []}
-          isSuggestionsLoading={suggestQuery.isLoading}
-          // `isFetching` (not `isLoading`) avoids permanently disabling the button when
-          // there are no assignees (React Query sets isLoading: true for disabled queries).
-          isProfilesLoading={profilesQuery.isFetching}
-          isUpdating={isUpdating}
-          canManage={canManage && !readOnly && targetId !== undefined}
-          onSearchChange={setSearchTerm}
-          onChange={
-            targetId ? (newSelected) => void handleChange(rowKey, targetId, newSelected) : () => {}
-          }
-          buttonIconSize={buttonIconSize}
-        />
-      );
+      return {
+        conversationId: rowKey,
+        selected,
+        suggestions: suggestQuery.data ?? [],
+        isSuggestionsLoading: suggestQuery.isLoading,
+        // `isFetching` (not `isLoading`) avoids permanently disabling the button when
+        // there are no assignees (React Query sets isLoading: true for disabled queries).
+        isProfilesLoading: profilesQuery.isFetching,
+        isUpdating,
+        canManage: canManage && !readOnly && targetId !== undefined,
+        onSearchChange: setSearchTerm,
+        onChange: targetId
+          ? (newSelected: UserProfileWithAvatar[]) =>
+              void handleChange(rowKey, targetId, newSelected)
+          : () => {},
+        buttonIconSize,
+      };
     },
     [
       pendingAssignees,

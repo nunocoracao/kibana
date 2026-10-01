@@ -13,7 +13,7 @@ import {
   ESCALATIONS_UI_CAPABILITY_SHOW,
   ESCALATIONS_UI_CAPABILITY_MANAGE,
   INVESTIGATIONS_UI_CAPABILITY_MANAGE,
-} from '@kbn/agentic-investigations-plugin/common';
+} from '../../common';
 
 export interface AgenticInvestigationsCapabilities {
   showEscalations: boolean;
@@ -38,7 +38,7 @@ export const getAgenticInvestigationsCapabilities = (
 
 /**
  * React hook wrapper around `getAgenticInvestigationsCapabilities`. Use inside components;
- * use the pure function in `plugin.ts` and `routes.tsx`.
+ * use the pure function outside React (for example in a plugin's `start`).
  */
 export const useAgenticInvestigationsCapabilities = (): AgenticInvestigationsCapabilities => {
   const {

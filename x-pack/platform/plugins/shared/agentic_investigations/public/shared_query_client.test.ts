@@ -5,13 +5,13 @@
  * 2.0.
  */
 
-import { getSharedAppQueryClient } from './shared_app_query_client';
+import { getSharedInvestigationsQueryClient } from './shared_query_client';
 
-describe('getSharedAppQueryClient', () => {
+describe('getSharedInvestigationsQueryClient', () => {
   it('returns the same instance on every call, so the queue page and the flyout share one cache', async () => {
     const [first, second] = await Promise.all([
-      getSharedAppQueryClient(),
-      getSharedAppQueryClient(),
+      getSharedInvestigationsQueryClient(),
+      getSharedInvestigationsQueryClient(),
     ]);
     expect(first).toBe(second);
   });

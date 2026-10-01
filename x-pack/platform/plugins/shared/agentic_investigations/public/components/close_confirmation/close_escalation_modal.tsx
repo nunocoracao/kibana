@@ -20,7 +20,7 @@ import {
 import { KbnInfoCallout } from '@kbn/ui-callout';
 import type { DismissReason } from '@kbn/proposals-common';
 import { DISMISS_REASON_OPTIONS } from '@kbn/proposals-ui';
-import type { EscalationClosePreviewResponse } from '@kbn/agentic-investigations-plugin/common';
+import type { EscalationClosePreviewResponse } from '../../../common';
 import { PendingProposalsList } from './pending_proposals_list';
 import * as i18n from './translations';
 

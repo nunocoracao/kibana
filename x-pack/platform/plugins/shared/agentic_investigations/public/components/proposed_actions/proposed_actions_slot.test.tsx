@@ -17,7 +17,7 @@ import {
   useIsApprovingProposal,
   useIsDecliningProposal,
 } from '@kbn/proposals-plugin/public';
-import { useCurrentUserProfile } from '@kbn/agentic-investigations-plugin/public';
+import { useCurrentUserProfile } from '../../user_profiles';
 import { useKibana } from '@kbn/kibana-react-plugin/public';
 import { ProposedActionsSlot } from './proposed_actions_slot';
 
@@ -29,7 +29,7 @@ jest.mock('@kbn/proposals-plugin/public', () => ({
   useIsDecliningProposal: jest.fn(),
 }));
 
-jest.mock('@kbn/agentic-investigations-plugin/public', () => ({
+jest.mock('../../user_profiles', () => ({
   useCurrentUserProfile: jest.fn(),
 }));
 

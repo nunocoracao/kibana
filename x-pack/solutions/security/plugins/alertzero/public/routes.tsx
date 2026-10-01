@@ -8,7 +8,7 @@
 import React from 'react';
 import { Redirect } from 'react-router-dom';
 import { Route, Routes } from '@kbn/shared-ux-router';
-import { useAgenticInvestigationsCapabilities } from './hooks/use_agentic_investigations_capabilities';
+import { useAgenticInvestigationsCapabilities } from '@kbn/agentic-investigations-plugin/public';
 import { PlaceholderPage } from './components/placeholder_page';
 import {
   NAV_ALERTS,

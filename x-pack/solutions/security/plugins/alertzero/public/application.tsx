@@ -12,10 +12,10 @@ import { Router } from '@kbn/shared-ux-router';
 import { KibanaContextProvider } from '@kbn/kibana-react-plugin/public';
 import { QueryClientProvider } from '@kbn/react-query';
 import { ALERTZERO_PLUGIN_NAME } from '@kbn/alertzero-common';
+import { getSharedInvestigationsQueryClient } from '@kbn/agentic-investigations-plugin/public';
 import { AppChromeLayout } from './components/app_chrome';
 import type { AlertZeroStartDependencies } from './types';
 import { AlertZeroRoutes } from './routes';
-import { getSharedAppQueryClient } from './shared_app_query_client';
 
 interface RenderAppParams {
   coreStart: CoreStart;
@@ -37,10 +37,10 @@ export const renderApp = async ({
 }: RenderAppParams): Promise<AppUnmount> => {
   coreStart.chrome.docTitle.change(ALERTZERO_PLUGIN_NAME);
 
-  // Shared with the investigation flyout's "Proposed actions" slot (see `plugin.ts`), so a
-  // decision made in either invalidates the other's cache directly instead of needing a
-  // cross-boundary signal to bridge two separate ones.
-  const queryClient = await getSharedAppQueryClient();
+  // Shared with the investigation flyout's "Proposed actions" slot (registered by the
+  // agenticInvestigations plugin), so a decision made in either invalidates the other's cache
+  // directly instead of needing a cross-boundary signal to bridge two separate ones.
+  const queryClient = await getSharedInvestigationsQueryClient();
 
   /**
    * `KibanaContextProvider` backs `useKibana()` from `@kbn/kibana-react-plugin`, which the app uses

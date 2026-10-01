@@ -19,14 +19,14 @@ import { KibanaErrorBoundary, KibanaErrorBoundaryProvider } from '@kbn/shared-ux
  *    a loading indicator instead of a blank screen.
  *
  * The provider is mounted here rather than inherited from the page because the flyout
- * renders outside alertzero's main React tree.
+ * renders outside the consuming app's main React tree.
  *
  * Note: the loading/error strings live in this file rather than `escalation_modal_translations.ts`
  * because that module is intentionally kept in the lazy chunk so its `i18n.translate` calls do
  * not affect the main-chunk size.
  */
 
-const LOADING_LABEL = i18n.translate('xpack.alertzero.escalationModal.loading', {
+const LOADING_LABEL = i18n.translate('xpack.agenticInvestigations.escalationModal.loading', {
   defaultMessage: 'Loading escalation modal…',
 });
 

@@ -8,10 +8,10 @@
 import { i18n } from '@kbn/i18n';
 
 export const CONNECTED_ASSIGNEES_LABELS = Object.freeze({
-  assignSuccess: i18n.translate('xpack.alertzero.connectedAssignees.assignSuccess', {
+  assignSuccess: i18n.translate('xpack.agenticInvestigations.connectedAssignees.assignSuccess', {
     defaultMessage: 'Assignees updated',
   }),
-  assignError: i18n.translate('xpack.alertzero.connectedAssignees.assignError', {
+  assignError: i18n.translate('xpack.agenticInvestigations.connectedAssignees.assignError', {
     defaultMessage: 'Failed to update assignees',
   }),
 });

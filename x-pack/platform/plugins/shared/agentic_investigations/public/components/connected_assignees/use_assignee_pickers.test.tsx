@@ -12,12 +12,13 @@ import { I18nProvider } from '@kbn/i18n-react';
 import { KibanaContextProvider } from '@kbn/kibana-react-plugin/public';
 import { QueryClient, QueryClientProvider } from '@kbn/react-query';
 import { coreMock } from '@kbn/core/public/mocks';
-import { useUserProfiles, useSuggestUserProfiles } from '@kbn/agentic-investigations-plugin/public';
+import { useUserProfiles, useSuggestUserProfiles } from '../../user_profiles';
 import { assigneeSignal } from './assignee_overrides';
-import { useAssigneePickers } from './use_assignee_pickers';
+import { AssignToUsers } from '@kbn/agentic-investigations-common';
+import { useAssigneePickers, type AssigneePickerProps } from './use_assignee_pickers';
 
-jest.mock('@kbn/agentic-investigations-plugin/public', () => ({
-  ...jest.requireActual('@kbn/agentic-investigations-plugin/public'),
+jest.mock('../../user_profiles', () => ({
+  ...jest.requireActual('../../user_profiles'),
   useUserProfiles: jest.fn(),
   useSuggestUserProfiles: jest.fn(),
 }));
@@ -82,20 +83,20 @@ const makeProviders = () => ({
   queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }),
 });
 
-type RenderPicker = (item: TestItem) => React.ReactNode;
+type GetPickerProps = (item: TestItem) => AssigneePickerProps;
 
 const renderWithProviders = (
   core: ReturnType<typeof coreMock.createStart>,
   queryClient: QueryClient,
-  hook: () => RenderPicker,
+  hook: () => GetPickerProps,
   items: TestItem[]
 ) => {
   const Wrapper: React.FC<{ items: TestItem[] }> = ({ items: currentItems }) => {
-    const renderPicker = hook();
+    const getPickerProps = hook();
     return (
       <>
         {currentItems.map((item) => (
-          <React.Fragment key={item.id}>{renderPicker(item)}</React.Fragment>
+          <AssignToUsers key={item.id} {...getPickerProps(item)} />
         ))}
       </>
     );
@@ -150,7 +151,7 @@ const makeHook = (
   } = {}
 ) => {
   const opts = { items, assign, refresh, canManage, isReadOnly, buttonIconSize };
-  const hook = (): RenderPicker =>
+  const hook = (): GetPickerProps =>
     // eslint-disable-next-line react-hooks/rules-of-hooks
     useAssigneePickers({
       items: opts.items,

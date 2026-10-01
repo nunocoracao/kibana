@@ -16,9 +16,12 @@ import { KibanaErrorBoundary, KibanaErrorBoundaryProvider } from '@kbn/shared-ux
  * the lazy chunk. Kept separate rather than shared because the two wrap unrelated lazy subtrees
  * with their own loading copy.
  */
-const LOADING_LABEL = i18n.translate('xpack.alertzero.detailsFlyout.proposedActions.loading', {
-  defaultMessage: 'Loading proposed actions…',
-});
+const LOADING_LABEL = i18n.translate(
+  'xpack.agenticInvestigations.detailsFlyout.proposedActions.loading',
+  {
+    defaultMessage: 'Loading proposed actions…',
+  }
+);
 
 const Spinner: React.FC = () => (
   <EuiFlexGroup justifyContent="center" alignItems="center" style={{ minHeight: 60 }}>

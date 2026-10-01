@@ -8,6 +8,7 @@
 import type { CoreSetup, CoreStart, Plugin } from '@kbn/core/public';
 import { registerImpactAttachmentTypes } from './impact/attachments';
 import { registerImpactPublicStepDefinitions } from './impact/step_types';
+import { registerInvestigationTemplateUI } from './template_ui/register_template_ui';
 import type {
   AgenticInvestigationsPublicPluginSetup,
   AgenticInvestigationsPublicPluginStart,
@@ -16,8 +17,9 @@ import type {
 } from './types';
 
 /**
- * Registers Impact workflow steps and the Impact attachment UI. Escalations
- * and user profiles are consumed directly by a solution's UI.
+ * Registers Impact workflow steps, the Impact attachment UI, and the conversation details flyout
+ * UI of the `investigation` and `escalation` templates. Escalations, user profiles and the
+ * connected investigation components are also consumed directly by a solution's UI.
  */
 export class AgenticInvestigationsPublicPlugin
   implements
@@ -37,11 +39,13 @@ export class AgenticInvestigationsPublicPlugin
   }
 
   start(
-    _core: CoreStart,
-    { agentBuilder }: AgenticInvestigationsPublicStartDependencies
+    core: CoreStart,
+    startDeps: AgenticInvestigationsPublicStartDependencies
   ): AgenticInvestigationsPublicPluginStart {
+    const { agentBuilder } = startDeps;
     if (agentBuilder) {
       registerImpactAttachmentTypes(agentBuilder);
+      registerInvestigationTemplateUI({ core, startDeps: { ...startDeps, agentBuilder } });
     }
     return {};
   }

@@ -9,14 +9,14 @@ import React, { useCallback, useState } from 'react';
 import { useQueryClient } from '@kbn/react-query';
 import { useKibana } from '@kbn/kibana-react-plugin/public';
 import type { CoreStart } from '@kbn/core/public';
-import {
-  useSetInvestigationStatus,
-  useInvestigationClosePreview,
-  escalationQueryKeys,
-} from '@kbn/agentic-investigations-plugin/public';
 import { queryKeys as platformQueryKeys } from '@kbn/proposals-plugin/public';
 import type { DismissReason } from '@kbn/proposals-common';
 import type { CloseInvestigationModalRenderProps } from '@kbn/agentic-investigations-common';
+import { escalationQueryKeys } from '../../escalations/query_keys';
+import {
+  useSetInvestigationStatus,
+  useInvestigationClosePreview,
+} from '../../investigations/hooks/use_investigations_api';
 import { statusSignal } from './status_signal';
 import { getCloseErrorCode } from './close_error_codes';
 import { CloseInvestigationModal } from '../close_confirmation/close_investigation_modal';
@@ -55,7 +55,6 @@ export const ConnectedCloseInvestigationModal: React.FC<CloseInvestigationModalR
   const invalidateAll = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: escalationQueryKeys.all });
     void queryClient.invalidateQueries({ queryKey: platformQueryKeys.proposals.all });
-    void queryClient.invalidateQueries({ queryKey: ['alertzero', 'investigations', 'count'] });
   }, [queryClient]);
 
   const handleConfirm = useCallback(

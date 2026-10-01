@@ -10,20 +10,22 @@ import { useQueryClient } from '@kbn/react-query';
 import { useKibana } from '@kbn/kibana-react-plugin/public';
 import type { CoreStart } from '@kbn/core/public';
 import { StatusToggle } from '@kbn/agentic-investigations-common';
-import {
-  useSetInvestigationStatus,
-  useSetEscalationStatus,
-  useInvestigationClosePreview,
-  useEscalationClosePreview,
-  escalationQueryKeys,
-} from '@kbn/agentic-investigations-plugin/public';
 import { queryKeys as platformQueryKeys } from '@kbn/proposals-plugin/public';
 import type { DismissReason } from '@kbn/proposals-common';
 import type { StatusSlotRenderProps } from '@kbn/agentic-investigations-common';
+import {
+  useSetInvestigationStatus,
+  useInvestigationClosePreview,
+} from '../../investigations/hooks/use_investigations_api';
+import {
+  useSetEscalationStatus,
+  useEscalationClosePreview,
+} from '../../escalations/hooks/use_escalations_api';
+import { escalationQueryKeys } from '../../escalations/query_keys';
 import type {
   InvestigationClosePreviewResponse,
   EscalationClosePreviewResponse,
-} from '@kbn/agentic-investigations-plugin/common';
+} from '../../../common';
 import { useAgenticInvestigationsCapabilities } from '../../hooks/use_agentic_investigations_capabilities';
 import { statusSignal } from './status_signal';
 import { getCloseErrorCode, isKnownCloseError, isPartialCloseError } from './close_error_codes';
@@ -225,7 +227,6 @@ export const ConnectedStatusToggle: React.FC<ConnectedStatusToggleProps> = ({
   const invalidateAll = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: escalationQueryKeys.all });
     void queryClient.invalidateQueries({ queryKey: platformQueryKeys.proposals.all });
-    void queryClient.invalidateQueries({ queryKey: ['alertzero', 'investigations', 'count'] });
   }, [queryClient]);
 
   const handleSuccess = useCallback(

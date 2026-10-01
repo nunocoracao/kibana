@@ -18,7 +18,7 @@ import {
 } from '@elastic/eui';
 import type { DismissReason } from '@kbn/proposals-common';
 import { DISMISS_REASON_OPTIONS } from '@kbn/proposals-ui';
-import type { InvestigationClosePreviewResponse } from '@kbn/agentic-investigations-plugin/common';
+import type { InvestigationClosePreviewResponse } from '../../../common';
 import { PendingProposalsList } from './pending_proposals_list';
 import * as i18n from './translations';
 

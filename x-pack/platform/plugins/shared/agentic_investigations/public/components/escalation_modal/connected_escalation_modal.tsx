@@ -22,18 +22,17 @@ import {
 import { KbnWarningCallout } from '@kbn/ui-callout';
 import { css } from '@emotion/react';
 import { type EscalationModalRenderProps } from '@kbn/agentic-investigations-common';
-import {
-  useListEscalations,
-  useCreateEscalation,
-  useAttachToEscalation,
-  useCurrentUserProfile,
-  useSuggestUserProfiles,
-  useEscalationsForInvestigation,
-} from '@kbn/agentic-investigations-plugin/public';
 import { getUserDisplayName } from '@kbn/user-profile-components';
 import { useKibana } from '@kbn/kibana-react-plugin/public';
 import type { CoreStart } from '@kbn/core/public';
 import { isHttpFetchError } from '@kbn/core-http-browser';
+import { useCurrentUserProfile, useSuggestUserProfiles } from '../../user_profiles';
+import {
+  useListEscalations,
+  useCreateEscalation,
+  useAttachToEscalation,
+  useEscalationsForInvestigation,
+} from '../../escalations/hooks/use_escalations_api';
 import {
   ESCALATION_MODAL_TRANSLATIONS,
   ESCALATION_ERRORS,

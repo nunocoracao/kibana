@@ -19,13 +19,13 @@ import {
   useAssignEscalation,
   useListEscalations,
   escalationQueryKeys,
+  useAgenticInvestigationsCapabilities,
+  useOpenInChat,
 } from '@kbn/agentic-investigations-plugin/public';
-import { useAgenticInvestigationsCapabilities } from '../../hooks/use_agentic_investigations_capabilities';
 
 import { AlertZeroPageSection } from '../../components/layout/alertzero_page_section';
 import { EscalationsPageHeader } from '../../components/escalations_page_header';
 import { useAlertZeroDocTitle } from '../../hooks/use_alertzero_doc_title';
-import { useOpenInChat } from '../../hooks/use_open_in_chat';
 import { escalationToQueueItem } from './escalation_to_queue_item';
 import { ESCALATIONS_PAGE_INFO } from './translations';
 import { useQueueAssignees } from '../../components/connected_assignees/use_queue_assignees';

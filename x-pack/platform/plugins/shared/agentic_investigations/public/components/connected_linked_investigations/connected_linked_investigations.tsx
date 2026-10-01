@@ -8,7 +8,7 @@
 import React, { memo } from 'react';
 import type { LinkedInvestigationsSlotRenderProps } from '@kbn/agentic-investigations-common';
 import { LinkedInvestigationsList } from '@kbn/agentic-investigations-common';
-import { useLinkedInvestigations } from '@kbn/agentic-investigations-plugin/public';
+import { useLinkedInvestigations } from '../../escalations/hooks/use_escalations_api';
 import { useStatusSignal } from '../connected_status/use_status_signal';
 
 /**
@@ -18,10 +18,10 @@ import { useStatusSignal } from '../connected_status/use_status_signal';
  * renders the shared `LinkedInvestigationsList`. Clicking a row delegates navigation to
  * `onOpenInvestigation`, which the registration context captured at plugin start.
  *
- * This component lives in alertzero (not the shared package) so it can use `useKibana` and the
- * HTTP hooks from `@kbn/agentic-investigations-plugin/public`. The plugin wraps it in
- * `KibanaContextProvider` + `QueryClientProvider` via `makeLazyWithProviders` before passing it
- * as a render prop to `registerEscalationTemplateUI`.
+ * This component lives in this plugin (not the shared package) so it can use `useKibana` and the
+ * escalation HTTP hooks. The template UI registration wraps it in `KibanaContextProvider` +
+ * `QueryClientProvider` via `makeLazyWithProviders` before passing it as a render prop to
+ * `registerEscalationTemplateUI`.
  *
  * The component subscribes to the cross-boundary `statusSignal` so that a status mutation in the
  * escalation header toggle (which runs in a different `QueryClient`) triggers an immediate
