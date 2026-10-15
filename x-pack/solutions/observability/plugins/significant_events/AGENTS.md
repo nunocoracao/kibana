@@ -52,7 +52,7 @@ exploration, not an exhaustive taxonomy or log sweep. There are no fixed finish 
 or forced write rounds; partial reports real blockers or actual limits.
 
 
-The loop exposes five tools: source catalog, source-scoped ES|QL templates/custom pipelines,
+The loop exposes a shared on-demand ES|QL reference, source catalog, source-scoped ES|QL templates/custom pipelines,
 read-only Kibana tool access, compact KI index/detail/upsert, and explicit completion.
 Infrastructure inventories include ECS/OTel Kubernetes, host/IP, container and cloud metadata.
 The prompt covers entity, dependency, infrastructure, technology and schema families;
@@ -96,3 +96,5 @@ Monitoring's `monitoring_rules action=baseline` describes bounded candidate hist
 Update this file when you make a change that would mislead an agent reading it: cross-package ownership changes, pipeline restructuring, addition or removal of concepts relevant to the pipeline, or naming convention updates. Do not update it for type field additions or directory reorganisations within a package — those are discoverable from the code.
 
 Agent Explorer schedule settings persist intervalMinutes separately for each agent and space (whole minutes, 1–10080; default 60). Managed workflow templates render the actual schedule and retain their values across reinstall/restart. Knowledge source-change reconciliation reads the saved cadence. Saving minutes while off does not enable execution. Legacy hourly workflow IDs/state flags remain for compatibility; frequency is no longer fixed to one hour.
+
+All three agents must supply source_esql lookbackMinutes explicitly; there is no time-range default. The volume template bypasses schema/pattern scans and returns a capped source-wide count, rate relation and latency. endOffsetMinutes selects older intervals consistently across templates/caches; novelty comparisons are window-scoped. Agents choose narrow, wider or distributed historical samples from observed volume and latency, especially for remote clusters. Capped rates are lower bounds and sampled/quiet intervals do not establish source-wide completeness.

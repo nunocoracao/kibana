@@ -44,6 +44,7 @@ const tool = (
 export const discoveryTools: Record<string, ToolDefinition> = {
   detection_sources: explorationTools.detection_sources,
   source_esql: explorationTools.source_esql,
+  esql_guide: explorationTools.esql_guide,
   kibana_information: explorationTools.kibana_information,
   knowledge_indicators: monitoringTools.knowledge_indicators,
   rule_change_points: changePointToolDefinition,

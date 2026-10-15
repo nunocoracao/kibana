@@ -103,6 +103,7 @@ export const monitoringTools: Record<string, ToolDefinition> = {
   detection_sources: explorationTools.detection_sources,
   rule_change_points: changePointToolDefinition,
   source_esql: explorationTools.source_esql,
+  esql_guide: explorationTools.esql_guide,
   kibana_information: explorationTools.kibana_information,
   knowledge_indicators: definition(
     'Read compact KI index/details only. action=index/read; writes are forbidden. Source IDs are opaque. Read details for relevant feature IDs before proposing monitors.',

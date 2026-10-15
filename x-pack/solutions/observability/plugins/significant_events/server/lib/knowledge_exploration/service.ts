@@ -556,7 +556,7 @@ export class KnowledgeExplorationService {
         sources: 'All enabled detection sources in this space',
         lookback:
           this.agent === 'knowledge'
-            ? 'Start with at least 24 hours of service/category discovery; then scope by service for deeper exploration and widen history as needed'
+            ? 'Choose explicit time windows using source volume/latency probes; sample historical intervals and scope by service before expensive exploration'
             : 'Agent-selected bounded windows; start small and widen with evidence',
       },
       triggers:
@@ -902,7 +902,7 @@ export class KnowledgeExplorationService {
             prioritySourceId: run.sourceId ?? null,
             lookback:
               this.agent === 'knowledge'
-                ? 'Start with at least 24 hours of service/category discovery; then scope by service for deeper exploration and widen history as needed'
+                ? 'Choose explicit time windows using source volume/latency probes; sample historical intervals and scope by service before expensive exploration'
                 : 'Agent-selected bounded windows; start small and widen with evidence',
             unfinishedExploration: progress.remainingGaps ?? [],
             now: run.startedAt,
