@@ -74,14 +74,17 @@ export function useKnowledgeIndicatorsBulkDelete({
         queriesPromise,
       ]);
 
+      const errors: string[] = [];
       let succeeded = 0;
       let failed = 0;
 
       if (featuresSettled.status === 'fulfilled') {
         succeeded += featuresSettled.value.succeededCount;
         failed += featuresSettled.value.failedCount;
+        errors.push(...(featuresSettled.value.errors ?? []));
       } else {
         failed += features.length;
+        if (featuresSettled.reason instanceof Error) errors.push(featuresSettled.reason.message);
       }
 
       if (queriesSettled.status === 'fulfilled') {
@@ -89,10 +92,11 @@ export function useKnowledgeIndicatorsBulkDelete({
         failed += queriesSettled.value.failedCount;
       } else {
         failed += queryIds.length;
+        if (queriesSettled.reason instanceof Error) errors.push(queriesSettled.reason.message);
       }
 
       if (succeeded === 0 && failed > 0) {
-        throw new Error(BULK_DELETE_REJECTED_ERROR_MESSAGE);
+        throw new Error(errors[0] ?? BULK_DELETE_REJECTED_ERROR_MESSAGE);
       }
 
       return { succeeded, failed };

@@ -14,6 +14,7 @@ import type { WorkflowsServerPluginSetup } from '@kbn/workflows-management-plugi
 import { type SignificantEventsWorkflowStatusResult } from '@kbn/significant-events-schema';
 import { installDiscoveryAgents } from '../../agent_builder/agents/discovery';
 import { StatusError } from '../errors/status_error';
+import { assertDetectionWorkflowsEnabled } from './detection_workflow_mode';
 import { WorkflowExecutionService } from './workflow_execution_service';
 
 export interface SignificantEventsDiscoveryRunParams {
@@ -53,6 +54,7 @@ export class SignificantEventsDiscoveryClient {
     executionId: string;
     isNew: boolean;
   }> {
+    assertDetectionWorkflowsEnabled();
     // Resolve an explicit model first so an unknown or blocked id is reported even when another
     // discovery execution is active. Preserve the existing no-override behavior by returning an
     // active run before resolving the default.

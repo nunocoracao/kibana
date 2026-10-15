@@ -1,0 +1,25 @@
+version: '1'
+name: 'v2 Monitoring Setup — scheduled'
+enabled: false
+description: 'Invokes the source-scoped monitoring agent on its configured schedule when its independent schedule is enabled.'
+tags:
+  - observability
+  - significant-events
+settings:
+  timeout: '22m'
+  concurrency:
+    key: nightshift-v2-monitoring-setup-hourly
+    strategy: drop
+    max: 1
+triggers:
+  - type: scheduled
+    with:
+      every: '__EXPLORATION_INTERVAL_MINUTES__m'
+steps:
+  - name: setup_monitoring
+    type: kibana.request
+    with:
+      method: POST
+      path: '/s/{{ workflow.spaceId }}/internal/significant_events/monitoring_setup/_run_sync'
+      headers:
+        x-elastic-internal-origin: 'kibana'

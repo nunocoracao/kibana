@@ -32,6 +32,7 @@ export interface ContinuousOnboardingWorkflowService {
    */
   ensureWorkflow(params: {
     enabled: boolean;
+    intervalMinutes?: number;
     request: KibanaRequest;
     spaceId: string;
   }): Promise<void>;
@@ -42,11 +43,13 @@ export const createContinuousOnboardingWorkflowService = ({
   managementApi,
   streamsKIsOnboardingClient,
   getManagedWorkflowsClient,
+  getIntervalMinutes = async () => 60,
 }: {
   logger: Logger;
   managementApi: WorkflowsServerPluginSetup['management'];
   streamsKIsOnboardingClient: SignificantEventsKIsOnboardingClient;
   getManagedWorkflowsClient: () => Promise<PluginScopedManagedWorkflowsApi>;
+  getIntervalMinutes?: (request: KibanaRequest) => Promise<number>;
 }): ContinuousOnboardingWorkflowService => {
   const log = logger.get('continuous-ki-onboarding-workflow');
 
@@ -126,7 +129,7 @@ export const createContinuousOnboardingWorkflowService = ({
   };
 
   return {
-    async ensureWorkflow({ enabled, request, spaceId }) {
+    async ensureWorkflow({ enabled, intervalMinutes, request, spaceId }) {
       const workflowId = `${SIGNIFICANT_EVENTS_KI_CONTINUOUS_ONBOARDING_WORKFLOW_ID}-${spaceId}`;
       const managedWorkflowOptions = { spaceId, workflowIdSuffix: spaceId };
 
@@ -150,7 +153,10 @@ export const createContinuousOnboardingWorkflowService = ({
         const managedWorkflowsClient = await getManagedWorkflowsClient();
         await managedWorkflowsClient.install(
           SIGNIFICANT_EVENTS_KI_CONTINUOUS_ONBOARDING_WORKFLOW_ID,
-          managedWorkflowOptions
+          {
+            ...managedWorkflowOptions,
+            values: { intervalMinutes: intervalMinutes ?? (await getIntervalMinutes(request)) },
+          }
         );
         await setManagedEnabled({ enabled: true, workflowId, spaceId, request });
         log.info(`Enabled continuous KI onboarding workflow in space ${spaceId}`);

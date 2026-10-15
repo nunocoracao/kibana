@@ -100,7 +100,7 @@ export const RuleSummaryFlyoutContainer = ({
     <>
       <RuleSummaryFlyout
         rule={rule}
-        canWrite={canWrite}
+        canWrite={canWrite && !rule.id.startsWith('nightshift-v2-monitor-')}
         isToggleLoading={isToggling}
         session="start"
         onClose={onClose}

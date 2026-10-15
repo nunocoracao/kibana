@@ -1,7 +1,7 @@
 version: '1'
 name: Significant Events Investigation Completed
 description: Attaches completed Nightshift investigations to their Significant Event.
-enabled: true
+enabled: false
 tags:
   - observability
   - streams

@@ -30,6 +30,10 @@ export const AGENT_BUILDER_BUILTIN_TOOLS = [
   // Streams / Significant Events
   ...Object.values(platformSignificantEventsTools),
 
+  'platform.sig_events.v2_knowledge_extractor',
+  'platform.sig_events.v2_monitoring_setup',
+  'platform.sig_events.v2_event_discovery',
+
   // Alerting
   `${internalNamespaces.platformAlerting}.manage_rule`,
 
@@ -194,6 +198,9 @@ export const isAllowedBuiltinAgent = (agentName: string): agentName is AgentBuil
  */
 export const AGENT_BUILDER_AGENT_TYPES = [
   chatAgentTypeId,
+  'platform.sig_events.v2-knowledge-extractor-type',
+  'platform.sig_events.v2-monitoring-setup-type',
+  'platform.sig_events.v2-event-discovery-type',
   `${internalNamespaces.platformNightshift}.investigation-type`,
   `${internalNamespaces.platformSignificantEvents}.decision-tree-reinforcement-type`,
   `${internalNamespaces.platformSignificantEvents}.discovery-type`,

@@ -5,6 +5,7 @@
  * 2.0.
  */
 
+import Boom from '@hapi/boom';
 import { lazySchema, z } from '@kbn/zod/v4';
 import pLimit from 'p-limit';
 import { v4 as uuidv4 } from 'uuid';
@@ -145,6 +146,13 @@ const promoteUnbackedQueriesRoute = createServerRoute({
   },
 });
 
+const assertUserQueries = (ids: string[]): void => {
+  if (ids.some((id) => id.startsWith('nightshift-v2-monitor-')))
+    throw Boom.forbidden(
+      'Monitoring Setup owns these rules. Manage or reset them in Agent Explorer.'
+    );
+};
+
 const demoteBackedQueriesRoute = createServerRoute({
   endpoint: 'POST /internal/streams/queries/_demote',
   options: {
@@ -178,6 +186,7 @@ const demoteBackedQueriesRoute = createServerRoute({
     await assertNotPaused({ maintenanceService, request });
 
     const kiClient = await scopedClients.getKnowledgeIndicatorClient();
+    assertUserQueries(params.body.queryIds);
     // Only rule-backed queries can be demoted; unbacked queries have no rule to remove.
     const catalogSourceIds = await requestedOrAllSourceIds(undefined, sourcesClient);
     const toDemote = await kiClient.getQueryLinks(catalogSourceIds, {
@@ -249,6 +258,7 @@ const bulkDeleteQueriesRoute = createServerRoute({
 
     const kiClient = await scopedClients.getKnowledgeIndicatorClient();
 
+    assertUserQueries(params.body.queryIds);
     // Bulk delete must cover both backed and unbacked queries; the default 'exclude'
     // filter would skip unbacked (draft) ones. includeExpired: explicit-id action, so
     // an expired query must stay reachable.
@@ -807,6 +817,7 @@ const upsertQueryRoute = createServerRoute({
     await assertNotPaused({ maintenanceService, request });
 
     const kiClient = await scopedClients.getKnowledgeIndicatorClient();
+    assertUserQueries([queryId]);
     const existingLink = await findExistingQueryLink({
       kiClient,
       sourcesClient,

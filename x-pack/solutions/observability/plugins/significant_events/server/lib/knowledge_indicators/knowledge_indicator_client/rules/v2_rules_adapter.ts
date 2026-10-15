@@ -51,7 +51,13 @@ export interface RulesAdapterV2Params {
     | 'findRules'
     | 'getTags'
     | 'ruleExists'
-  >;
+  > &
+    Partial<
+      Pick<
+        RulesClientApi,
+        'bulkDeleteManagedRules' | 'bulkEnableManagedRules' | 'bulkDisableManagedRules'
+      >
+    >;
   cpsEnabled: boolean;
 }
 
@@ -134,7 +140,16 @@ export class RulesAdapterV2 implements IRulesManagementClient {
 
   async bulkDeleteRules(ids: string[]): Promise<void> {
     if (ids.length === 0) return;
-    const { errors } = await this.rulesClient.bulkDeleteRules({ ids });
+    const managed = ids.filter((id) => id.startsWith('nightshift-v2-monitor-'));
+    const regular = ids.filter((id) => !id.startsWith('nightshift-v2-monitor-'));
+    const responses = [];
+    if (regular.length) responses.push(await this.rulesClient.bulkDeleteRules({ ids: regular }));
+    if (managed.length) {
+      if (!this.rulesClient.bulkDeleteManagedRules)
+        throw new Error('Managed rule lifecycle API unavailable');
+      responses.push(await this.rulesClient.bulkDeleteManagedRules({ ids: managed }));
+    }
+    const errors = responses.flatMap((response) => response.errors);
     const fatal = errors.filter((e) => e.error.code !== ALERTING_ERROR_CODES.RULE_NOT_FOUND);
     if (fatal.length > 0) {
       const detail = fatal.map((e) => `${e.id}: ${e.error.message}`).join('; ');
@@ -144,9 +159,23 @@ export class RulesAdapterV2 implements IRulesManagementClient {
 
   async setRulesEnabled(ids: string[], enabled: boolean): Promise<void> {
     if (ids.length === 0) return;
-    const { errors } = enabled
-      ? await this.rulesClient.bulkEnableRules({ ids })
-      : await this.rulesClient.bulkDisableRules({ ids });
+    const managed = ids.filter((id) => id.startsWith('nightshift-v2-monitor-'));
+    const regular = ids.filter((id) => !id.startsWith('nightshift-v2-monitor-'));
+    const responses = [];
+    if (regular.length)
+      responses.push(
+        enabled
+          ? await this.rulesClient.bulkEnableRules({ ids: regular })
+          : await this.rulesClient.bulkDisableRules({ ids: regular })
+      );
+    if (managed.length) {
+      const change = enabled
+        ? this.rulesClient.bulkEnableManagedRules?.bind(this.rulesClient)
+        : this.rulesClient.bulkDisableManagedRules?.bind(this.rulesClient);
+      if (!change) throw new Error('Managed rule lifecycle API unavailable');
+      responses.push(await change({ ids: managed }));
+    }
+    const errors = responses.flatMap((response) => response.errors);
     const fatal = errors.filter((e) => e.error.code !== ALERTING_ERROR_CODES.RULE_NOT_FOUND);
     if (fatal.length > 0) {
       const action = enabled ? 'enable' : 'disable';

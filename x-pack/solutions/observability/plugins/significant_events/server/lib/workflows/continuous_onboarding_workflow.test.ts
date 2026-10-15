@@ -10,122 +10,50 @@ import type { WorkflowsServerPluginSetup } from '@kbn/workflows-management-plugi
 import {
   SIGNIFICANT_EVENTS_KI_CONTINUOUS_ONBOARDING_WORKFLOW_ID,
   getManagedWorkflowDefinition,
+  SIGNIFICANT_EVENTS_MONITORING_SETUP_HOURLY_WORKFLOW_ID,
+  SIGNIFICANT_EVENTS_EVENT_DISCOVERY_HOURLY_WORKFLOW_ID,
 } from '@kbn/workflows/managed';
-import {
-  COORDINATOR_INTERVAL_MINUTES,
-  MAX_SCHEDULED_STREAMS,
-  POLL_DELAY_SECONDS,
-} from '../../../common/constants';
 import { createContinuousOnboardingWorkflowService } from './continuous_onboarding_workflow';
 import type { SignificantEventsKIsOnboardingClient } from './onboarding_workflow_client';
 
-// The continuous onboarding workflow YAML lives in the managed workflow
-// definition (kbn-workflows/managed/definitions/significant_events/knowledge_indicators/continuous_onboarding.yaml).
-// These tests keep that YAML in sync with the constants in common/constants.ts.
-const definition = getManagedWorkflowDefinition(
-  SIGNIFICANT_EVENTS_KI_CONTINUOUS_ONBOARDING_WORKFLOW_ID
-);
+describe.each([
+  SIGNIFICANT_EVENTS_KI_CONTINUOUS_ONBOARDING_WORKFLOW_ID,
+  SIGNIFICANT_EVENTS_MONITORING_SETUP_HOURLY_WORKFLOW_ID,
+  SIGNIFICANT_EVENTS_EVENT_DISCOVERY_HOURLY_WORKFLOW_ID,
+])('Agent schedule %s', (id) => {
+  const definition = getManagedWorkflowDefinition(id);
+  const render = (intervalMinutes?: number): string => {
+    if (!definition?.yamlTemplate) throw new Error('Missing agent schedule template');
+    return definition.yamlTemplate(intervalMinutes === undefined ? {} : { intervalMinutes });
+  };
 
-const getWorkflowYaml = (): string => {
-  if (!definition || !('yaml' in definition) || typeof definition.yaml !== 'string') {
-    throw new Error('Continuous onboarding managed workflow definition is missing inline YAML');
-  }
-  return definition.yaml;
-};
-
-const WORKFLOW_YAML = getWorkflowYaml();
-
-const assertYamlContains = (expected: string) => {
-  expect(WORKFLOW_YAML).toContain(expected);
-};
-
-describe('continuous_onboarding.yaml stays in sync with constants', () => {
-  it('is registered as a restorable managed workflow', () => {
-    expect(definition?.management.enablement).toBe('restorable');
+  it('preserves the existing hourly schedule for older installs', () => {
+    expect(render()).toContain("every: '60m'");
   });
 
-  it('is disabled by default so the user setting controls enablement', () => {
-    assertYamlContains('enabled: false');
-  });
-
-  it('uses the correct timeout', () => {
-    assertYamlContains(`timeout: '${COORDINATOR_INTERVAL_MINUTES - 1}m'`);
-  });
-
-  it('uses the correct coordinator interval', () => {
-    assertYamlContains(`every: '${COORDINATOR_INTERVAL_MINUTES}m'`);
-  });
-
-  it('uses the correct maxScheduledStreams input', () => {
-    assertYamlContains(
-      `name: maxScheduledStreams\n        type: number\n        default: ${MAX_SCHEDULED_STREAMS}`
-    );
-  });
-
-  it('uses the correct lookbackHours input', () => {
-    assertYamlContains(`name: lookbackHours\n        type: number\n        default: 24`);
-  });
-
-  it('declares consts that match the input defaults', () => {
-    assertYamlContains(`maxScheduledStreams: ${MAX_SCHEDULED_STREAMS}`);
-    assertYamlContains('lookbackHours: 24');
-  });
-
-  it('declares extractionIntervalHours as an optional input without default', () => {
-    assertYamlContains('name: extractionIntervalHours\n        type: number\n        description:');
-    expect(WORKFLOW_YAML).not.toMatch(
-      /- name: extractionIntervalHours\n\s+type: number\n\s+default:/m
-    );
-  });
-
-  it('does not declare the removed excludedStreamPatterns input', () => {
-    expect(WORKFLOW_YAML).not.toContain('excludedStreamPatterns');
-  });
-
-  it('uses the correct poll delay duration', () => {
-    assertYamlContains(`duration: '${POLL_DELAY_SECONDS}s'`);
-  });
-
-  it('calls the eligibility endpoint with the correct query params', () => {
-    assertYamlContains('_extraction/_eligible');
-    assertYamlContains(
-      'maxScheduledStreams={{ inputs.maxScheduledStreams | default: consts.maxScheduledStreams }}'
-    );
-    assertYamlContains('lookbackHours={{ inputs.lookbackHours | default: consts.lookbackHours }}');
-    assertYamlContains(
-      '{%- if inputs.extractionIntervalHours %}&extractionIntervalHours={{ inputs.extractionIntervalHours }}{% endif -%}'
-    );
-  });
-
-  it('starts onboarding via workflow.executeAsync for the managed onboarding workflow', () => {
-    assertYamlContains('type: workflow.executeAsync');
-    assertYamlContains("workflow-id: 'system-streams-ki-onboarding'");
-  });
-
-  it('runs both features identification and queries generation', () => {
-    assertYamlContains('skipFeatures: false');
-    assertYamlContains('skipQueries: false');
-  });
-
-  it('converts the eligibility sampling window from ISO to epoch ms', () => {
-    assertYamlContains(
-      `featuresStart: "\${{ steps.get_eligible.output.timeRange.from | date: '%s' | times: 1000 }}"`
-    );
-    assertYamlContains(
-      `featuresEnd: "\${{ steps.get_eligible.output.timeRange.to | date: '%s' | times: 1000 }}"`
-    );
-  });
-
-  it('polls the onboarding status endpoint to await completion', () => {
-    assertYamlContains('onboarding/_status');
-  });
+  it.each([1, 7, 90, 10080])(
+    'renders a %i-minute cadence without changing run concurrency',
+    (minutes) => {
+      const yaml = render(minutes);
+      expect(yaml).toContain(`every: '${minutes}m'`);
+      expect(yaml).toContain('strategy: drop');
+      expect(yaml).toContain('max: 1');
+      expect(yaml).toContain('enabled: false');
+      expect(yaml).not.toContain('__EXPLORATION_INTERVAL_MINUTES__');
+      expect(yaml).not.toContain('_extraction/_eligible');
+    }
+  );
 });
 
 describe('createContinuousOnboardingWorkflowService', () => {
   const request = {} as KibanaRequest;
   const spaceId = 'space-a';
   const workflowDocumentId = `${SIGNIFICANT_EVENTS_KI_CONTINUOUS_ONBOARDING_WORKFLOW_ID}-${spaceId}`;
-  const managedWorkflowOptions = { spaceId, workflowIdSuffix: spaceId };
+  const managedWorkflowOptions = {
+    spaceId,
+    workflowIdSuffix: spaceId,
+    values: { intervalMinutes: 60 },
+  };
 
   let logger: Logger;
   let getWorkflow: jest.Mock;
@@ -184,6 +112,34 @@ describe('createContinuousOnboardingWorkflowService', () => {
       { enabled: true },
       spaceId,
       request
+    );
+  });
+
+  it('updates the cadence while keeping an already enabled workflow enabled', async () => {
+    getWorkflow.mockResolvedValue({ enabled: true });
+    await createService().ensureWorkflow({ enabled: true, intervalMinutes: 7, request, spaceId });
+    expect(managedWorkflowsClient.install).toHaveBeenCalledWith(
+      SIGNIFICANT_EVENTS_KI_CONTINUOUS_ONBOARDING_WORKFLOW_ID,
+      { spaceId, workflowIdSuffix: spaceId, values: { intervalMinutes: 7 } }
+    );
+    expect(managementApi.updateWorkflow).not.toHaveBeenCalled();
+  });
+
+  it('uses the saved cadence when a source change reconciles the workflow', async () => {
+    getWorkflow.mockResolvedValue({ enabled: true });
+    const service = createContinuousOnboardingWorkflowService({
+      logger,
+      managementApi,
+      streamsKIsOnboardingClient: {
+        cancelAllRunning: jest.fn(),
+      } as unknown as SignificantEventsKIsOnboardingClient,
+      getManagedWorkflowsClient: jest.fn().mockResolvedValue(managedWorkflowsClient),
+      getIntervalMinutes: async () => 17,
+    });
+    await service.ensureWorkflow({ enabled: true, request, spaceId });
+    expect(managedWorkflowsClient.install).toHaveBeenCalledWith(
+      SIGNIFICANT_EVENTS_KI_CONTINUOUS_ONBOARDING_WORKFLOW_ID,
+      { spaceId, workflowIdSuffix: spaceId, values: { intervalMinutes: 17 } }
     );
   });
 

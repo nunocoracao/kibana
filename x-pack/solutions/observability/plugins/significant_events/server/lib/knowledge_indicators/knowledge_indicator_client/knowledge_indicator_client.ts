@@ -22,6 +22,7 @@ import {
   type KnowledgeIndicatorDataStreamClient,
   type RuleUnbackedFilter,
 } from './types';
+import { readKnowledgeActivity } from './activity_reader';
 import { RevisionReader } from './revision_reader';
 import { IndicatorWriter } from './indicator_writer';
 import { IndicatorReader } from './indicator_reader';
@@ -52,6 +53,8 @@ export class KnowledgeIndicatorClient {
   private readonly reader: IndicatorReader;
   private readonly searcher: IndicatorSearcher;
   private readonly orchestrator: QueryRuleOrchestrator;
+  private readonly activitySpace: string;
+  private readonly activityEsClient: KnowledgeIndicatorClientDeps['esClient'];
   private readonly ttlDays: number;
   private readonly withSourceWrite: NonNullable<KnowledgeIndicatorClientDeps['withSourceWrite']>;
 
@@ -65,6 +68,8 @@ export class KnowledgeIndicatorClient {
     > = DEFAULT_SIGNIFICANT_EVENTS_TUNING_CONFIG
   ) {
     this.withSourceWrite = deps.withSourceWrite ?? ((_sourceId, run) => run());
+    this.activityEsClient = deps.esClient;
+    this.activitySpace = deps.space;
     const revisionReader = new RevisionReader(deps.esClient, deps.logger, deps.space);
     this.ttlDays = config.feature_ttl_days;
     this.writer = new IndicatorWriter(
@@ -90,6 +95,10 @@ export class KnowledgeIndicatorClient {
       this.reader,
       deps.space
     );
+  }
+
+  getActivity(sourceIds: string[], from: string, to: string) {
+    return readKnowledgeActivity(this.activityEsClient, sourceIds, this.activitySpace, from, to);
   }
 
   bulk(sourceId: string, operations: KIBulkOperation[]) {

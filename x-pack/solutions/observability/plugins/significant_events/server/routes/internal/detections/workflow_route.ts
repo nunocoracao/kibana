@@ -12,6 +12,7 @@ import {
   MIN_SIG_EVENTS_CHANGE_POINT_BUCKETS,
   MAX_SIG_EVENTS_CHANGE_POINT_BUCKETS,
 } from '../../../../common/constants';
+import { assertDetectionWorkflowsEnabled } from '../../../lib/workflows/detection_workflow_mode';
 import { StatusError } from '../../../lib/errors/status_error';
 import { createSignificantEventsTracedEsClient } from '../../../lib/significant_events/create_significant_events_traced_es_client';
 import {
@@ -113,6 +114,7 @@ const countAlertsRoute = createServerRoute({
     const { scopedClusterClient, licensing } = scopedClients;
 
     await assertSignificantEventsAccess({ server, licensing });
+    assertDetectionWorkflowsEnabled();
 
     // Same 400-on-malformed contract as the change_point scan route.
     assertDetectionLookback(params.body.lookback);
@@ -159,6 +161,7 @@ const changePointScanRoute = createServerRoute({
     const { scopedClusterClient, licensing } = scopedClients;
 
     await assertSignificantEventsAccess({ server, licensing });
+    assertDetectionWorkflowsEnabled();
 
     assertDetectionAnalysisWindow(params.body.lookback, params.body.bucketInterval);
 

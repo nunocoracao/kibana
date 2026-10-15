@@ -37,6 +37,62 @@ into that package.
 - Managed workflow ids keep their `system-streams-ki-*` names.
 - Legacy handling that stays: the `sigevents:stream:<name>` rule ownership tag (`LEGACY_RULE_STREAM_TAG_PREFIX`) and the maintenance reset sweep.
 
+## Agent Explorer prototype
+
+The active KI extraction path is `server/lib/knowledge_exploration`: one space-scoped,
+source-aware inference tool loop across all enabled sources, triggered on its configured minute cadence (60 by default), when
+sources are added/changed, or manually. It uses no Agent Builder skills. The old
+feature-identification agent, computed/inferred identification endpoints and extraction
+skills are disabled. Monitoring Setup maintains native-rule query references, and V2 Event Discovery runs a separate correlation/investigation loop.
+The periodic managed workflow invokes the global loop once rather than running an agent
+per source. Source-added runs prioritize the new source while retaining cross-source context. Initial
+learning (sources without completed novelty checkpoints) receives larger snapshotted
+time/turn/token/cost limits than incremental runs. Completion means useful supported
+exploration, not an exhaustive taxonomy or log sweep. There are no fixed finish nudges
+or forced write rounds; partial reports real blockers or actual limits.
+
+
+The loop exposes five tools: source catalog, source-scoped ES|QL templates/custom pipelines,
+read-only Kibana tool access, compact KI index/detail/upsert, and explicit completion.
+Infrastructure inventories include ECS/OTel Kubernetes, host/IP, container and cloud metadata.
+The prompt covers entity, dependency, infrastructure, technology and schema families;
+operational patterns use inferred schema KIs rather than fabricated computed payloads.
+Writes preserve the existing feature schema and stamp source ownership and run provenance.
+Evidence references are run-local handles to observed rows; dependency writes must cite
+rows supporting both endpoints. Logical feature IDs are for reads/upserts; storage UUIDs
+are used for deletion. A batch can save some KIs while rejecting others.
+
+Run traces, price snapshots, model selection, novelty checkpoints and cost ledgers are
+space-scoped saved objects. Changing the selected inference connector affects future runs
+only; each run retains its model/connector and price snapshot. Default selection for every agent is Luna 6 Pro, with thinking requested. Explicit model selections affect future runs only. New runs require pricing and reported usage; missing usage/rates stop execution. Historical incomplete estimates remain explicit. Every run has a $50 reported-estimated cost ceiling, checked between model calls; an in-flight request can exceed it before its usage is reported. Stop cancels the model/tool signal and clears queued source runs. The Knowledge Explorer UI exposes the actual prompt/tools/settings,
+per-run traces and estimates, and separate feature, history and total resets. Feature reset
+never deletes generated queries or alert rules. Detection includes Overview, Timeline, Events
+and Rules plus a Sources child page. It consumes current source IDs and learned relationships;
+it does not import Carl's topology map. Retained KI activity filters both source ID and
+`kibana.space_ids` before collecting revisions.
+
+This branch disables the existing detection/discovery/orchestrator/review workflows while
+Knowledge Explorer is evaluated. Managed YAML defaults are off; `detection_workflow_mode.ts`
+blocks manual discovery and change-point execution and scheduled enablement. Startup keeps
+scheduled workflows and cleanup off. Knowledge Explorer's manual/source-added/hourly paths
+are independent. Do not re-enable old per-source KI extraction when adapting the Detection UI.
+
+## Monitoring Setup prototype
+
+`server/lib/monitoring_setup` is a tool loop with manual runs and an independent configurable minute schedule, off by default, using the shared Agent Explorer runner with separate space-scoped model selections, histories, leases, output resets and cost ledgers. Luna 6 Pro is the default for every new agent. It reads configured-source KIs, native rules and the available read-only Kibana tool catalog (including anomaly/ML context), then maintains only its exact owned native `kind: signal` rules. Query KI references keep the rules visible in Detection. Metric series collect useful baselines without requiring a severity or incident threshold; Event Discovery will judge significance. The prompt prefers a compact grouped rule set, incremental coverage and source-supported failure examples; simulator topology is never an input.
+
+Reserved rule IDs use `nightshift-v2-monitor-` and ownership tag `nightshift:agent:v2-monitoring-setup`. Native Alerting lists these rules read-only and public routes block writes; internal managed methods retain the native rule scheduler, authorization and events. User-facing query edits/deletes/demotions are blocked for the reserved IDs. Source disable/removal and maintenance still manage them through internal lifecycle methods. Reset Monitoring removes only its native rules and query references. Detection engine activity includes Knowledge Extractor, Monitoring Setup and Event Discovery runs, polling every three seconds; skipped legacy executions do not appear as activity. Coverage reports distinguish covered, partial, blind spots and unobservable concerns and link to Detection Rules. Monitoring create/update/re-enable tools enforce at most seven active owned rules per service and namespace across configured sources; grouped rules consume a slot for every observed emitting service. Ownership tags retain those identities alongside KI references. This ceiling is not a quota: use observed critical journeys, dependency impact, user rules/SLOs and source evidence to prioritize high-impact uncovered concerns, and record concern priority/reason in the coverage report. Throughput/latency baselines do not establish failure or correctness coverage.
+
+Agent Builder installs `v2 Knowledge Extractor`, `v2 Monitoring Setup` and `V2 Event Discovery`. All three expose no skills and use run/status/stop/anatomy control tools to launch the same instrumented loops asynchronously. Their actual prompts/tools/models live in Agent Explorer; Agent Builder launcher conversation charges are separate from loop estimates. Per-space installs happen on first explorer access/run as well as startup in the default space.
+
+## Event Discovery prototype
+
+`server/lib/event_discovery` correlates managed and user native rule activity and legacy Observability alerts attributable to enabled configured sources over the last 30 minutes. Manual and independent configurable scheduled invocation use the shared runner, isolated histories/models/costs/Stop and owned-output reset; hourly defaults off. Measurements are not incident verdicts. Native rule evidence is stored in `rule_signals`, separately from historical change-point `signals`, preserving actual rule/alert references. Assessments use owned native alerts, active for relevant current problems and inactive for evaluated benign/recovered/unsupported candidates. Stable issue keys and prior event IDs support continuation; operator dismissals are retained. Context KIs are not automatically causal features. Active writes require current bounded source evidence or a recent active alert; old error examples do not prove continued failure. Source samples expose first/last-seen times and label representative text honestly.
+
+Monitoring's `monitoring_rules action=baseline` describes bounded candidate histories before setup, including sample counts, variation and gaps without inferring thresholds or filling missing observations with zero. Both Monitoring and Discovery may inspect existing series through optional `rule_change_points`; latest per-bucket revisions and complete buckets are used. Elasticsearch can return indeterminable for short/gapped history. Neither change-point significance nor constant background errors alone establish an incident. Live Carl evaluations keep simulator topology/fault ledgers outside agent context, clear telemetry/KIs/rules/alerts between systems, and run Knowledge then Monitoring before injecting faults. Start with the simplest dungeon and verify clean baseline, real fault, identity and recovery before increasing complexity.
+
 ## Keeping this file current
 
 Update this file when you make a change that would mislead an agent reading it: cross-package ownership changes, pipeline restructuring, addition or removal of concepts relevant to the pipeline, or naming convention updates. Do not update it for type field additions or directory reorganisations within a package — those are discoverable from the code.
+
+Agent Explorer schedule settings persist intervalMinutes separately for each agent and space (whole minutes, 1–10080; default 60). Managed workflow templates render the actual schedule and retain their values across reinstall/restart. Knowledge source-change reconciliation reads the saved cadence. Saving minutes while off does not enable execution. Legacy hourly workflow IDs/state flags remain for compatibility; frequency is no longer fixed to one hour.

@@ -11,6 +11,7 @@ import { resolveNightshiftModelForRequest, type InferenceDocument } from '@kbn/n
 import { MAX_ID_LENGTH } from '@kbn/significant-events-schema';
 import { isInferenceProviderError } from '@kbn/inference-common';
 import { NIGHTSHIFT_API_PRIVILEGES } from '@kbn/nightshift-shared';
+import { StatusError } from '../../../../lib/errors/status_error';
 import { createServerRoute } from '../../../create_server_route';
 import { assertNotPaused } from '../../../utils/assert_not_paused';
 import { assertSignificantEventsAccess } from '../../../utils/assert_significant_events_access';
@@ -129,6 +130,7 @@ const prepareInferredSamplingRoute = createServerRoute({
 
     await assertSignificantEventsAccess({ server, licensing });
     await assertNotPaused({ maintenanceService, request });
+    throwIfLegacyExtraction(server);
 
     const { sourceId } = params.path;
     const routeLogger = logger.get('features_identification', 'prepare', sourceId);
@@ -212,6 +214,7 @@ const identifyInferredFeaturesRoute = createServerRoute({
 
     await assertSignificantEventsAccess({ server, licensing });
     await assertNotPaused({ maintenanceService, request });
+    throwIfLegacyExtraction(server);
 
     const { sourceId } = params.path;
     const routeLogger = logger.get('features_identification', 'inferred', sourceId);
@@ -359,6 +362,7 @@ const identifyComputedFeaturesRoute = createServerRoute({
 
     await assertSignificantEventsAccess({ server, licensing });
     await assertNotPaused({ maintenanceService, request });
+    throwIfLegacyExtraction(server);
 
     const { sourceId } = params.path;
     const routeLogger = logger.get('features_identification', 'computed', sourceId);
@@ -458,4 +462,9 @@ export const internalIdentifyKIFeaturesRoutes = {
   ...identifyInferredFeaturesRoute,
   ...identifyComputedFeaturesRoute,
   ...shouldIdentifyRoute,
+};
+
+const throwIfLegacyExtraction = (server: { knowledgeExploration?: object }): void => {
+  if (server.knowledgeExploration)
+    throw new StatusError('Legacy KI extraction is disabled. Use Knowledge Explorer.', 409);
 };

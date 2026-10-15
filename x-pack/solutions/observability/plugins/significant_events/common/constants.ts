@@ -43,14 +43,8 @@ export const SIGNIFICANT_EVENT_TIERED_FEATURES = [SIGNIFICANT_EVENTS_TIERED_FEAT
 export const LEGACY_CONTINUOUS_KI_EXTRACTION_WORKFLOW_ID =
   'workflow-ad83678a-dba7-55d1-8caa-3010f6f46b81';
 
-// Scheduling: the workflow runs every COORDINATOR_INTERVAL_MINUTES with a
-// timeout 1 minute shorter to avoid overlapping with the next run.
-//
-// The coordinator starts onboarding for each eligible source (features AND
-// queries generation) and then polls every source
-// until it reaches a terminal state. Per-source onboarding is capped at 30m
-// and runs in parallel, so the interval must comfortably exceed that ceiling.
-export const COORDINATOR_INTERVAL_MINUTES = 35;
+// One space-wide agent run per hour. Each run is bounded to ten minutes.
+export const COORDINATOR_INTERVAL_MINUTES = 60;
 
 // Source selection: how many sources to process per run and how often
 export const DEFAULT_EXTRACTION_INTERVAL_HOURS = 12;

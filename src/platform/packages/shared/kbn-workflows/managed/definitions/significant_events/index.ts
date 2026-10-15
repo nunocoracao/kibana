@@ -8,7 +8,9 @@
  */
 
 import CLEANUP_YAML from './cleanup.yaml';
+import EVENT_DISCOVERY_HOURLY_YAML from './event_discovery_hourly.yaml';
 import INVESTIGATION_COMPLETED_YAML from './investigation_completed.yaml';
+import MONITORING_SETUP_HOURLY_YAML from './monitoring_setup_hourly.yaml';
 import DETECTION_YAML from './significant_events/detection.yaml';
 import DISCOVERY_YAML from './significant_events/discovery.yaml';
 import ORCHESTRATOR_YAML from './significant_events/orchestrator.yaml';
@@ -29,7 +31,7 @@ export const SIGNIFICANT_EVENTS_INVESTIGATION_COMPLETED_WORKFLOW_ID =
 
 // lifecycle: 'static' — instances are declared at startup; orphans are cleaned up on restart.
 // versionStrategy: 'auto' — version bumps are handled automatically on install.
-// enablement: 'enforced' — always enabled, cannot be disabled by the user.
+// enablement: 'enforced' — apply the YAML state; detection is disabled in this KI prototype.
 const SIGNIFICANT_EVENTS_WORKFLOW_MANAGEMENT = {
   lifecycle: 'static',
   versionStrategy: 'auto',
@@ -86,3 +88,43 @@ export const SIGNIFICANT_EVENTS_INVESTIGATION_COMPLETED_WORKFLOW = {
   yaml: INVESTIGATION_COMPLETED_YAML,
   management: SIGNIFICANT_EVENTS_WORKFLOW_MANAGEMENT,
 } as const satisfies ManagedWorkflowDefinition;
+
+export const SIGNIFICANT_EVENTS_MONITORING_SETUP_HOURLY_WORKFLOW_ID =
+  'system-nightshift-v2-monitoring-setup-hourly';
+
+export const SIGNIFICANT_EVENTS_MONITORING_SETUP_HOURLY_WORKFLOW = {
+  id: SIGNIFICANT_EVENTS_MONITORING_SETUP_HOURLY_WORKFLOW_ID,
+  pluginId: 'significantEvents',
+  version: 2,
+  billable: false,
+  yamlTemplate: ({ intervalMinutes = 60 }) =>
+    MONITORING_SETUP_HOURLY_YAML.replace(
+      '__EXPLORATION_INTERVAL_MINUTES__',
+      String(intervalMinutes)
+    ),
+  management: {
+    lifecycle: 'dynamic',
+    versionStrategy: 'auto',
+    enablement: 'restorable',
+  },
+} as const satisfies ManagedWorkflowDefinition<{ intervalMinutes?: number }>;
+
+export const SIGNIFICANT_EVENTS_EVENT_DISCOVERY_HOURLY_WORKFLOW_ID =
+  'system-nightshift-v2-event-discovery-hourly';
+
+export const SIGNIFICANT_EVENTS_EVENT_DISCOVERY_HOURLY_WORKFLOW = {
+  id: SIGNIFICANT_EVENTS_EVENT_DISCOVERY_HOURLY_WORKFLOW_ID,
+  pluginId: 'significantEvents',
+  version: 2,
+  billable: false,
+  yamlTemplate: ({ intervalMinutes = 60 }) =>
+    EVENT_DISCOVERY_HOURLY_YAML.replace(
+      '__EXPLORATION_INTERVAL_MINUTES__',
+      String(intervalMinutes)
+    ),
+  management: {
+    lifecycle: 'dynamic',
+    versionStrategy: 'auto',
+    enablement: 'restorable',
+  },
+} as const satisfies ManagedWorkflowDefinition<{ intervalMinutes?: number }>;

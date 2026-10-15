@@ -92,7 +92,8 @@ export class GetRulesRoute extends BaseAlertingRoute {
   }
 
   protected async execute() {
-    const result = await this.rulesClient.findRules(toFindRulesArgs(this.request.query));
+    const args = toFindRulesArgs(this.request.query);
+    const result = await this.rulesClient.findRules(args);
     return this.ctx.response.ok({ body: result });
   }
 }

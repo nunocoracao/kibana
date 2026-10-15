@@ -171,9 +171,11 @@ const sourceIdsIntersects = (values: string[]): ESQLAstExpression =>
  * Verified live against `.rule-events` on nightshift-program#1517.
  */
 const ruleUuidsIntersects = (values: string[]): ESQLAstExpression =>
-  esql.exp`MV_INTERSECTS(FIELD_EXTRACT(${esql.col('data')}, ${esql.str(
+  esql.exp`(MV_INTERSECTS(FIELD_EXTRACT(${esql.col('data')}, ${esql.str(
     'signals.metadata.rule_uuid'
-  )}), [${values.map((value) => esql.str(value))}])`;
+  )}), [${values.map((value) => esql.str(value))}]) OR MV_INTERSECTS(FIELD_EXTRACT(${esql.col(
+    'data'
+  )}, ${esql.str('rule_signals.rule_uuid')}), [${values.map((value) => esql.str(value))}]))`;
 
 /**
  * Topology feature filter: an event matches when either

@@ -226,6 +226,33 @@ export class RulesClient {
     this.logger = loggerService.forSubsystem('rulesClient');
   }
 
+  private assertUserRuleIds(ids: readonly string[]): void {
+    if (ids.some((id) => id.startsWith('nightshift-v2-monitor-')))
+      throw Boom.forbidden(
+        'This rule is managed by Nightshift Monitoring Setup. Use Agent Explorer to manage it.'
+      );
+  }
+
+  /** Creates a code-owned Nightshift rule through the native rule engine. */
+  public async createManagedRule(params: CreateRuleParams): Promise<RuleResponse> {
+    return this.createRuleInternal(params);
+  }
+
+  /** Updates a code-owned rule without exposing managed writes through public routes. */
+  public async updateManagedRule(params: UpdateRuleParams): Promise<RuleResponse> {
+    return this.updateRuleInternal(params);
+  }
+
+  public async bulkDeleteManagedRules(params: BulkByIdsParams): Promise<BulkResponse> {
+    return this.executeBulkDelete(params.ids, true);
+  }
+  public async bulkEnableManagedRules(params: BulkByIdsParams): Promise<BulkResponse> {
+    return this.executeBulkEnable(params.ids, true);
+  }
+  public async bulkDisableManagedRules(params: BulkByIdsParams): Promise<BulkResponse> {
+    return this.executeBulkDisable(params.ids, true);
+  }
+
   private getSpaceContext(): { spaceId: string } {
     return { spaceId: this.spaceId };
   }
@@ -617,6 +644,13 @@ export class RulesClient {
 
   @withApm
   public async createRule(params: CreateRuleParams): Promise<RuleResponse> {
+    this.assertUserRuleIds(params.options?.id ? [params.options.id] : []);
+    if (params.data.metadata.tags?.includes('nightshift:agent:v2-monitoring-setup'))
+      throw Boom.forbidden('The managed Nightshift ownership tag is reserved.');
+    return this.createRuleInternal(params);
+  }
+
+  private async createRuleInternal(params: CreateRuleParams): Promise<RuleResponse> {
     const parsed = this.parseRuleData(createRuleDataSchema, params.data, 'create');
     const actor = await this.userService.getCurrentActor();
     const nowIso = new Date().toISOString();
@@ -656,6 +690,13 @@ export class RulesClient {
 
   @withApm
   public async bulkCreateRules(params: BulkCreateRulesParams): Promise<BulkCreateRulesResponse> {
+    this.assertUserRuleIds(params.items.flatMap((item) => (item.id ? [item.id] : [])));
+    if (
+      params.items.some((item) =>
+        item.metadata.tags?.includes('nightshift:agent:v2-monitoring-setup')
+      )
+    )
+      throw Boom.forbidden('The managed Nightshift ownership tag is reserved.');
     const parsed = this.parseRuleData(bulkCreateRulesRequestSchema, params, 'create');
     const { spaceId } = this.getSpaceContext();
     const actor = await this.userService.getCurrentActor();
@@ -717,7 +758,14 @@ export class RulesClient {
   }
 
   @withApm
-  public async updateRule({ id, data }: UpdateRuleParams): Promise<RuleResponse> {
+  public async updateRule(params: UpdateRuleParams): Promise<RuleResponse> {
+    this.assertUserRuleIds([params.id]);
+    if (params.data.metadata?.tags?.includes('nightshift:agent:v2-monitoring-setup'))
+      throw Boom.forbidden('The managed Nightshift ownership tag is reserved.');
+    return this.updateRuleInternal(params);
+  }
+
+  private async updateRuleInternal({ id, data }: UpdateRuleParams): Promise<RuleResponse> {
     const { spaceId } = this.getSpaceContext();
     const parsed = this.parseRuleData(updateRuleDataSchema, data, 'update');
     if (parsed.artifacts !== undefined) {
@@ -1179,7 +1227,8 @@ export class RulesClient {
    * bulk errors. Task-removal failures do not fail the operation but are
    * logged and surfaced per-rule as `TASK_MANAGER_DRIFT` errors.
    */
-  private async executeBulkDelete(ids: string[]): Promise<BulkResponse> {
+  private async executeBulkDelete(ids: string[], managed = false): Promise<BulkResponse> {
+    if (!managed) this.assertUserRuleIds(ids);
     const { spaceId } = this.getSpaceContext();
     const errors: BulkOperationError[] = [];
     let affectedCount = 0;
@@ -1236,7 +1285,8 @@ export class RulesClient {
     return { affected_count: affectedCount, errors };
   }
 
-  private async executeBulkEnable(ids: string[]): Promise<BulkResponse> {
+  private async executeBulkEnable(ids: string[], managed = false): Promise<BulkResponse> {
+    if (!managed) this.assertUserRuleIds(ids);
     const { spaceId } = this.getSpaceContext();
     const errors: BulkOperationError[] = [];
     let affectedCount = 0;
@@ -1356,7 +1406,8 @@ export class RulesClient {
     return { affected_count: affectedCount, errors };
   }
 
-  private async executeBulkDisable(ids: string[]): Promise<BulkResponse> {
+  private async executeBulkDisable(ids: string[], managed = false): Promise<BulkResponse> {
+    if (!managed) this.assertUserRuleIds(ids);
     const { spaceId } = this.getSpaceContext();
     const errors: BulkOperationError[] = [];
     let affectedCount = 0;
@@ -1466,6 +1517,7 @@ export class RulesClient {
    * rules whose key actually rotated.
    */
   private async executeBulkUpdateApiKey(ids: string[]): Promise<BulkResponse> {
+    this.assertUserRuleIds(ids);
     const { spaceId } = this.getSpaceContext();
     const errors: BulkOperationError[] = [];
     let affectedCount = 0;
@@ -1799,6 +1851,7 @@ export class RulesClient {
     id: string;
     data: CreateRuleData;
   }): Promise<{ rule: RuleResponse; created: boolean }> {
+    this.assertUserRuleIds([id]);
     const parsed = this.parseRuleData(createRuleDataSchema, data, 'upsert');
     this.artifactTypeRegistry.validate(parsed.artifacts);
 

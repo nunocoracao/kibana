@@ -83,7 +83,12 @@ export interface SignificantEventsPluginStartDependencies {
   nightshiftInvestigations?: NightshiftInvestigationsServerStart;
 }
 
+import type { KnowledgeExplorationService } from './lib/knowledge_exploration/service';
+
 export interface SignificantEventsServer {
+  knowledgeExploration: KnowledgeExplorationService;
+  monitoringSetup: KnowledgeExplorationService;
+  eventDiscovery: KnowledgeExplorationService;
   core: CoreStart;
   logger: Logger;
   security: SecurityPluginStart;

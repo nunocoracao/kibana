@@ -15,7 +15,6 @@ import type { SignificantEventsServer } from '../../types';
 import { createKIQueryGenerationSkill } from './ki_query_generation';
 import { knowledgeIndicatorsManagementSkill } from './knowledge_indicators_management';
 import { createKiIdentificationManagementSkill } from './ki_identification_management';
-import { featureIdentificationSkill } from './feature_identification';
 import { significantEventsManagementSkill } from './significant_events_management';
 import { significantEventsKIGroundingSkill } from './significant_events_ki_grounding';
 import { streamsInvestigationManagementSkill } from './investigation_management';
@@ -28,7 +27,7 @@ interface RegisterSignificantEventsSkillsOptions {
   streamsKIsOnboardingClient?: SignificantEventsKIsOnboardingClient;
   maintenanceService?: SignificantEventsMaintenanceService;
   getScopedClients: GetScopedClients;
-  server: Pick<SignificantEventsServer, 'security'>;
+  server: Pick<SignificantEventsServer, 'security' | 'knowledgeExploration'>;
   logger: Logger;
   isAvailable: () => Promise<boolean>;
   /**
@@ -75,16 +74,19 @@ export const registerSignificantEventsSkills = async ({
     createKIQueryGenerationSkill({ getScopedClients, server, logger }),
     significantEventsKIGroundingSkill,
     significantEventsManagementSkill,
-    featureIdentificationSkill,
     ...(streamsKIsOnboardingClient && maintenanceService
       ? [
-          createKiIdentificationManagementSkill({
-            server,
-            telemetry,
-            streamsKIsOnboardingClient,
-            maintenanceService,
-            getScopedClients,
-          }),
+          ...(!server.knowledgeExploration
+            ? [
+                createKiIdentificationManagementSkill({
+                  server,
+                  telemetry,
+                  streamsKIsOnboardingClient,
+                  maintenanceService,
+                  getScopedClients,
+                }),
+              ]
+            : []),
         ]
       : []),
     streamsInvestigationManagementSkill,

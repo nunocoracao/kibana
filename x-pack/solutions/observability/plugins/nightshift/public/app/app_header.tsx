@@ -79,6 +79,8 @@ export interface NightshiftAppHeaderProps {
   page?: 'landing' | 'automations' | 'knowledge' | 'settings';
   onManagementClick: () => void | Promise<void>;
   managementHref: string;
+  detectionHref?: string;
+  onDetectionClick?: () => void | Promise<void>;
   onKnowledgeClick?: () => void | Promise<void>;
   knowledgeHref?: string;
   onSettingsClick?: () => void | Promise<void>;
@@ -95,6 +97,8 @@ export function NightshiftAppHeader({
   page = 'landing',
   onManagementClick,
   managementHref,
+  detectionHref,
+  onDetectionClick,
   onKnowledgeClick,
   knowledgeHref,
   onSettingsClick,
@@ -132,6 +136,20 @@ export function NightshiftAppHeader({
                 run: () => onSandboxSecretsClick(),
                 testId: 'nightshiftSandboxSecretsLink',
                 overflow: true,
+              },
+            ]
+          : []),
+        ...(detectionHref
+          ? [
+              {
+                id: 'nightshiftDetection',
+                label: i18n.translate('xpack.nightshift.detectionLinkLabel', {
+                  defaultMessage: 'Detection',
+                }),
+                iconType: 'graphApp',
+                href: detectionHref,
+                run: () => void onDetectionClick?.(),
+                testId: 'nightshiftDetectionLink',
               },
             ]
           : []),
@@ -182,6 +200,8 @@ export function NightshiftAppHeader({
       ],
     }),
     [
+      detectionHref,
+      onDetectionClick,
       automationsHref,
       isAutomationsPage,
       isKnowledgePage,

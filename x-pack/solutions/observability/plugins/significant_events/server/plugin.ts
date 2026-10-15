@@ -37,6 +37,12 @@ import { NIGHTSHIFT_ENABLED_FLAG } from '@kbn/nightshift-shared';
 import { SIGNIFICANT_EVENTS_SOURCE_RECONCILIATION_WORKFLOW_ID } from '@kbn/workflows/managed';
 import { GLOBAL_WORKFLOW_SPACE_ID } from '@kbn/workflows/server';
 import {
+  registerExplorerAgentTypes,
+  registerExplorerControlTools,
+  installExplorerAgents,
+} from './agent_builder/agents/explorer';
+import { enginePreferencesSavedObjectType } from './lib/engine_preferences';
+import {
   createSourceKnowledgeStateClient,
   sourceKnowledgeStateSavedObjectType,
   SOURCE_KNOWLEDGE_STATE_TYPE,
@@ -118,10 +124,6 @@ import {
   registerSignificantEventsDiscoveryAgentTypes,
 } from './agent_builder/agents/discovery';
 import {
-  installFeatureIdentificationAgent,
-  registerSignificantEventsFeatureIdentificationAgentTypes,
-} from './agent_builder/agents/feature_identification';
-import {
   installKIQueryGenerationAgent,
   registerSignificantEventsKIQueryGenerationAgentTypes,
 } from './agent_builder/agents/ki_query_generation';
@@ -131,6 +133,12 @@ import { isSignificantEventsAvailable } from './routes/utils/assert_significant_
 import type { SignificantEventsKIsOnboardingClient } from './lib/workflows/onboarding_workflow_client';
 import { WorkflowExecutionService } from './lib/workflows/workflow_execution_service';
 import { createSourceChangeListener } from './routes/internal/knowledge_indicators/reconcile_source_catalog';
+import { KnowledgeExplorationService } from './lib/knowledge_exploration/service';
+import {
+  explorationSavedObjectTypes,
+  monitoringSavedObjectTypes,
+  eventDiscoverySavedObjectTypes,
+} from './lib/knowledge_exploration/store';
 import { isSignificantEventsSemanticCodeSearchGroundingEnabled } from './lib/semantic_code_search_grounding/is_significant_events_semantic_code_search_grounding_enabled';
 
 const SIGNIFICANT_EVENTS_MANAGED_WORKFLOW_OWNER = 'significantEvents';
@@ -177,7 +185,13 @@ export class SignificantEventsPlugin
 
     core.savedObjects.registerType(getRelayAppConnectionSavedObjectType());
     core.savedObjects.registerType(getSignificantEventsMaintenanceStateSavedObjectType());
+    [
+      ...explorationSavedObjectTypes,
+      ...monitoringSavedObjectTypes,
+      ...eventDiscoverySavedObjectTypes,
+    ].forEach((type) => core.savedObjects.registerType(type));
     core.savedObjects.registerType(sourceKnowledgeStateSavedObjectType);
+    core.savedObjects.registerType(enginePreferencesSavedObjectType);
     core.savedObjects.registerType(runQuotaSettingsSavedObjectType);
     core.savedObjects.registerType(runQuotaLedgerSavedObjectType);
 
@@ -324,7 +338,7 @@ export class SignificantEventsPlugin
           { ignoreContinuousSetting = false }: IScheduleSourceOnboardingOptions = {}
         ): Promise<boolean> => {
           if (
-            !streamsKIsOnboardingClient ||
+            !this.server?.knowledgeExploration ||
             !source.enabled ||
             // The toggle governs the periodic sweeps only. A created or edited source is
             // onboarded once for its new revision whatever the toggle says.
@@ -336,22 +350,9 @@ export class SignificantEventsPlugin
           ) {
             return false;
           }
-          const now = Date.now();
-          await streamsKIsOnboardingClient.run({
-            request,
-            inputs: {
-              sourceId: source.id,
-              sourceSlug: source.slug,
-              sourceRevision: source.esql_updated_at,
-              rootTriggeredBy: 'scheduled',
-              features: {
-                skip: false,
-                start: now - 24 * 60 * 60_000,
-                end: now,
-                recencyThresholdHours: 0,
-              },
-              queries: { skip: false },
-            },
+          await this.server?.knowledgeExploration.start(request, {
+            reason: 'source_added',
+            sourceId: source.id,
           });
           return true;
         },
@@ -367,6 +368,25 @@ export class SignificantEventsPlugin
         tuningConfig,
       };
     };
+
+    this.server.knowledgeExploration = new KnowledgeExplorationService(
+      () => this.server,
+      this.getScopedClients,
+      () => priceService
+    );
+    this.server.monitoringSetup = new KnowledgeExplorationService(
+      () => this.server,
+      this.getScopedClients,
+      () => priceService,
+      'monitoring'
+    );
+
+    this.server.eventDiscovery = new KnowledgeExplorationService(
+      () => this.server,
+      this.getScopedClients,
+      () => priceService,
+      'events'
+    );
 
     const telemetryClient = this.ebtTelemetryService.getClient();
 
@@ -398,10 +418,8 @@ export class SignificantEventsPlugin
     }
 
     if (plugins.agentBuilder) {
+      registerExplorerAgentTypes(plugins.agentBuilder);
       registerSignificantEventsDiscoveryAgentTypes({ agentBuilder: plugins.agentBuilder });
-      registerSignificantEventsFeatureIdentificationAgentTypes({
-        agentBuilder: plugins.agentBuilder,
-      });
       registerSignificantEventsKIQueryGenerationAgentTypes({
         agentBuilder: plugins.agentBuilder,
         isSemanticCodeSearchGroundingEnabled: async () =>
@@ -414,6 +432,11 @@ export class SignificantEventsPlugin
         .then(async () => {
           const { getScopedClients, server } = this;
           if (!getScopedClients || !server) return;
+          registerExplorerControlTools(
+            plugins.agentBuilder!,
+            server,
+            () => this.maintenanceService
+          );
           await registerStreamsAgentBuilder({
             agentBuilder: plugins.agentBuilder!,
             getScopedClients,
@@ -463,6 +486,8 @@ export class SignificantEventsPlugin
 
       if (streamsKIsOnboardingClient) {
         continuousOnboardingWorkflowService = createContinuousOnboardingWorkflowService({
+          getIntervalMinutes: async (request) =>
+            (await this.server?.knowledgeExploration.intervalMinutes(request)) ?? 60,
           logger: this.logger,
           managementApi,
           streamsKIsOnboardingClient,
@@ -546,6 +571,24 @@ export class SignificantEventsPlugin
           // Keep periodic repair available even when continuous onboarding is switched off.
           if ((await this.maintenanceService?.getState({ request })) !== 'paused') {
             await syncWorkflowService?.ensureEnabled({ request, spaceId: request.spaceId });
+            const clients = await this.getScopedClients?.({ request });
+            if (clients && continuousOnboardingWorkflowService) {
+              const configured = await clients.uiSettingsClient.getUserProvided();
+              const enabled =
+                configured[OBSERVABILITY_NIGHTSHIFT_CONTINUOUS_ONBOARDING_ENABLED]?.userValue;
+              // Selecting a source starts hourly exploration unless the user explicitly disabled it.
+              if (enabled === undefined)
+                await clients.uiSettingsClient.set(
+                  OBSERVABILITY_NIGHTSHIFT_CONTINUOUS_ONBOARDING_ENABLED,
+                  true
+                );
+              if (enabled !== false)
+                await continuousOnboardingWorkflowService.ensureWorkflow({
+                  enabled: true,
+                  request,
+                  spaceId: request.spaceId,
+                });
+            }
           }
         },
       })
@@ -710,6 +753,9 @@ export class SignificantEventsPlugin
     // Pause re-assert runs inside ensureSignificantEventsInstalled after every install.
     if (plugins.agentBuilder && this.server) {
       const agentBuilder = plugins.agentBuilder;
+      void installExplorerAgents(agentBuilder, this.server, DEFAULT_SPACE_ID).catch(
+        (error: unknown) => this.logManagedResourceError('v2 agents', error)
+      );
       const availability = createSignificantEventsAvailability({
         server: this.server,
         logger: this.logger,
@@ -719,13 +765,6 @@ export class SignificantEventsPlugin
           this.logManagedResourceError('significant events agents', error);
         }
       );
-      void installFeatureIdentificationAgent({
-        agentBuilder,
-        spaceId: DEFAULT_SPACE_ID,
-        availability,
-      }).catch((error: unknown) => {
-        this.logManagedResourceError('feature identification agent', error);
-      });
       void installKIQueryGenerationAgent({
         agentBuilder,
         spaceId: DEFAULT_SPACE_ID,
@@ -837,6 +876,9 @@ export class SignificantEventsPlugin
   }
 
   public async stop() {
+    await this.server?.knowledgeExploration.stop();
+    await this.server?.monitoringSetup.stop();
+    await this.server?.eventDiscovery.stop();
     this.subscriptions.forEach((s) => s.unsubscribe());
   }
 }

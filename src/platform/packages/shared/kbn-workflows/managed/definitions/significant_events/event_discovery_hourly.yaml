@@ -1,0 +1,25 @@
+version: '1'
+name: 'v2 Event Discovery — scheduled'
+enabled: false
+description: 'Invokes the source-scoped event discovery agent on its configured schedule when its independent schedule is enabled.'
+tags:
+  - observability
+  - significant-events
+settings:
+  timeout: '22m'
+  concurrency:
+    key: nightshift-v2-event-discovery-hourly
+    strategy: drop
+    max: 1
+triggers:
+  - type: scheduled
+    with:
+      every: '__EXPLORATION_INTERVAL_MINUTES__m'
+steps:
+  - name: discover_events
+    type: kibana.request
+    with:
+      method: POST
+      path: '/s/{{ workflow.spaceId }}/internal/significant_events/event_discovery/_run_sync'
+      headers:
+        x-elastic-internal-origin: 'kibana'

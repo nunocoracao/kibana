@@ -79,7 +79,8 @@ export const RuleDetailPage: React.FunctionComponent = () => {
   const { rulesLocators } = useAlertingLocators();
   const rulesListHref = rulesLocators.useUrl({});
 
-  const canWrite = useService(UserCapabilities).canWrite('rules');
+  const canWrite =
+    useService(UserCapabilities).canWrite('rules') && !rule.id.startsWith('nightshift-v2-monitor-');
   const chrome = useService(CoreStart('chrome'));
   const agentBuilder = useService(PluginStart('agentBuilder'), { optional: true }) as
     | AgentBuilderPluginStart

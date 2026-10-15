@@ -107,6 +107,22 @@ export function SignificantEventsPage() {
         ? {
             items: [
               {
+                id: 'detectionOverview',
+                order: -1,
+                label: 'Detection',
+                iconType: 'graphApp',
+                href: getUrlForApp('significant_events', { path: '/detection' }),
+              },
+              {
+                id: 'knowledgeExplorer',
+                order: 0,
+                iconType: 'machineLearningApp',
+                label: i18n.translate('xpack.significantEventsApp.knowledgeExplorer.link', {
+                  defaultMessage: 'Agent Explorer',
+                }),
+                href: getUrlForApp('significant_events', { path: '/knowledge-exploration' }),
+              },
+              {
                 id: 'settings',
                 order: 1,
                 label: settingsLabel,
@@ -117,7 +133,7 @@ export function SignificantEventsPage() {
             ],
           }
         : undefined,
-    [canManageAndConfigure, settingsHref, settingsLabel]
+    [canManageAndConfigure, settingsHref, settingsLabel, getUrlForApp]
   );
 
   useEffect(() => {

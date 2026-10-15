@@ -75,11 +75,12 @@ export const SIGNIFICANT_EVENTS_KI_ONBOARDING_WORKFLOW = {
 export const SIGNIFICANT_EVENTS_KI_CONTINUOUS_ONBOARDING_WORKFLOW = {
   id: SIGNIFICANT_EVENTS_KI_CONTINUOUS_ONBOARDING_WORKFLOW_ID,
   pluginId: 'significantEvents',
-  version: 4,
+  version: 6,
   billable: false,
-  yaml: CONTINUOUS_ONBOARDING_YAML,
+  yamlTemplate: ({ intervalMinutes = 60 }) =>
+    CONTINUOUS_ONBOARDING_YAML.replace('__EXPLORATION_INTERVAL_MINUTES__', String(intervalMinutes)),
   management: SIGNIFICANT_EVENTS_KI_PER_SPACE_WORKFLOW_MANAGEMENT,
-} as const satisfies ManagedWorkflowDefinition;
+} as const satisfies ManagedWorkflowDefinition<{ intervalMinutes?: number }>;
 
 // The sync (groundedness) sweep workflow is installed per space and enabled on
 // demand by SyncWorkflowService, so it shares the continuous onboarding management.

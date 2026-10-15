@@ -53,6 +53,7 @@ export function NightshiftPage(): React.ReactElement | null {
   const knowledgeHref = application.getUrlForApp(NIGHTSHIFT_APP_ID, {
     path: '/knowledge',
   });
+  const detectionHref = application.getUrlForApp(SIGNIFICANT_EVENTS_APP_ID, { path: '/detection' });
   const managementHref = application.getUrlForApp(SIGNIFICANT_EVENTS_APP_ID, {
     path: '/sources',
   });
@@ -211,6 +212,8 @@ export function NightshiftPage(): React.ReactElement | null {
       ) : (
         <>
           <NightshiftAppHeader
+            detectionHref={detectionHref}
+            onDetectionClick={() => application.navigateToUrl(detectionHref)}
             page={canUseAutomationsPage ? 'automations' : 'landing'}
             onManagementClick={navigateToManagement}
             managementHref={managementHref}

@@ -9,6 +9,7 @@ import type { KibanaRequest, Logger } from '@kbn/core/server';
 import type { WorkflowsServerPluginSetup } from '@kbn/workflows-management-plugin/server';
 import { SIGNIFICANT_EVENTS_CLEANUP_WORKFLOW_ID } from '@kbn/workflows/managed';
 import type { PluginScopedManagedWorkflowsApi } from '@kbn/workflows/server/types';
+import { DETECTION_WORKFLOWS_ENABLED } from './detection_workflow_mode';
 import { stateBlocksNewActivity } from '../../../common/maintenance/state_machine';
 import type { SignificantEventsMaintenanceService } from '../maintenance/maintenance_service';
 
@@ -72,6 +73,17 @@ export const createCleanupWorkflowService = ({
       let existing = await managementApi
         .getClient(request)
         .getWorkflow(workflowDocumentId, spaceId);
+
+      if (!DETECTION_WORKFLOWS_ENABLED) {
+        if (existing?.enabled)
+          await managementApi.updateWorkflow(
+            workflowDocumentId,
+            { enabled: false },
+            spaceId,
+            request
+          );
+        return;
+      }
 
       if (!existing) {
         const managedWorkflowsClient = await getManagedWorkflowsClient();

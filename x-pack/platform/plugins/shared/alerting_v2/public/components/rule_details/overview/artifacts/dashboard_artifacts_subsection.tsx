@@ -232,7 +232,9 @@ const DashboardsSubsectionHeader = ({ manageButton }: { manageButton: React.Reac
 );
 
 export const DashboardArtifactsSubsection: React.FC<RuleSummarySectionProps> = ({ rule }) => {
-  const canWrite = useService(UserCapabilities).canWrite('rules');
+  const canWrite =
+    useService(UserCapabilities).canWrite('rules') &&
+    !rule.id?.startsWith('nightshift-v2-monitor-');
   const http = useService(CoreStart('http'));
   const share = useService(PluginStart('share')) as SharePluginStart;
   const dashboard = useService(PluginStart('dashboard'), { optional: true }) as

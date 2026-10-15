@@ -466,6 +466,27 @@ export const significantEventBaseSchema = lazySchema(() =>
       .describe(
         'Evidence signals associated with this incident record. Each entry represents one alerting rule associated with this event. '
       ),
+    rule_signals: z
+      .array(
+        z.object({
+          source_id: z.string().max(MAX_ID_LENGTH),
+          rule_uuid: z.string().max(MAX_ID_LENGTH),
+          rule_name: z.string().max(MAX_TITLE_LENGTH),
+          alert_id: z.string().max(MAX_ID_LENGTH),
+          origin: z.enum(['managed', 'user']),
+          kind: z.enum(['signal', 'alert']),
+          description: z.string().max(MAX_TEXT_LENGTH),
+          verdict: z.enum(SIGNAL_VERDICTS),
+          collected_at: isoDateTime({ offset: true }),
+          evidence: signalEvidenceSchema.optional(),
+        })
+      )
+      .max(MAX_ARRAY_LENGTH)
+      .optional(),
+    discovery_run_id: z.string().max(MAX_ID_LENGTH).optional(),
+    issue_key: z.string().max(500).optional(),
+    agent_owner: z.literal('v2-event-discovery').optional(),
+    operator_dismissed: z.boolean().optional(),
     // traceability
     workflow_execution_id: z
       .string()

@@ -313,10 +313,10 @@ const bulkFeaturesRoute = createServerRoute({
     const kiOps: KIBulkOperation[] = operations.map((op) =>
       'delete' in op ? { delete: { type: 'feature' as const, id: op.delete.id } } : op
     );
-    await kiClient.bulk(sourceId, kiOps);
+    const { applied } = await kiClient.bulk(sourceId, kiOps);
 
     const hasShrinkingOp = operations.some((op) => 'delete' in op || 'exclude' in op);
-    if (hasShrinkingOp) {
+    if (applied > 0 && hasShrinkingOp) {
       try {
         await kiClient.reconcileSource(sourceId);
       } catch (err) {
@@ -364,7 +364,7 @@ const bulkFeaturesAcrossStreamsRoute = createServerRoute({
     getScopedClients,
     server,
     logger,
-  }): Promise<{ succeeded: number; failed: number; skipped: number }> => {
+  }): Promise<{ succeeded: number; failed: number; skipped: number; errors: string[] }> => {
     const scopedClients = await getScopedClients({
       request,
     });
@@ -411,6 +411,7 @@ const bulkFeaturesAcrossStreamsRoute = createServerRoute({
     let succeeded = 0;
     let failed = 0;
     let skipped = skippedFromLookup;
+    const errors: string[] = [];
 
     const sourcesWithShrinkingOps = new Set<string>();
 
@@ -419,7 +420,7 @@ const bulkFeaturesAcrossStreamsRoute = createServerRoute({
         const { applied, skipped: sourceSkipped } = await kiClient.bulk(sourceId, ops);
         succeeded += applied;
         skipped += sourceSkipped;
-        if (ops.some((op) => 'delete' in op || 'exclude' in op)) {
+        if (applied > 0 && ops.some((op) => 'delete' in op || 'exclude' in op)) {
           sourcesWithShrinkingOps.add(sourceId);
         }
       } catch (error) {
@@ -429,6 +430,7 @@ const bulkFeaturesAcrossStreamsRoute = createServerRoute({
           }`
         );
         failed += ops.length;
+        errors.push((error instanceof Error ? error.message : String(error)).slice(0, 500));
       }
     }
 
@@ -445,7 +447,7 @@ const bulkFeaturesAcrossStreamsRoute = createServerRoute({
       }
     }
 
-    return { succeeded, failed, skipped };
+    return { succeeded, failed, skipped, errors };
   },
 });
 

@@ -11,6 +11,9 @@ import React from 'react';
 import { DateRangeRedirect } from '../app_root/date_range_redirect';
 import { SignificantEventsAppPageTemplate } from '../components/page_template';
 import { RedirectTo } from '../components/redirect_to';
+import { DetectionPage } from '../pages/detection/page';
+import { SourcesPage } from '../pages/detection/sources_page';
+import { KnowledgeExplorationPage } from '../pages/knowledge_exploration/page';
 import { SignificantEventsPage } from '../pages/significant_events/page';
 
 /**
@@ -30,6 +33,15 @@ const significantEventsAppRoutes = {
       '/': {
         element: <RedirectTo path="/{tab}" params={{ path: { tab: 'sources' } }} />,
       },
+      '/detection': {
+        element: (
+          <DateRangeRedirect>
+            <DetectionPage />
+          </DateRangeRedirect>
+        ),
+      },
+      '/detection/sources': { element: <SourcesPage /> },
+      '/knowledge-exploration': { element: <KnowledgeExplorationPage /> },
       '/{tab}': {
         element: (
           <DateRangeRedirect>

@@ -24,6 +24,7 @@ import { createServerRoute } from '../../create_server_route';
 import { assertSignificantEventsAccess } from '../../utils/assert_significant_events_access';
 import { assertNotPaused } from '../../utils/assert_not_paused';
 import { FeatureNotEnabledError } from '../../../lib/errors/feature_not_enabled_error';
+import { assertDetectionWorkflowsEnabled } from '../../../lib/workflows/detection_workflow_mode';
 import { StatusError } from '../../../lib/errors/status_error';
 import { installDiscoveryAgents } from '../../../agent_builder/agents/discovery';
 import {
@@ -190,6 +191,7 @@ const putScheduledDiscoverySettingsRoute = createServerRoute({
     }
 
     const { scheduledDiscovery } = params.body;
+    if (scheduledDiscovery.enabled) assertDetectionWorkflowsEnabled();
 
     const spaceUpdates: Record<string, boolean | number> = {};
 

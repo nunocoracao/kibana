@@ -1,7 +1,7 @@
 version: '1'
 name: 'Significant Events Discovery'
 description: 'Correlates unhandled detections into significant events using a discovery agent, writes final event versions, and propagates rule-level resolutions.'
-enabled: true
+enabled: false
 settings:
   timeout: '45m'
   concurrency:

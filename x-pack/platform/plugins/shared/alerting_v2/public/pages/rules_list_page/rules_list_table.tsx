@@ -197,6 +197,7 @@ export const RulesListTable: React.FC<RulesListTableProps> = ({
                 <EuiCheckbox
                   id={`select-rule-${id}`}
                   checked={isRowSelected(id)}
+                  disabled={id.startsWith('nightshift-v2-monitor-')}
                   onChange={() => onSelectRow(id)}
                   aria-label={i18n.translate('xpack.alertingV2.rulesList.selectRule', {
                     defaultMessage: 'Select rule',
@@ -219,6 +220,13 @@ export const RulesListTable: React.FC<RulesListTableProps> = ({
             <EuiLink onClick={() => onOpenSummary(rule)} data-test-subj={`ruleNameLink-${rule.id}`}>
               {metadata?.name ?? rule.id}
             </EuiLink>
+            {rule.id.startsWith('nightshift-v2-monitor-') && (
+              <EuiBadge color="hollow" data-test-subj="nightshiftManagedRuleBadge">
+                {i18n.translate('xpack.alertingV2.rulesList.managedBadge', {
+                  defaultMessage: 'Managed by Nightshift',
+                })}
+              </EuiBadge>
+            )}
             {metadata?.description && (
               <EuiText size="xs" color="subdued" css={descriptionTextStyle}>
                 {metadata.description}
@@ -310,7 +318,7 @@ export const RulesListTable: React.FC<RulesListTableProps> = ({
         width: '8%',
         sortable: true,
         render: (enabled: boolean, rule: RuleApiResponse) => {
-          if (!canWrite) {
+          if (!canWrite || rule.id.startsWith('nightshift-v2-monitor-')) {
             return (
               <EuiBadge
                 color={enabled ? 'success' : 'default'}
@@ -367,7 +375,7 @@ export const RulesListTable: React.FC<RulesListTableProps> = ({
                   responsive={false}
                   justifyContent="flexEnd"
                 >
-                  {canWrite ? (
+                  {canWrite && !rule.id.startsWith('nightshift-v2-monitor-') ? (
                     <EuiFlexItem grow={false}>
                       <EuiToolTip
                         content={i18n.translate('xpack.alertingV2.rulesList.action.quickEdit', {
@@ -393,7 +401,7 @@ export const RulesListTable: React.FC<RulesListTableProps> = ({
                   <EuiFlexItem grow={false}>
                     <RuleActionsMenu
                       rule={rule}
-                      canWrite={canWrite}
+                      canWrite={canWrite && !rule.id.startsWith('nightshift-v2-monitor-')}
                       onEdit={onEdit}
                       onClone={onClone}
                       onDelete={onDelete}

@@ -14,6 +14,7 @@ import {
 import type { PluginScopedManagedWorkflowsApi } from '@kbn/workflows/server/types';
 import type { WorkflowsServerPluginSetup } from '@kbn/workflows-management-plugin/server';
 import { SCHEDULED_DISCOVERY_WORKFLOW_IDS } from '../maintenance/managed_workflow_targets';
+import { DETECTION_WORKFLOWS_ENABLED } from './detection_workflow_mode';
 import { pollUntil } from './poll_until';
 
 const RUNNING_EXECUTIONS_PAGE_SIZE = 1000;
@@ -246,6 +247,12 @@ export const createSignificantEventsScheduledWorkflowsService = ({
   return {
     async ensureWorkflow({ enabled, request, spaceId, config }) {
       const client = await getManagedWorkflowsClient();
+
+      if (!DETECTION_WORKFLOWS_ENABLED) {
+        await setAllEnabled({ enabled: false, request, spaceId });
+        await cancelRunningScheduledExecutions({ request, spaceId });
+        return;
+      }
 
       if (enabled) {
         await installOrUpdate({ client, spaceId, config });

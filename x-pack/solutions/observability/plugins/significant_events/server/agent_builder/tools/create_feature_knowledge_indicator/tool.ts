@@ -97,6 +97,11 @@ export function createFeatureKnowledgeIndicatorTool({
     availability: {
       cacheMode: 'space',
       handler: async (): Promise<ToolAvailabilityResult> => {
+        if (server.knowledgeExploration)
+          return {
+            status: 'unavailable',
+            reason: 'Feature extraction is owned by Knowledge Explorer',
+          };
         try {
           await assertSignificantEventsAccess({
             server,

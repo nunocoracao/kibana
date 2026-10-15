@@ -67,6 +67,24 @@ export const runRulesInBatches = async (
   return { affectedCount, toggledIds, failedIds, failures };
 };
 
+/** Dispatches only reserved agent IDs through the internal managed lifecycle API. */
+const withManagedRules = async (
+  ids: string[],
+  run: (ids: string[]) => Promise<BulkResponse>,
+  runManaged: (ids: string[]) => Promise<BulkResponse>
+): Promise<BulkResponse> => {
+  const regular = ids.filter((id) => !id.startsWith('nightshift-v2-monitor-'));
+  const managed = ids.filter((id) => id.startsWith('nightshift-v2-monitor-'));
+  if (!managed.length) return run(ids);
+  if (!regular.length) return runManaged(managed);
+  const normalResponse = await run(regular);
+  const managedResponse = await runManaged(managed);
+  return {
+    affected_count: normalResponse.affected_count + managedResponse.affected_count,
+    errors: [...normalResponse.errors, ...managedResponse.errors],
+  };
+};
+
 /** Toggle `enabled` on a set of alerting v2 signal rules as the caller. */
 export const setV2RulesEnabled = async (
   rulesClient: RulesClientApi,
@@ -75,9 +93,17 @@ export const setV2RulesEnabled = async (
 ): Promise<RulesToggleResult> =>
   toRulesToggleResult(
     ids,
-    enabled
-      ? await rulesClient.bulkEnableRules({ ids })
-      : await rulesClient.bulkDisableRules({ ids })
+    await withManagedRules(
+      ids,
+      (regular) =>
+        enabled
+          ? rulesClient.bulkEnableRules({ ids: regular })
+          : rulesClient.bulkDisableRules({ ids: regular }),
+      (managed) =>
+        enabled
+          ? rulesClient.bulkEnableManagedRules({ ids: managed })
+          : rulesClient.bulkDisableManagedRules({ ids: managed })
+    )
   );
 
 export const deleteV2Rules = async (
@@ -89,7 +115,11 @@ export const deleteV2Rules = async (
   failures: SignificantEventsMaintenanceFailure[];
 }> => {
   const { affectedCount, failedIds, failures } = await runRulesInBatches(ids, (chunk) =>
-    rulesClient.bulkDeleteRules({ ids: chunk })
+    withManagedRules(
+      chunk,
+      (regular) => rulesClient.bulkDeleteRules({ ids: regular }),
+      (managed) => rulesClient.bulkDeleteManagedRules({ ids: managed })
+    )
   );
   return { deleted: affectedCount, failedIds, failures };
 };

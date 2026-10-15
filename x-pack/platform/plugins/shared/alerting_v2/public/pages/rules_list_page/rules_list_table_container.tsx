@@ -14,6 +14,9 @@ import {
   useContentListSort,
 } from '@kbn/content-list-provider';
 import { useService } from '@kbn/core-di-browser';
+import { useQuery } from '@kbn/react-query';
+import { RulesApi } from '../../services/rules_api';
+import { toFindRulesRequest } from '../../hooks/use_fetch_rules';
 import type { RuleApiResponse } from '../../services/rules_api';
 import { UserCapabilities } from '../../services/user_capabilities';
 import { useBulkSelect } from '../../hooks/use_bulk_select';
@@ -68,6 +71,21 @@ export const RulesListTableContainer: React.FC<RulesListTableContainerProps> = (
   const { filter, search } = useMemo(() => toRulesQueryParams(activeFilters), [activeFilters]);
 
   const items = contentItems.map((item) => (item as RuleContentListItem).rule);
+  const rulesApi = useService(RulesApi);
+  const selectionFilter = [
+    filter ? `(${filter})` : '',
+    'NOT metadata.tags: "nightshift:agent:v2-monitoring-setup"',
+  ]
+    .filter(Boolean)
+    .join(' AND ');
+  const selectableRules = useQuery({
+    queryKey: ['alertingV2-selectable-rules', selectionFilter, search, totalItems],
+    queryFn: () =>
+      rulesApi.listRules(
+        toFindRulesRequest({ filter: selectionFilter, search, page: 1, perPage: 1 })
+      ),
+    enabled: canWrite,
+  });
 
   const tableSortField = API_SORT_TO_TABLE_FIELD[sortField];
 
@@ -120,9 +138,9 @@ export const RulesListTableContainer: React.FC<RulesListTableContainerProps> = (
     onClearSelection,
     getBulkParams,
   } = useBulkSelect({
-    totalItemCount: totalItems,
-    items,
-    filter,
+    totalItemCount: selectableRules.data?.total ?? 0,
+    items: items.filter((item) => !item.id.startsWith('nightshift-v2-monitor-')),
+    filter: selectionFilter,
     search,
   });
 
@@ -217,7 +235,7 @@ export const RulesListTableContainer: React.FC<RulesListTableContainerProps> = (
         sortField={tableSortField}
         sortDirection={sortDirection}
         isLoading={isLoading}
-        canWrite={canWrite}
+        canWrite={canWrite && Boolean(selectableRules.data?.total)}
         selectedCount={selectedCount}
         isAllSelected={isAllSelected}
         isPageSelected={isPageSelected}

@@ -5,7 +5,7 @@
  * 2.0.
  */
 
-import type { SignificantEventStatus } from '@kbn/significant-events-schema';
+import type { SignificantEventStatus, Severity } from '@kbn/significant-events-schema';
 import type { AlertEventsClientApi } from '@kbn/alerting-v2-plugin/server';
 import type { RuleEventsClient } from './rule_events_client';
 import type { TriggerEmitter } from '../../../workflows/triggers/emit';
@@ -17,6 +17,7 @@ export const updateSignificantEventStatus = async ({
   eventId,
   status,
   assessmentNote,
+  severity,
   alertEventsClient,
   emitTrigger,
 }: {
@@ -24,6 +25,7 @@ export const updateSignificantEventStatus = async ({
   eventId: string;
   status: SignificantEventStatus;
   assessmentNote?: string;
+  severity?: Severity;
   alertEventsClient: AlertEventsClientApi;
   emitTrigger?: TriggerEmitter;
 }): Promise<{
@@ -37,7 +39,11 @@ export const updateSignificantEventStatus = async ({
     return { updated: 0, ignored: 1, status };
   }
 
-  if (latest.status === status) {
+  if (
+    latest.status === status &&
+    (!severity || latest.severity === severity) &&
+    !assessmentNote?.trim()
+  ) {
     return { updated: 0, ignored: 1, status };
   }
 
@@ -48,6 +54,8 @@ export const updateSignificantEventStatus = async ({
     ...latest,
     '@timestamp': now,
     status,
+    operator_dismissed: status === 'inactive',
+    ...(severity ? { severity } : {}),
     ...(note ? { assessment_note: note } : {}),
   };
 

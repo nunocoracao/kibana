@@ -5,6 +5,12 @@
  * 2.0.
  */
 
+import { internalEngineActivityRoutes } from './internal/engine_activity/route';
+import { internalEnginePreferencesRoutes } from './internal/engine_activity/preferences_route';
+import { internalKIActivityRoutes } from './internal/knowledge_indicators/activity_route';
+import { internalEventDiscoveryRoutes } from './internal/event_discovery/route';
+import { internalMonitoringSetupRoutes } from './internal/monitoring_setup/route';
+import { internalKnowledgeExplorationRoutes } from './internal/knowledge_exploration/route';
 import { internalAvailabilityRoutes } from './internal/availability/route';
 import { internalSlackAppRoutes } from './internal/apps/slack/route';
 import { internalDetectionsRoutes } from './internal/detections/route';
@@ -27,6 +33,12 @@ import { syncRoutes } from './internal/knowledge_indicators/sync_route';
 import { internalScheduledDiscoveryRoutes } from './internal/scheduled_discovery/route';
 
 export const significantEventsRouteRepository = {
+  ...internalEngineActivityRoutes,
+  ...internalEnginePreferencesRoutes,
+  ...internalKIActivityRoutes,
+  ...internalKnowledgeExplorationRoutes,
+  ...internalMonitoringSetupRoutes,
+  ...internalEventDiscoveryRoutes,
   // internal APIs
   ...internalAvailabilityRoutes,
   ...internalSlackAppRoutes,

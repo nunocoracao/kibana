@@ -12,6 +12,7 @@ import { useKibana } from './use_kibana';
 export interface BulkOperationResult {
   succeededCount: number;
   failedCount: number;
+  errors?: string[];
 }
 
 type CrossStreamOp =
@@ -39,14 +40,14 @@ export function useDiscoveryFeaturesApi(): DiscoveryFeaturesApi {
       if (features.length === 0) {
         return { succeededCount: 0, failedCount: 0 };
       }
-      const { succeeded, failed } = await significantEventsRepositoryClient.fetch(
+      const { succeeded, failed, errors } = await significantEventsRepositoryClient.fetch(
         'POST /internal/streams/features/_bulk',
         {
           signal: null,
           params: { body: { operations: features.map(buildOp) } },
         }
       );
-      return { succeededCount: succeeded, failedCount: failed };
+      return { succeededCount: succeeded, failedCount: failed, errors };
     };
 
     return {
