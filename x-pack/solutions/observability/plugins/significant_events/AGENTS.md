@@ -58,6 +58,9 @@ Infrastructure inventories include ECS/OTel Kubernetes, host/IP, container and c
 The prompt covers entity, dependency, infrastructure, technology and schema families;
 operational patterns use inferred schema KIs rather than fabricated computed payloads.
 Writes preserve the existing feature schema and stamp source ownership and run provenance.
+Knowledge Extraction also writes non-rule-backed stats query KIs using the existing query
+schema; Monitoring Setup reads and validates these reusable source-scoped measurement
+recipes before adapting them into managed rules.
 Evidence references are run-local handles to observed rows; dependency writes must cite
 rows supporting both endpoints. Logical feature IDs are for reads/upserts; storage UUIDs
 are used for deletion. A batch can save some KIs while rejecting others.

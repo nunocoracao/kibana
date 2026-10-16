@@ -108,7 +108,7 @@ export const monitoringTools: Record<string, ToolDefinition> = {
   esql_guide: explorationTools.esql_guide,
   kibana_information: explorationTools.kibana_information,
   knowledge_indicators: definition(
-    'Read compact KI index/details only. action=index/read; writes are forbidden. Source IDs are opaque. Read details for relevant feature IDs before proposing monitors. Keep includeProvenance=false for ordinary reads; stored extraction query histories are unnecessary for monitoring.',
+    'Read compact feature and source-scoped stats query KI index/details only. action=index/read; writes are forbidden. index returns queryRecords paged by queryOffset/queryLimit; read fetches selected feature or query IDs (max 25), including source, ES|QL, ruleBacked state and feature links. Inspect useful query KIs as evidence-backed measurement recipes, then baseline/validate and adapt them; they do not themselves count as enabled monitor coverage. Source IDs are opaque. Keep includeProvenance=false for ordinary reads.',
     {
       action: { type: 'string', enum: ['index', 'read'] },
       sourceId: string,
@@ -117,6 +117,8 @@ export const monitoringTools: Record<string, ToolDefinition> = {
       includeProvenance: { type: 'boolean' },
       offset: number(0, 10000),
       limit: number(1, 100),
+      queryOffset: number(0, 10000),
+      queryLimit: number(1, 100),
     },
     ['action']
   ),
