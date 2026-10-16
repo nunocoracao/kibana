@@ -36,6 +36,41 @@ export const monitoredServices = (features: Feature[]): string[] => {
     ),
   ];
 };
+export const observedMonitoredServices = (
+  columns: ReadonlyArray<{ name: string }>,
+  rows: ReadonlyArray<ReadonlyArray<unknown>>
+): string[] => {
+  const indices = (names: string[]) =>
+    names
+      .map((name) => columns.findIndex((column) => column.name === name))
+      .filter((index) => index >= 0);
+  const names = indices(['resource.attributes.service.name', 'service.name', 'service_name']);
+  const namespaces = indices([
+    'resource.attributes.service.namespace',
+    'service.namespace',
+    'namespace',
+  ]);
+  if (!names.length || !namespaces.length) return [];
+  const value = (row: ReadonlyArray<unknown>, positions: number[]) =>
+    positions.map((index) => row[index]).find((item) => typeof item === 'string' && item.trim());
+  return [
+    ...new Set(
+      rows.flatMap((row) => {
+        const name = value(row, names);
+        const namespace = value(row, namespaces);
+        return typeof name === 'string'
+          ? [identity(name, typeof namespace === 'string' ? namespace : '')]
+          : [];
+      })
+    ),
+  ];
+};
+
+export const servicesFromOwnershipTags = (tags: string[]): string[] =>
+  tags
+    .filter((tag) => tag.startsWith(SERVICE_TAG_PREFIX))
+    .map((tag) => decodeURIComponent(tag.slice(SERVICE_TAG_PREFIX.length)));
+
 export const serviceOwnershipTags = (services: string[]): string[] =>
   services.map((service) => SERVICE_TAG_PREFIX + encodeURIComponent(service));
 
@@ -58,9 +93,7 @@ export const serviceRuleUsage = (
   );
   const usage = new Map<string, Set<string>>();
   for (const rule of rules.filter((item) => item.enabled)) {
-    const tagged = (rule.metadata.tags ?? [])
-      .filter((tag) => tag.startsWith(SERVICE_TAG_PREFIX))
-      .map((tag) => decodeURIComponent(tag.slice(SERVICE_TAG_PREFIX.length)));
+    const tagged = servicesFromOwnershipTags(rule.metadata.tags ?? []);
     const referenced = queries
       .filter((query) => query.rule_id === rule.id)
       .flatMap((query) =>
@@ -84,7 +117,9 @@ export const assertServiceRuleCapacity = (
   candidateId: string
 ): void => {
   if (!services.length)
-    throw new Error('Link the monitor to its emitting service KI before creating or enabling it.');
+    throw new Error(
+      'Retain observed emitting service columns in the validated query output, or link a source-local emitting-service KI before creating or enabling the monitor.'
+    );
   for (const service of services) {
     const ids = usage.get(service) ?? new Set<string>();
     const existingCount = [...ids].filter((id) => id !== candidateId).length;

@@ -23,7 +23,11 @@ import type { NightshiftSource } from '@kbn/nightshift-shared';
 import type { KibanaRequest } from '@kbn/core/server';
 import type { ObservedEntity } from './dependency_evidence';
 import { dependencyCandidates, rowIdentity } from './dependency_evidence';
-import { buildServiceScopeFilter } from './source_scope';
+import {
+  buildServiceScopeFilter,
+  sourceLogExpression,
+  sourceIdentityColumns,
+} from './source_scope';
 import {
   explorationWindowSchema,
   sourceTimeWindow,
@@ -31,6 +35,7 @@ import {
   summarizeVolume,
 } from './source_volume';
 import { esqlGuideTool, readEsqlGuide } from './esql_guide';
+import { pageSourceFields } from './source_paging';
 import { summarizeNamespaceInventory } from './namespace_inventory';
 import type { ExplorationRun, ExplorationCheckpoint } from '../../../common/knowledge_exploration';
 import type { SignificantEventsServer } from '../../types';
@@ -42,6 +47,7 @@ const sourceQuerySchema = z.object({
   sourceIds: sourceIdsSchema,
   template: z.enum([
     'volume',
+    'profile',
     'novelty',
     'schema',
     'inventory',
@@ -132,7 +138,7 @@ export const explorationTools: ToolDefinitions = {
   },
   source_esql: {
     description:
-      'Read enabled logs, metrics and traces using bounded source-scoped ES|QL. Batch sourceIds. IMPORTANT: samples, patterns and relationships inspect LOG MESSAGES only. For metrics/traces use schema then template=custom with KEEP of observed fields and LIMIT, or compact STATS. A log-template unavailable result does not mean missing metric/span data. For traces, inspect actual kind, peer and duration rows; for metrics, inspect actual instrument values, types and units. novelty compares compact schema, service/deployment/version and categorized-pattern inventories against the previous successful run; unchanged counts do not cause novelty. Other templates: schema, inventory, patterns, relationships, infrastructure, samples, custom. samples provides bounded categorized excerpts per selected service, with sampleKind representative/dependencies/errors/startup; no custom ES|QL needed. Every call REQUIRES explicit lookbackMinutes; there is no default. First use template=volume with an agent-chosen short interval to measure capped document count, docs/sec and latency without schema or pattern scans. Choose subsequent windows based on that result. Use endOffsetMinutes to sample earlier hours/minutes across a day; zero means now. Volume is source-wide, not service-filtered. A capped count is a lower bound, not an exact rate. On remote clusters avoid broad aggregates until probes justify them. Use esql_guide for query strategies and common syntax errors. Widen time for sparse services, startup evidence or unresolved connections; a quiet recent window is not proof of absence. LIMIT bounds output, not scanned data: always bound time and target fields/services before aggregating. Try targeted samples when aggregates omit a needed operation. infrastructure inventories actual non-null Kubernetes clusters/namespaces/nodes/workloads/pods, hosts/hostnames/IPs, containers and cloud resource fields together with service identity. Use fieldSearch for focused subsets, offset/maxRows to page. Empty results mean absent metadata, never invent infrastructure. relationships returns categorized representative dependency log clues grouped by service, with exact evidence references. Use it after the service inventory. candidates offers optional relationship hints from a few recognized formats; it is incomplete and never validates or gates KI writes. Inspect rows and structured payloads yourself even when candidates is empty. Use JSON_EXTRACT for JSON messages, FIELD_EXTRACT for mapped flattened objects, and DISSECT/GROK for plaintext. Schema columns are authoritative: never guess top-level fields; JSON keys inside message are not columns. Novelty/schema results have paging metadata; use offset/maxRows and schema fieldSearch (pipe-separated keywords) to request missing details. Views do not expose _id; use rowRefs, never fabricated document IDs. Include service.name and message for dependencies. For ratios, use floating-point arithmetic (1.0 * failures / total or TO_DOUBLE(failures) / total); integer division can silently turn a real partial failure rate into zero. Retain numerator and denominator while checking the result. CATEGORIZE must be first in STATS BY. Alias aggregates explicitly: STATS count=COUNT(*) BY service.name | SORT count DESC; COUNT is not the column name of an unaliased COUNT(). samples, relationships and custom automatically apply serviceNames and serviceNamespace BEFORE the pipeline; these filters do not scope the source-wide schema/pattern catalog. Use samples for per-service log categories. relationships supports targeted endpoint exploration and offset/maxRows for paging. Empty optional filters mean no filter. Custom pipeline is appended to FROM the selected source view; no FROM/JOIN/ENRICH/FORK allowed. Use KEEP, STATS, CATEGORIZE and small LIMIT. Logs templates do not replace metric/trace exploration: inspect actual populated instruments/span attributes using schema plus bounded custom queries. Preserve service and namespace. Returns compact changed rows first, truncation and query provenance.',
+      'Read enabled logs, metrics and traces using bounded source-scoped ES|QL. Batch sourceIds. IMPORTANT: samples, patterns and relationships inspect LOG MESSAGES only. For metrics/traces use schema then template=custom with KEEP of observed fields and LIMIT, or compact STATS. A log-template unavailable result does not mean missing metric/span data. For traces, inspect actual kind, peer and duration rows; for metrics, inspect actual instrument values, types and units. novelty compares compact schema, service/deployment/version and categorized-pattern inventories against the previous successful run; unchanged counts do not cause novelty. Other templates: profile, schema, inventory, patterns, relationships, infrastructure, samples, custom. profile requires fieldSearch (pipe-separated keywords), applies service/namespace scope and counts actual non-null observations for up to 12 mapped fields per page. Use it before interpreting sparse metric rows; schema presence is not populated data. samples provides bounded categorized excerpts per selected service, with sampleKind representative/dependencies/errors/startup; no custom ES|QL needed. Every call REQUIRES explicit lookbackMinutes; there is no default. First use template=volume with an agent-chosen short interval to measure capped document count, docs/sec and latency without schema or pattern scans. Choose subsequent windows based on that result. Use endOffsetMinutes to sample earlier hours/minutes across a day; zero means now. Volume is source-wide, not service-filtered. A capped count is a lower bound, not an exact rate. On remote clusters avoid broad aggregates until probes justify them. Use esql_guide for query strategies and common syntax errors. Widen time for sparse services, startup evidence or unresolved connections; a quiet recent window is not proof of absence. LIMIT bounds output, not scanned data: always bound time and target fields/services before aggregating. Try targeted samples when aggregates omit a needed operation. infrastructure inventories actual non-null Kubernetes clusters/namespaces/nodes/workloads/pods, hosts/hostnames/IPs, containers and cloud resource fields together with service identity. Use fieldSearch for focused resource subsets (e.g. k8s.pod|k8s.node or host.name|host.ip), offset/maxRows to page. Do not group every mapped infrastructure field across a dense estate at once. Empty results mean absent metadata, never invent infrastructure. relationships returns categorized representative dependency log clues grouped by service, with exact evidence references. Use it after the service inventory. candidates offers optional relationship hints from a few recognized formats; it is incomplete and never validates or gates KI writes. Inspect rows and structured payloads yourself even when candidates is empty. Use JSON_EXTRACT for JSON messages, FIELD_EXTRACT for mapped flattened objects, and DISSECT/GROK for plaintext. Schema columns are authoritative: never guess top-level fields; JSON keys inside message are not columns. Novelty/schema results have paging metadata; use offset/maxRows and schema fieldSearch (pipe-separated keywords) to request missing details. Views do not expose _id; use rowRefs, never fabricated document IDs. Include service.name and message for dependencies. For ratios, use floating-point arithmetic (1.0 * failures / total or TO_DOUBLE(failures) / total); integer division can silently turn a real partial failure rate into zero. Retain numerator and denominator while checking the result. CATEGORIZE must be first in STATS BY. Alias aggregates explicitly: STATS count=COUNT(*) BY service.name | SORT count DESC; COUNT is not the column name of an unaliased COUNT(). infrastructure, samples, relationships and custom automatically apply serviceNames and serviceNamespace BEFORE the pipeline; these filters do not scope the source-wide schema/pattern catalog. Use samples for per-service log categories. relationships supports targeted endpoint exploration and offset/maxRows for paging. Empty optional filters mean no filter. Custom pipeline is appended to FROM the selected source view; no FROM/JOIN/ENRICH/FORK allowed. Use KEEP, STATS, CATEGORIZE and small LIMIT. Logs templates do not replace metric/trace exploration: inspect actual populated instruments/span attributes using schema plus bounded custom queries. Preserve service and namespace. Returns compact changed rows first, truncation and query provenance.',
     schema: {
       type: 'object',
       properties: {
@@ -141,6 +147,7 @@ export const explorationTools: ToolDefinitions = {
           type: 'string',
           enum: [
             'volume',
+            'profile',
             'novelty',
             'schema',
             'inventory',
@@ -194,7 +201,7 @@ export const explorationTools: ToolDefinitions = {
   },
   knowledge_indicators: {
     description:
-      'Read/write existing-schema KI features. The first unfiltered index page includes namespaceInventory with deduplicated KI counts and relationshipInvestigationNeeded hints. Use this to prioritize service-only namespaces; counts are stored knowledge, not completeness or observability scores. index returns the canonical logical id to use for KI reads, featureIds and causalFeatureIds; storage UUIDs are not agent references. It otherwise returns only identity/title/type/confidence/namespace: page with offset/limit (AT MOST 100 per page; follow hasMore/nextOffset) and optional sourceId/query. read fetches selected IDs (max 25) across enabled sources or one sourceId, details later. read defaults to compact semantic details and bounded exact evidence; includeProvenance=true requests the stored extraction history. Follow hasMore/nextOffset for detail pages. upsert batches schema-valid features for one enabled source (featuresJson accepts up to 100 and is split into batches of 25 server-side; features accepts 25); reuse IDs; prefer evidence_refs from source_esql rowRefs/entityGaps/patterns with evidence=[] so the server copies exact evidence; only observed document IDs. The tool checks schema and ID/type collisions, not the quality or interpretation of evidence. Writes are merged and provenance is recorded. Each observing source needs its own service entity anchor for downstream native-rule associations: an entity saved on logs is not a source-local entity on metrics/traces. Reuse logical IDs across sources, deduplicate within each source. needsDetails means evidence was not delivered: narrow to one namespace with maxRows=5 before judging completeness. Write dependencies with properties.source/target as actual service names and properties.source_namespace/target_namespace, not top-level fields or KI IDs. Use evidence_refs for exact observed log rows. Infrastructure KIs use type=infrastructure and subtype=kubernetes_cluster/kubernetes_namespace/kubernetes_node/kubernetes_workload/kubernetes_pod/host/container/cloud_resource/network_endpoint. Properties are extensible; use name plus actual cluster/node/pod/workload/host_name/host_id/hostname/ip/ips/container_id/image/provider/region/zone/service_name/service_namespace as observed. Reuse identities and link only services observed on that resource. Also persist observed technology, infrastructure and schema KIs, including log formats (schema/log_format with properties.format and properties.services naming every emitting service that uses it) and recurring operational patterns as schema/log_pattern. Never infer languages from log formatting alone. Omit sourceId for an index/read across all enabled sources. Prefer featuresJson for upsert: a compact JSON-encoded array using only needed property keys, avoiding fixed-schema placeholder fields. The same KI schema and 25-item limit apply; features remains supported. Valid evidence_refs are authoritative: the server copies real evidence, so omit redundant literal evidence. Upsert responses echo sourceId and non-blocking warnings for evidence references from another source or unknown handles; inspect them and correct ownership rather than ignoring a successful-but-misattributed batch. Never combine metric and trace contracts under one sourceId. Save useful discoveries immediately in small coherent batches as evidence is established; do not hold all KIs until the end of exploration. Each dependency has one actual caller and one actual target, never a pipe-joined endpoint family. This tool does not generate alert rules.',
+      'Read/write existing-schema KI features. The first unfiltered index page includes namespaceInventory with deduplicated KI counts and relationshipInvestigationNeeded hints. Use this to prioritize service-only namespaces; counts are stored knowledge, not completeness or observability scores. index returns the canonical logical id to use for KI reads, featureIds and causalFeatureIds; storage UUIDs are not agent references. It otherwise returns only identity/title/type/confidence/namespace: page with offset/limit (AT MOST 100 per page; follow hasMore/nextOffset) and optional sourceId/query (query matches any whitespace/pipe/comma-separated keyword). read fetches selected IDs (max 25) across enabled sources or one sourceId, details later. read defaults to compact semantic details and bounded exact evidence; keep includeProvenance=false for ordinary monitoring/investigation; includeProvenance=true requests the stored extraction history. Follow hasMore/nextOffset for detail pages. upsert batches schema-valid features for one enabled source (featuresJson accepts up to 100 and is split into batches of 25 server-side; features accepts 25); reuse IDs; prefer evidence_refs from source_esql rowRefs/entityGaps/patterns with evidence=[] so the server copies exact evidence; only observed document IDs. The tool checks schema and ID/type collisions, not the quality or interpretation of evidence. Writes are merged and provenance is recorded. Each observing source needs its own service entity anchor for downstream native-rule associations: an entity saved on logs is not a source-local entity on metrics/traces. Reuse logical IDs across sources, deduplicate within each source. needsDetails means evidence was not delivered: narrow to one namespace with maxRows=5 before judging completeness. Write dependencies with properties.source/target as actual service names and properties.source_namespace/target_namespace, not top-level fields or KI IDs. Use evidence_refs for exact observed log rows. Infrastructure KIs use type=infrastructure and subtype=kubernetes_cluster/kubernetes_namespace/kubernetes_node/kubernetes_workload/kubernetes_pod/host/container/cloud_resource/network_endpoint. Properties are extensible; use name plus actual cluster/node/pod/workload/host_name/host_id/hostname/ip/ips/container_id/image/provider/region/zone/service_name/service_namespace as observed. Reuse identities and link only services observed on that resource. Also persist observed technology, infrastructure and schema KIs, including log formats (schema/log_format with properties.format and properties.services naming every emitting service that uses it) and recurring operational patterns as schema/log_pattern. Never infer languages from log formatting alone. Omit sourceId for an index/read across all enabled sources. Prefer featuresJson for upsert: a compact JSON-encoded array using only needed property keys, avoiding fixed-schema placeholder fields. The same KI schema and 25-item limit apply; features remains supported. Valid evidence_refs are authoritative: the server copies real evidence, so omit redundant literal evidence. Upsert responses echo sourceId and non-blocking warnings for evidence references from another source or unknown handles; inspect them and correct ownership rather than ignoring a successful-but-misattributed batch. Never combine metric and trace contracts under one sourceId. Save useful discoveries immediately in small coherent batches as evidence is established; do not hold all KIs until the end of exploration. Each dependency has one actual caller and one actual target, never a pipe-joined endpoint family. This tool does not generate alert rules.',
     schema: {
       type: 'object',
       properties: {
@@ -511,9 +518,12 @@ export class ExplorationToolSession {
     columns: string[],
     search: string | undefined,
     lookbackMinutes: number,
-    endOffsetMinutes: number
+    endOffsetMinutes: number,
+    serviceNames?: string[],
+    serviceNamespace?: string
   ) {
-    const key = `${source.id}:${lookbackMinutes}:${endOffsetMinutes}:${search ?? ''}`;
+    const scope = buildServiceScopeFilter(columns, serviceNames, serviceNamespace);
+    const key = JSON.stringify([source.id, lookbackMinutes, endOffsetMinutes, search, scope]);
     const cached = this.infrastructureInventories.get(key);
     if (cached) return cached;
     const keywords = search?.toLowerCase().split('|').filter(Boolean) ?? [];
@@ -527,8 +537,7 @@ export class ExplorationToolSession {
       ['resource.attributes.service.name', 'service.name', 'service_name'],
       ['resource.attributes.service.namespace', 'service.namespace', 'namespace'],
     ].flatMap((options) => {
-      const name = options.find((option) => columns.includes(option));
-      return name ? [name] : [];
+      return options.filter((option) => columns.includes(option));
     });
     identity.push(
       ...['attributes.fluent.tag', 'fluent.tag', 'data_stream.dataset'].filter((name) =>
@@ -539,7 +548,7 @@ export class ExplorationToolSession {
       columns.includes('@timestamp')
         ? ` | ${sourceTimeWindow(lookbackMinutes, endOffsetMinutes)}`
         : ''
-    } | WHERE ${fields
+    } | ${scope}WHERE ${fields
       .map((name) => `${field(name)} IS NOT NULL`)
       .join(' OR ')} | STATS count=COUNT(*) BY ${[...identity, ...fields]
       .map(field)
@@ -944,8 +953,7 @@ export class ExplorationToolSession {
           !keywords.length ||
           keywords.some((keyword) => column.name.toLowerCase().includes(keyword))
       );
-      const nextOffset = args.offset + args.maxRows;
-      const page = matching.slice(args.offset, nextOffset);
+      const { page, ...paging } = pageSourceFields(matching, args.offset, args.maxRows);
       const refs = this.record(
         source.id,
         page.map((column) => ({ schema_field: column.name, schema_type: column.type })),
@@ -953,10 +961,13 @@ export class ExplorationToolSession {
       );
       return {
         sourceId: source.id,
+        identityColumns: sourceIdentityColumns(schema.map((column) => column.name)),
         columns: page.map((column, index) => ({ ...column, evidenceRef: refs[index] })),
         totalColumns: matching.length,
-        hasMore: nextOffset < matching.length,
-        nextOffset: nextOffset < matching.length ? nextOffset : null,
+        ...paging,
+        pagingNote: paging.offsetReset
+          ? 'Requested offset exceeded the current filtered fields; returned the first matching page. Reset offset to zero when changing fieldSearch.'
+          : undefined,
         metadataIdAvailable: matching.some((column) => column.name === '_id'),
       };
     }
@@ -965,13 +976,73 @@ export class ExplorationToolSession {
       throw new Error(
         'Source lacks @timestamp; refusing an unbounded historical scan. Inspect schema/context instead.'
       );
+    if (args.template === 'profile') {
+      if (!args.fieldSearch?.trim())
+        throw new Error('profile requires focused fieldSearch keywords; inspect schema first');
+      const keywords = args.fieldSearch
+        .toLowerCase()
+        .split('|')
+        .map((word) => word.trim())
+        .filter(Boolean);
+      const matching = columns.filter((name) =>
+        keywords.some((word) => name.toLowerCase().includes(word))
+      );
+      const { page: fields, ...paging } = pageSourceFields(
+        matching,
+        args.offset,
+        Math.min(args.maxRows, 12)
+      );
+      if (!fields.length)
+        return { sourceId: source.id, fields: [], totalFields: matching.length, hasMore: false };
+      const scope = buildServiceScopeFilter(columns, args.serviceNames, args.serviceNamespace);
+      const query = `FROM ${source.view_name} | ${sourceTimeWindow(
+        lookbackMinutes,
+        endOffsetMinutes
+      )} | ${scope}STATS documents=COUNT(*), ${fields
+        .map((name, index) => `non_null_${index}=COUNT(*) WHERE ${field(name)} IS NOT NULL`)
+        .join(', ')}`;
+      const response = await this.clients.streamDataEsClient.esql.query(
+        { query },
+        { signal: this.signal, requestTimeout: 30000 }
+      );
+      if (response.is_partial)
+        throw new Error('Profile is partial; narrow the window/scope before interpreting counts');
+      const values = Object.fromEntries(
+        response.columns.map((column, index) => [column.name, response.values[0]?.[index]])
+      );
+      const rows = fields.map((name, index) => ({
+        field: name,
+        nonNullCount: values[`non_null_${index}`],
+      }));
+      const rowRefs = this.record(
+        source.id,
+        rows.map((row) => ({ field: row.field, nonNullCount: String(row.nonNullCount) })),
+        query
+      );
+      return {
+        sourceId: source.id,
+        query,
+        documents: values.documents,
+        identityColumns: sourceIdentityColumns(columns),
+        identityNote:
+          'Use these actual emitting-service columns in KEEP. attributes.service.name is not a replacement for service.name/resource.attributes.service.name; a null arbitrary attribute does not mean absent emitter identity.',
+        rows,
+        rowRefs,
+        totalFields: matching.length,
+        ...paging,
+        nextAction:
+          'For populated fields, use WHERE field IS NOT NULL before KEEP/LIMIT, preserve the actual emitter/namespace and inspect units/type. Zero counts apply only to this interval and scope; rotate time/service before concluding absence.',
+      };
+    }
     if (args.template === 'infrastructure') {
       const inventory = await this.infrastructureInventory(
         source,
         columns,
         args.fieldSearch,
         lookbackMinutes,
-        endOffsetMinutes
+        endOffsetMinutes,
+        args.serviceNames,
+        args.serviceNamespace
       );
       const nextOffset = args.offset + args.maxRows;
       const hostShare = new Map<string, Set<string>>();
@@ -1054,13 +1125,13 @@ export class ExplorationToolSession {
       : 'STATS count=COUNT(*)';
     const warnings: string[] = [];
     if (args.template === 'relationships' || args.template === 'samples') {
-      const messageField = ['message', 'body.text', 'body'].find((name) => columns.includes(name));
+      const messageExpression = sourceLogExpression(columns);
       const serviceField = [
         'resource.attributes.service.name',
         'service.name',
         'service_name',
       ].find((name) => columns.includes(name));
-      if (!messageField || !serviceField)
+      if (!messageExpression || !serviceField)
         return {
           sourceId: source.id,
           rows: [],
@@ -1085,7 +1156,7 @@ export class ExplorationToolSession {
       const expressions = {
         representative: '',
         dependencies:
-          'hops|upstream|downstream|dependenc|depends|https?://|grpc|connect|call to|calling|request to|publish|consum|queue|topic|broker|attempt|endpoint|peer|remote|database|cache|redis|postgres|mysql|mongo|kafka|rabbit|amqp|host=|port=|reconcil|sync',
+          'hops|upstream|downstream|dependenc|depends|https?://|grpc|rpc|connect|call to|calling|request|fetch|destination|target|publish|consum|queue|topic|broker|attempt|endpoint|peer|remote|database|cache|redis|postgres|mysql|mongo|kafka|rabbit|amqp|host=|port=|reconcil|sync',
         errors: 'error|fail|unavailable|timeout|exception|refused|fallback|retry',
         startup: 'start|listen|ready|version|runtime|initialized|boot',
       };
@@ -1094,7 +1165,7 @@ export class ExplorationToolSession {
       const observedTimes = columns.includes('@timestamp')
         ? ', first_seen=MIN(`@timestamp`), last_seen=MAX(`@timestamp`)'
         : '';
-      pipeline = `${scopedFilter}EVAL log=TO_STRING(${field(messageField)}) | ${
+      pipeline = `${scopedFilter}EVAL log=${messageExpression} | ${
         expression ? `WHERE TO_LOWER(log) RLIKE ".*(${expression}).*" | ` : ''
       }STATS count=COUNT(*)${observedTimes}, sample=TOP(log, 1, "desc"), sample_low=TOP(log, 1, "asc"), sample_any=SAMPLE(log, 1) BY pattern=CATEGORIZE(log), ${field(
         serviceField
@@ -1169,6 +1240,19 @@ export class ExplorationToolSession {
       );
       return executeQuery(query);
     });
+    if (
+      args.template === 'custom' &&
+      sourceIdentityColumns(columns).length &&
+      !response.columns.some((column) => sourceIdentityColumns(columns).includes(column.name))
+    ) {
+      warnings.push(
+        `Output omits the mapped emitting-service identity fields (${sourceIdentityColumns(
+          columns
+        ).join(
+          ', '
+        )}). If attribution matters, include them in KEEP or grouping before concluding that identity is missing. A source-wide aggregate may intentionally omit identity.`
+      );
+    }
     const rows = response.values.map((values) =>
       Object.fromEntries(
         response.columns.map((column, index) => [
@@ -1228,7 +1312,9 @@ export class ExplorationToolSession {
       return {
         sourceId: source.id,
         query,
-        ...(args.template === 'custom' ? { columns: response.columns } : {}),
+        ...(args.template === 'custom'
+          ? { columns: response.columns, identityColumns: sourceIdentityColumns(columns) }
+          : {}),
         rows:
           args.template === 'custom'
             ? response.values.slice(offset, offset + args.maxRows)
@@ -1276,8 +1362,9 @@ export class ExplorationToolSession {
       logger: this.server.logger,
       plugin: 'significant_events',
     });
-    const message = ['message', 'body.text', 'body'].find((name) => columns.includes(name));
-    const needsPatterns = message && (args.template === 'novelty' || args.template === 'patterns');
+    const messageFields = ['message', 'body.text', 'body'].filter((name) => columns.includes(name));
+    const needsPatterns =
+      messageFields.length > 0 && (args.template === 'novelty' || args.template === 'patterns');
     const patterns = needsPatterns
       ? this.patternInventories.get(inventoryKey) ??
         (await getSigEventsLogPatternsEsql({
@@ -1285,7 +1372,7 @@ export class ExplorationToolSession {
           samplingSource: source.view_name,
           start: now - (lookbackMinutes + endOffsetMinutes) * 60000,
           end: now - endOffsetMinutes * 60000,
-          fields: [message],
+          fields: messageFields,
         }))
       : [];
     if (needsPatterns) this.patternInventories.set(inventoryKey, patterns);
@@ -1522,13 +1609,17 @@ export class ExplorationToolSession {
     if (args.action === 'index') {
       if (!sourceIds.length) return { total: 0, records: [], hasMore: false };
       const { hits } = await client.getFeatures(sourceIds, { limit: 10000, includeExcluded: true });
-      const matching = hits.filter(
-        (feature) =>
-          !args.query ||
-          `${feature.id} ${feature.title} ${JSON.stringify(feature.properties)}`
-            .toLowerCase()
-            .includes(args.query.toLowerCase())
-      );
+      const terms =
+        args.query
+          ?.toLowerCase()
+          .split(/[\s|,]+/)
+          .filter(Boolean) ?? [];
+      const matching = hits.filter((feature) => {
+        const text = `${feature.id} ${feature.title} ${JSON.stringify(
+          feature.properties
+        )}`.toLowerCase();
+        return !terms.length || terms.some((term) => text.includes(term));
+      });
       return {
         total: matching.length,
         ...(args.offset === 0 && !args.query
@@ -1582,12 +1673,12 @@ export class ExplorationToolSession {
             }
       );
       while (details.length > 1 && JSON.stringify(details).length > 10000) details.pop();
-      return compact({
+      return {
         features: details,
         total: hits.length,
         hasMore: args.offset + details.length < hits.length,
         nextOffset: args.offset + details.length,
-      });
+      };
     }
     if (!args.sourceId && sourceIds.length === 1) args.sourceId = sourceIds[0];
     if (!args.sourceId)

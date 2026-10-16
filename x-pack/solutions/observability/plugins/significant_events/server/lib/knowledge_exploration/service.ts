@@ -18,6 +18,7 @@ import type { NightshiftSource } from '@kbn/nightshift-shared';
 import { SEVERITY_CONTRACT_RULE } from '@kbn/significant-events-schema';
 import type {
   ExplorerAgent,
+  ExplorationState,
   ExplorationRun,
   ExplorationPricing,
   ExplorationStatus,
@@ -35,6 +36,12 @@ import { SOURCE_KNOWLEDGE_STATE_TYPE } from '../knowledge_indicators/source_know
 import { StatusError } from '../errors/status_error';
 import { EXPLORATION_RUN_TYPE, EXPLORATION_STATE_TYPE, ExplorationStore } from './store';
 import { explorationTools, ExplorationToolSession } from './tools';
+import {
+  buildSamplingAgenda,
+  mergeSamplingAttempts,
+  SAMPLING_STRATEGY,
+  summarizeSamplingAttempts,
+} from './sampling_strategy';
 import prompt from './system_prompt.text';
 import discoveryPrompt from '../event_discovery/system_prompt.text';
 import {
@@ -73,6 +80,17 @@ const priceModelKey = (model: string): string =>
     .replace(/-chat_completion$/, '')
     .replace(/\s+/g, '-')
     .replace(/^(anthropic-claude)-(\d+(?:\.\d+)?)-(opus|sonnet|haiku|fable|mythos)$/, '$1-$3-$2');
+const runDurationMs = (run: ExplorationRun, end = Date.now()): number => {
+  const startedAt = Date.parse(run.startedAt);
+  const finishedAt = run.finishedAt ? Date.parse(run.finishedAt) : end;
+  return Number.isFinite(startedAt) && Number.isFinite(finishedAt)
+    ? Math.max(0, finishedAt - startedAt)
+    : 0;
+};
+const recordRunDuration = (state: ExplorationState, run: ExplorationRun): void => {
+  state.totalRunDurationMs = (state.totalRunDurationMs ?? 0) + runDurationMs(run);
+  state.totalRunDurationSamples = (state.totalRunDurationSamples ?? 0) + 1;
+};
 const addTokens = (target: ExplorationTokens, source: ExplorationTokens): void => {
   for (const key of ['prompt', 'completion', 'thinking', 'cached', 'total'] as const)
     target[key] += source[key];
@@ -144,6 +162,7 @@ export class KnowledgeExplorationService {
         : prompt;
     return (
       instructions +
+      SAMPLING_STRATEGY +
       '\nRUN INSPECTOR PROGRESS NOTES\nBefore calling tools, include one short user-facing sentence in your response explaining the next investigation or decision and its purpose. When reviewing results, state the key finding or uncertainty that motivates the next action. Keep notes concise (roughly 25 words), avoid repetitive boilerplate, and do not disclose private chain-of-thought. These progress summaries are shown in Agent Explorer alongside your tool calls.'
     );
   }
@@ -486,6 +505,7 @@ export class KnowledgeExplorationService {
       if (run.costEstimateComplete === false)
         current.state.unpricedRuns = (current.state.unpricedRuns ?? 0) + 1;
       current.state.totalRuns++;
+      recordRunDuration(current.state, run);
       addTokens(current.state.totalTokens, run.tokens);
     }
     await store.setState(current.state, current.version);
@@ -508,6 +528,8 @@ export class KnowledgeExplorationService {
     current.state.repricedRunIds = [];
     current.state.totalCostUsd = 0;
     current.state.totalRuns = 0;
+    current.state.totalRunDurationMs = 0;
+    current.state.totalRunDurationSamples = 0;
     current.state.totalTokens = emptyExplorationTokens();
     await store.setState(current.state, current.version);
     return { success: true };
@@ -529,6 +551,8 @@ export class KnowledgeExplorationService {
     current.state.repricedRunIds = [];
     current.state.totalCostUsd = 0;
     current.state.totalRuns = 0;
+    current.state.totalRunDurationMs = 0;
+    current.state.totalRunDurationSamples = 0;
     current.state.totalTokens = emptyExplorationTokens();
     await store.setState(current.state, current.version);
     return { removed };
@@ -642,6 +666,20 @@ export class KnowledgeExplorationService {
       runs: visibleRuns,
       totalCostUsd: state.totalCostUsd + (active?.estimatedCostUsd ?? 0),
       totalRuns: state.totalRuns,
+      totalRunDurationMs:
+        state.totalRunDurationMs ??
+        runs.reduce((total, run) => total + (run.finishedAt ? runDurationMs(run) : 0), 0),
+      averageRunDurationMs:
+        (state.totalRunDurationMs !== undefined && state.totalRunDurationSamples !== undefined
+          ? state.totalRunDurationSamples > 0
+            ? state.totalRunDurationMs / state.totalRunDurationSamples
+            : 0
+          : (() => {
+              const completed = runs.filter((run) => run.finishedAt);
+              return completed.length
+                ? completed.reduce((total, run) => total + runDurationMs(run), 0) / completed.length
+                : 0;
+            })()) || 0,
       totalTokens: state.totalTokens,
       featureCount:
         this.agent === 'events'
@@ -663,6 +701,15 @@ export class KnowledgeExplorationService {
     await this.ensureAgent(request);
     const store = this.store(request);
     const previous = await this.recoverInterrupted(request, store);
+    if (previous.state.totalRunDurationMs === undefined) {
+      const savedRuns = await store.listRuns();
+      const completedRuns = savedRuns.filter((run) => run.finishedAt);
+      previous.state.totalRunDurationMs = completedRuns.reduce(
+        (total, run) => total + runDurationMs(run),
+        0
+      );
+      previous.state.totalRunDurationSamples = completedRuns.length;
+    }
     if (previous.state.activeRunId && (previous.state.leaseUntil ?? 0) > Date.now()) {
       if (args.reason === 'source_added' && args.sourceId) {
         const pending = this.pendingSources.get(request.spaceId) ?? new Set<string>();
@@ -680,6 +727,7 @@ export class KnowledgeExplorationService {
         await store.saveRun(stale);
         previous.state.totalCostUsd += stale.estimatedCostUsd;
         previous.state.totalRuns++;
+        recordRunDuration(previous.state, stale);
         addTokens(previous.state.totalTokens, stale.tokens);
       }
     }
@@ -748,6 +796,7 @@ export class KnowledgeExplorationService {
         );
       state.totalCostUsd += run.estimatedCostUsd;
       state.totalRuns++;
+      recordRunDuration(state, run);
       addTokens(state.totalTokens, run.tokens);
       if (state.activeRunId === id) {
         state.activeRunId = undefined;
@@ -805,6 +854,7 @@ export class KnowledgeExplorationService {
           : await resetMonitoringRules(clients);
       current.state.checkpoints = {};
       current.state.remainingGaps = [];
+      current.state.samplingAttempts = [];
       await this.store(request).setState(current.state, current.version);
       return result;
     }
@@ -837,6 +887,7 @@ export class KnowledgeExplorationService {
     const latest = await store.getState();
     latest.state.checkpoints = {};
     latest.state.remainingGaps = [];
+    latest.state.samplingAttempts = [];
     await store.setState(latest.state, latest.version);
     return { features };
   }
@@ -894,6 +945,13 @@ export class KnowledgeExplorationService {
         controller.signal
       );
       const { state: progress } = await store.getState();
+      const samplingPlan = buildSamplingAgenda(
+        this.agent,
+        sources,
+        progress.samplingAttempts ?? [],
+        run.sourceId,
+        progress.remainingGaps ?? []
+      );
       const messages: Message[] = [
         {
           role: MessageRole.User,
@@ -905,6 +963,8 @@ export class KnowledgeExplorationService {
                 ? 'Choose explicit time windows using source volume/latency probes; sample historical intervals and scope by service before expensive exploration'
                 : 'Agent-selected bounded windows; start small and widen with evidence',
             unfinishedExploration: progress.remainingGaps ?? [],
+            previousSamplingAttempts: progress.samplingAttempts ?? [],
+            samplingPlan,
             now: run.startedAt,
             limits,
             instruction:
@@ -912,7 +972,7 @@ export class KnowledgeExplorationService {
                 ? 'Assess managed and user rule firings in the last 30 minutes, investigate relevance, preserve active/inactive assessments, then finish_exploration.'
                 : this.agent === 'monitoring'
                 ? 'Assess source-scoped monitoring coverage, maintain only your native managed Kibana rules, then finish_exploration.'
-                : 'Check novelty first, explore evidence-backed gaps, then call finish_exploration.',
+                : 'Plan volume-informed source sampling first; explore and save evidence-backed knowledge across the estate, then call finish_exploration.',
           }),
         },
       ];
@@ -1141,6 +1201,10 @@ export class KnowledgeExplorationService {
           session
         )
           Object.assign(latest.state.checkpoints, session.pendingCheckpoints);
+        latest.state.samplingAttempts = mergeSamplingAttempts(
+          latest.state.samplingAttempts ?? [],
+          summarizeSamplingAttempts(run.steps, this.agent)
+        );
         latest.state.remainingGaps = run.coverageComplete
           ? []
           : run.remainingGaps ?? progressGaps(run.summary);
@@ -1150,6 +1214,7 @@ export class KnowledgeExplorationService {
         if (run.costEstimateComplete === false)
           latest.state.unpricedRuns = (latest.state.unpricedRuns ?? 0) + 1;
         latest.state.totalRuns++;
+        recordRunDuration(latest.state, run);
         addTokens(latest.state.totalTokens, run.tokens);
         await store.setState(latest.state, latest.version);
       }

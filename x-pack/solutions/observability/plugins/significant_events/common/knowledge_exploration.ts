@@ -111,7 +111,32 @@ export interface ExplorationCheckpoint {
   checkedAt: string;
 }
 
+export interface ExplorationSamplingAttempt {
+  attemptId?: string;
+  agent?: ExplorerAgent;
+  startedAt?: string;
+  template: string;
+  sourceIds: string[];
+  lookbackMinutes: number;
+  endOffsetMinutes: number;
+  namespace: string;
+  services: string[];
+  fieldSearch: string;
+  pipeline: string;
+  durationMs: number;
+  status: ExplorationStep['status'];
+  results: Array<{
+    sourceId: string;
+    error?: string;
+    documents?: number;
+    countRelation?: string;
+    rowsReturned?: number;
+    truncated: boolean;
+  }>;
+}
+
 export interface ExplorationState {
+  samplingAttempts?: ExplorationSamplingAttempt[];
   hourlyEnabled?: boolean;
   intervalMinutes?: number;
   costTotalsResetAt?: string;
@@ -124,6 +149,8 @@ export interface ExplorationState {
   leaseUntil?: number;
   totalCostUsd: number;
   totalRuns: number;
+  totalRunDurationMs?: number;
+  totalRunDurationSamples?: number;
   totalTokens: ExplorationTokens;
 }
 
@@ -141,6 +168,8 @@ export interface ExplorationStatus {
   runs: ExplorationRun[];
   totalCostUsd: number;
   totalRuns: number;
+  totalRunDurationMs: number;
+  averageRunDurationMs: number;
   totalTokens: ExplorationTokens;
   sources: Array<{ id: string; slug: string; title: string; enabled: boolean }>;
 }

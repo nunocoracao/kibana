@@ -117,6 +117,12 @@ const copy = {
   average: i18n.translate('xpack.significantEventsApp.knowledgeExplorer.averageRunCost', {
     defaultMessage: 'Average cost per run',
   }),
+  runDuration: i18n.translate('xpack.significantEventsApp.agentPanel.runDuration', {
+    defaultMessage: 'Run duration',
+  }),
+  averageRunDuration: i18n.translate('xpack.significantEventsApp.agentPanel.averageRunDuration', {
+    defaultMessage: 'Average run duration',
+  }),
   stored: i18n.translate('xpack.significantEventsApp.knowledgeExplorer.stored', {
     defaultMessage: 'Stored feature KIs',
   }),
@@ -191,6 +197,20 @@ const copy = {
   }),
 };
 const dollars = (value = 0) => `$${value.toFixed(4)}`;
+const formatDuration = (durationMs: number): string => {
+  const seconds = Math.max(0, durationMs) / 1000;
+  if (seconds < 60) return `${seconds.toFixed(1)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.floor(seconds % 60);
+  if (minutes < 60) return `${minutes}m ${remainingSeconds}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
+};
+const durationForRun = (run: ExplorationRun): number => {
+  const started = Date.parse(run.startedAt);
+  const ended = run.finishedAt ? Date.parse(run.finishedAt) : Date.now();
+  return Number.isFinite(started) && Number.isFinite(ended) ? Math.max(0, ended - started) : 0;
+};
 export function KnowledgeExplorationPage() {
   const [agent, setAgent] = useState<'knowledge' | 'monitoring' | 'events'>(() =>
     new URLSearchParams(window.location.search).get('agent') === 'events'
@@ -343,6 +363,14 @@ function AgentPanel({
           ? `${dollars(averageRunCost)}+`
           : dollars(averageRunCost),
       description: copy.average,
+    },
+    {
+      title: run ? formatDuration(durationForRun(run)) : '—',
+      description: copy.runDuration,
+    },
+    {
+      title: status.data?.totalRuns ? formatDuration(status.data.averageRunDurationMs) : '—',
+      description: copy.averageRunDuration,
     },
     {
       title: status.data?.featureCount ?? 0,
@@ -770,7 +798,7 @@ function AgentPanel({
                       <br />
                       {item.written}{' '}
                       {events ? 'event updates' : monitoring ? 'rule changes' : 'KI writes'} ·{' '}
-                      {dollars(item.estimatedCostUsd)}
+                      {dollars(item.estimatedCostUsd)} · {formatDuration(durationForRun(item))}
                       <br />
                       {status.data?.availableModels.find(
                         (model) => model.connectorId === item.connectorId
@@ -877,7 +905,8 @@ function AgentPanel({
                         defaultMessage: 'issues ·',
                       })}
                       {run.written}{' '}
-                      {events ? 'event updates' : monitoring ? 'rule changes' : 'KI writes'}
+                      {events ? 'event updates' : monitoring ? 'rule changes' : 'KI writes'} ·{' '}
+                      {copy.runDuration.toLowerCase()} {formatDuration(durationForRun(run))}
                     </EuiText>
                     {run.status === 'running' && latestStep && (
                       <EuiText

@@ -99,6 +99,8 @@ export class ExplorationStore {
           checkpoints: {},
           totalCostUsd: 0,
           totalRuns: 0,
+          totalRunDurationMs: 0,
+          totalRunDurationSamples: 0,
           totalTokens: emptyExplorationTokens(),
         },
       };

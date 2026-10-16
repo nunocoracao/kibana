@@ -5,7 +5,11 @@
  * 2.0.
  */
 
-import { buildServiceScopeFilter } from './source_scope';
+import {
+  buildServiceScopeFilter,
+  sourceLogExpression,
+  sourceIdentityColumns,
+} from './source_scope';
 
 describe('source query service scope', () => {
   it('does not filter an explicitly unscoped query', () => {
@@ -41,5 +45,39 @@ describe('source query service scope', () => {
     expect(() => buildServiceScopeFilter(['service.name'], undefined, 'one')).toThrow(
       'No service namespace column'
     );
+  });
+  it('uses populated aliases rather than filtering only the first mapped alias', () => {
+    expect(
+      buildServiceScopeFilter(
+        [
+          'resource.attributes.service.name',
+          'service.name',
+          'resource.attributes.service.namespace',
+          'service.namespace',
+        ],
+        ['checkout'],
+        'shop'
+      )
+    ).toBe(
+      'WHERE COALESCE(`resource.attributes.service.name`, `service.name`) IN ("checkout") AND COALESCE(`resource.attributes.service.namespace`, `service.namespace`) == "shop" | '
+    );
+  });
+
+  it('reads OTel bodies when message is mapped but null for those rows', () => {
+    expect(sourceLogExpression(['message', 'body.text'])).toBe(
+      'COALESCE(TO_STRING(`message`), TO_STRING(`body.text`))'
+    );
+    expect(sourceLogExpression(['body.text'])).toBe('TO_STRING(`body.text`)');
+    expect(sourceLogExpression(['service.name'])).toBeUndefined();
+  });
+  it('distinguishes actual emitter identities from optional metric attributes', () => {
+    expect(
+      sourceIdentityColumns([
+        'attributes.service.name',
+        'service.name',
+        'service.namespace',
+        'metric.value',
+      ])
+    ).toEqual(['service.name', 'service.namespace']);
   });
 });

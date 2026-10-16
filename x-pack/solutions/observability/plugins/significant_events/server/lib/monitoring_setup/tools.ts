@@ -17,6 +17,8 @@ import { explorationTools, ExplorationToolSession } from '../knowledge_explorati
 import {
   MAX_MANAGED_RULES_PER_SERVICE,
   monitoredServices,
+  observedMonitoredServices,
+  servicesFromOwnershipTags,
   serviceOwnershipTags,
   serviceRuleUsage,
   assertServiceRuleCapacity,
@@ -106,7 +108,7 @@ export const monitoringTools: Record<string, ToolDefinition> = {
   esql_guide: explorationTools.esql_guide,
   kibana_information: explorationTools.kibana_information,
   knowledge_indicators: definition(
-    'Read compact KI index/details only. action=index/read; writes are forbidden. Source IDs are opaque. Read details for relevant feature IDs before proposing monitors.',
+    'Read compact KI index/details only. action=index/read; writes are forbidden. Source IDs are opaque. Read details for relevant feature IDs before proposing monitors. Keep includeProvenance=false for ordinary reads; stored extraction query histories are unnecessary for monitoring.',
     {
       action: { type: 'string', enum: ['index', 'read'] },
       sourceId: string,
@@ -129,7 +131,7 @@ export const monitoringTools: Record<string, ToolDefinition> = {
     []
   ),
   monitoring_rules: definition(
-    'Validate or maintain a native managed Kibana signal rule for one configured source. Actions baseline/validate/upsert/enable/disable/delete. baseline describes complete-minute candidate history before installing: per-group median, p95, spread, older/newer mean, sample count and gaps; no thresholds are inferred. Start with a small lookbackMinutes; baseline caps at 24 hours and returns at most 20 groups. Missing count buckets remain unknown, not zero. reason required. upsert requires slug,title,description,pipeline,featureIds. count mode: WHERE-only pipeline, source-wide aggregation grouped ONLY by bucket (groupBy cannot add service dimensions). Use metric mode with CASE/SUM and explicit service/namespace STATS BY for grouped counts, healthy zeroes or ratios. metric mode: STATS emitting datetime bucket and numeric metric_value, optional groupBy columns. No FROM/JOIN/ENRICH/FORK/comments; server supplies source view and time filter. Count mode uses native 5m cadence and 7m lookback; metric mode accepts everyMinutes. LookbackMinutes bounds validation. At most seven active managed rules per service and namespace across sources; grouped rules consume one slot for each service they cover. Inventory guardrails include zero-link services. Prioritize investigating namespaces with no useful managed or verified external coverage before adding redundant intents elsewhere. Inspect inventory guardrails and existing user coverage; a limit is not a target. Reuse or disable lower-priority owned rules when at capacity. Native metadata allows 20 tags including four reserved ownership tags and emitting-service tags: partition broad intents into bounded namespace/cohort rules (prefer at most 15 services each) after a tag-limit failure. Keep a compact rule set; consolidate equivalent intents. Every featureId must belong to this source, with source-local emitting service anchors; read the source-filtered KI index. Do not SUM/AVG cumulative counter types as counts/rates; use available gauges or log/span outcomes when source views cannot support TS. Metric upserts require at least one observed non-null numeric value; an empty/null series is not validated coverage. ES|QL LIKE uses * and ? wildcards, not SQL %. Count rules test positiveEvidenceRefs against the predicate. If no recent rows match, supply positiveEvidenceRefs or a justified preventiveReason. Do not use preventiveReason to bypass a failed observed example. JSON key order is not stable: prefer independent predicates or JSON_EXTRACT. Preventive zero-match monitors need KI grounding. Only exact agent-owned rules can be changed. Stable slug identifies an intent; reuse it to update. An equivalent parsed query for the same source reuses the existing rule even if the requested slug differs. Native grouping includes the emitted metric dimensions. Empty featureIds are allowed for enable/disable/delete; validate/upsert require KI grounding. Native Kibana executes rules; never creates SLOs, anomaly jobs, KIs or notifications.',
+    'Validate or maintain a native managed Kibana signal rule for one configured source. Actions baseline/validate/upsert/enable/disable/delete. baseline is read-only and requires no featureIds (source-local KI references are enforced for validate/upsert). It describes complete-minute candidate history before installing: per-group median, p95, spread, older/newer mean, sample count and gaps; no thresholds are inferred. Start with a small lookbackMinutes; baseline caps at 24 hours and returns at most 20 groups. Missing count buckets remain unknown, not zero. reason required. upsert requires slug,title,description,pipeline,featureIds. count mode: WHERE-only pipeline, source-wide aggregation grouped ONLY by bucket (groupBy cannot add service dimensions). Use metric mode with CASE/SUM and explicit service/namespace STATS BY for grouped counts, healthy zeroes or ratios. metric mode: STATS emitting datetime bucket and numeric metric_value, optional groupBy columns. No FROM/JOIN/ENRICH/FORK/comments; server supplies source view and time filter. Count mode uses native 5m cadence and 7m lookback; metric mode accepts everyMinutes. LookbackMinutes bounds validation. At most seven active managed rules per service and namespace across sources; grouped rules consume one slot for each service they cover. Inventory guardrails include zero-link services. Prioritize investigating namespaces with no useful managed or verified external coverage before adding redundant intents elsewhere. Inspect inventory guardrails and existing user coverage; a limit is not a target. Reuse or disable lower-priority owned rules when at capacity. Native metadata allows 20 tags including four reserved ownership tags and emitting-service tags: partition broad intents into bounded namespace/cohort rules (prefer at most 15 services each) after a tag-limit failure. Keep a compact rule set; consolidate equivalent intents. Every featureId must belong to this source. Observed service/namespace output dimensions establish emitting-service ownership and the seven-rule cap; relevant local schema/dependency KIs can ground the query even before an entity anchor exists; read the source-filtered KI index. Do not SUM/AVG cumulative counter types as counts/rates; use available gauges or log/span outcomes when source views cannot support TS. Metric upserts require at least one observed non-null numeric value; an empty/null series is not validated coverage. ES|QL LIKE uses * and ? wildcards, not SQL %. Count rules test positiveEvidenceRefs against the predicate. If no recent rows match, supply positiveEvidenceRefs or a justified preventiveReason. Do not use preventiveReason to bypass a failed observed example. JSON key order is not stable: prefer independent predicates or JSON_EXTRACT. Preventive zero-match monitors need KI grounding. Only exact agent-owned rules can be changed. Stable slug identifies an intent; reuse it to update. An equivalent parsed query for the same source reuses the existing rule even if the requested slug differs. Native grouping includes the emitted metric dimensions. Empty featureIds are allowed for enable/disable/delete; validate/upsert require KI grounding. Native Kibana executes rules; never creates SLOs, anomaly jobs, KIs or notifications.',
     {
       action: {
         type: 'string',
@@ -171,19 +173,45 @@ export const monitoringTools: Record<string, ToolDefinition> = {
     ['action', 'sourceId', 'reason']
   ),
   finish_exploration: definition(
-    'Complete the monitoring run with actual outcome and a source-scoped coverage report. coverageJson is a JSON array of {sourceId,entity,concern,state,ruleIds,evidence}. State: covered/partial/blind_spot/unobservable. Include priority (high/medium/low) and priorityReason explaining criticality and the actual use-case gap; baselines alone do not cover failures. A rule count is not a coverage score. Explain existing SLO/user-rule/anomaly coverage in evidence. Before finishing, investigate every discovered blind_spot/partial concern using relevant KI details, source schema and targeted logs/traces/metrics plus applicable existing Kibana coverage. Continue exploration and candidate baseline/validation while useful untried checks remain within run limits; a coverage report alone does not close a gap. Each unresolved concern needs evidence of what was checked and a concrete telemetry, capacity, cost or execution limitation. Rule limits constrain creation, not investigation. Set coverageComplete=false and remainingGaps for unresolved actionable gaps; use partial when a blocker or actual run limit prevented required exploration. Never loop indefinitely or continue after cancellation.',
+    'Complete the monitoring run with actual outcome and a source-scoped coverage report. Prefer coverage as a structured array, avoiding JSON string escaping; coverageJson remains a compatibility alternative containing the same JSON array of {sourceId,entity,concern,state,ruleIds,evidence,priority,priorityReason}. Every item requires priority and priorityReason as separate properties, not only prose inside evidence. Example: [{"sourceId":"actual-source-id","entity":"actual-service","concern":"checkout completion","state":"partial","ruleIds":[],"evidence":"observed rows and coverage limitations","priority":"high","priorityReason":"critical customer transaction path"}]. State: covered/partial/blind_spot/unobservable. Include priority (high/medium/low) and priorityReason explaining criticality and the actual use-case gap; baselines alone do not cover failures. A rule count is not a coverage score. Explain existing SLO/user-rule/anomaly coverage in evidence. Before finishing, investigate every discovered blind_spot/partial concern using relevant KI details, source schema and targeted logs/traces/metrics plus applicable existing Kibana coverage. Continue exploration and candidate baseline/validation while useful untried checks remain within run limits; a coverage report alone does not close a gap. Each unresolved concern needs evidence of what was checked and a concrete telemetry, capacity, cost or execution limitation. Rule limits constrain creation, not investigation. Set coverageComplete=false and remainingGaps for unresolved actionable gaps; use partial when a blocker or actual run limit prevented required exploration. Never loop indefinitely or continue after cancellation.',
     {
       outcome: { type: 'string', enum: ['configured', 'unchanged', 'partial'] },
       summary: string,
       coverageComplete: { type: 'boolean' },
       remainingGaps: { type: 'array', items: string },
+      coverage: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            sourceId: string,
+            entity: string,
+            concern: string,
+            state: { type: 'string', enum: ['covered', 'partial', 'blind_spot', 'unobservable'] },
+            ruleIds: { type: 'array', items: string },
+            evidence: string,
+            priority: { type: 'string', enum: ['high', 'medium', 'low'] },
+            priorityReason: string,
+          },
+          required: [
+            'sourceId',
+            'entity',
+            'concern',
+            'state',
+            'ruleIds',
+            'evidence',
+            'priority',
+            'priorityReason',
+          ],
+        },
+      },
       coverageJson: {
         type: 'string',
         description:
           'JSON array. Every entry requires sourceId, entity, concern, state (covered/partial/blind_spot/unobservable), ruleIds, evidence, priority (high/medium/low), and priorityReason (explain impact and verified existing coverage). Maximum 64000 characters.',
       },
     },
-    ['outcome', 'summary', 'coverageComplete', 'remainingGaps', 'coverageJson']
+    ['outcome', 'summary', 'coverageComplete', 'remainingGaps']
   ),
 };
 
@@ -383,10 +411,15 @@ export class MonitoringToolSession {
           summary: z.string().min(1).max(2000),
           coverageComplete: z.boolean(),
           remainingGaps: z.array(z.string().max(500)).max(20),
-          coverageJson: z.string().max(64000),
+          coverageJson: z.string().max(64000).optional(),
+          coverage: coverageSchema.optional(),
         })
         .parse(parameters);
-      const coverage = coverageSchema.parse(JSON.parse(args.coverageJson));
+      if (!args.coverage && !args.coverageJson)
+        throw new Error('Supply coverage as a structured array (preferred) or coverageJson.');
+      const coverage = args.coverage?.length
+        ? args.coverage
+        : coverageSchema.parse(JSON.parse(args.coverageJson || '[]'));
       const { alertingV2RulesClient: rules } =
         await this.clients.getSignificantEventsAlertingContext();
       for (const cell of coverage) {
@@ -504,7 +537,12 @@ export class MonitoringToolSession {
         ).hits.filter(
           (feature) => featureIds.includes(feature.id) || featureIds.includes(feature.uuid)
         );
-        assertServiceRuleCapacity(monitoredServices(features), await this.usage(), id);
+        const taggedServices = servicesFromOwnershipTags(existing.metadata.tags ?? []);
+        assertServiceRuleCapacity(
+          taggedServices.length ? taggedServices : monitoredServices(features),
+          await this.usage(),
+          id
+        );
       }
       this.signal.throwIfAborted();
       const result =
@@ -519,16 +557,12 @@ export class MonitoringToolSession {
       this.run.written++;
       return { ruleId: id, action: args.action, reason: args.reason };
     }
-    if (!args.pipeline || !args.featureIds?.length)
-      throw new Error('pipeline and featureIds are required');
+    if (!args.pipeline || (args.action !== 'baseline' && !args.featureIds?.length))
+      throw new Error('pipeline is required; validate/upsert also require source-local featureIds');
     if (hasForbiddenMonitoringOperations(args.pipeline))
       throw new Error(
         'Use only a source-scoped pipeline; FROM, joins, comments and external operations are forbidden'
       );
-    const allFeatures = (await ki.getFeatures(source.id, { limit: 10000 })).hits;
-    const features = allFeatures.filter((feature) => args.featureIds?.includes(feature.id));
-    if (features.length !== new Set(args.featureIds).size)
-      throw new Error('Every featureId must be a current KI belonging to the source');
     const prefix = `FROM ${source.view_name}`;
     const pipeline = args.pipeline.replace(/^\s*\|/, '').trim();
     const base = `${prefix} | ${pipeline}`;
@@ -543,6 +577,23 @@ export class MonitoringToolSession {
           } minutes`;
     if (args.action === 'baseline')
       return this.baseline(source, pipeline, args.mode, args.lookbackMinutes);
+    const allFeatures = (await ki.getFeatures(source.id, { limit: 10000 })).hits;
+    const features = allFeatures.filter((feature) => args.featureIds?.includes(feature.id));
+    if (features.length !== new Set(args.featureIds).size) {
+      return {
+        error:
+          'Every featureId for validate/upsert must be a current KI belonging to this source. Baseline reads do not need KI references.',
+        sourceId: source.id,
+        invalidFeatureIds: args.featureIds?.filter(
+          (featureId) => !features.some((feature) => feature.id === featureId)
+        ),
+        nextAction:
+          'Read knowledge_indicators action=index with this sourceId. Select existing relevant source-local service, dependency or schema KIs; never copy IDs from another source. If none exist, report the exact extraction gap and continue independent concerns.',
+        availableReferences: allFeatures
+          .slice(0, 25)
+          .map((feature) => ({ id: feature.id, type: feature.type, title: feature.title })),
+      };
+    }
     const probe = `${prefix} | WHERE \`@timestamp\` >= NOW() - ${
       args.lookbackMinutes
     } minutes | ${pipeline} | ${
@@ -693,7 +744,8 @@ export class MonitoringToolSession {
     const existing = ownedRules.find((rule) => rule.id === id);
     if (existing && !(existing.metadata.tags ?? []).includes(toSourceTag(source.id)))
       throw new Error('An existing monitor cannot be moved to another source');
-    const services = monitoredServices(features);
+    const observedServices = observedMonitoredServices(response.columns, response.values);
+    const services = observedServices.length ? observedServices : monitoredServices(features);
     if (!existing || existing.enabled) assertServiceRuleCapacity(services, await this.usage(), id);
     const serviceTags = serviceOwnershipTags(services);
     const data = {
