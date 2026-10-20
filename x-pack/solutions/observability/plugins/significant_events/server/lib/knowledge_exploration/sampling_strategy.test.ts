@@ -150,7 +150,17 @@ describe('deterministic sampling agenda', () => {
     expect(agenda.sources.find(({ sourceId }) => sourceId === 'logs')).toMatchObject({
       sourceId: 'logs',
       endOffsetMinutes: 60,
+      strataEndOffsetMinutes: [60, 360, 720, 1440, 0],
     });
+    expect(agenda.sources[0].strataEndOffsetMinutes).toEqual([0, 60, 360, 720, 1440]);
+    expect(agenda.instruction).toContain('at least three strata');
+  });
+
+  it('keeps a single time stratum for the monitoring agent', () => {
+    const agenda = buildSamplingAgenda('monitoring', [source('logs', 'logs')], []);
+    expect(agenda.sources[0].endOffsetMinutes).toBe(0);
+    expect(agenda.sources[0].strataEndOffsetMinutes).toBeUndefined();
+    expect(agenda.instruction).not.toContain('at least three strata');
   });
 
   it('prioritizes sources named in unresolved gaps', () => {

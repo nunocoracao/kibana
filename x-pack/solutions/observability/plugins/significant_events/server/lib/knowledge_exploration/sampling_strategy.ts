@@ -26,6 +26,8 @@ export interface SamplingAgenda {
     volumeProbeMinutes?: number;
     targetWindowMinutes: number;
     endOffsetMinutes: number;
+    /** Knowledge agent only: time strata to cover this run, least sampled first. */
+    strataEndOffsetMinutes?: number[];
     focus: string;
   }>;
 }
@@ -111,10 +113,11 @@ export const buildSamplingAgenda = (
         const offset = attempt.endOffsetMinutes;
         if (offsetCounts.has(offset)) offsetCounts.set(offset, (offsetCounts.get(offset) ?? 0) + 1);
       }
-      const endOffsetMinutes = [...TIME_STRATA_MINUTES].sort(
+      const strata = [...TIME_STRATA_MINUTES].sort(
         (left, right) =>
           (offsetCounts.get(left) ?? 0) - (offsetCounts.get(right) ?? 0) || left - right
-      )[0];
+      );
+      const endOffsetMinutes = strata[0];
       const hasCurrentVolumeProbe = sourceAttempts.some(
         (attempt) => attempt.template === 'volume' && attempt.endOffsetMinutes === 0
       );
@@ -125,6 +128,7 @@ export const buildSamplingAgenda = (
         ...(hasCurrentVolumeProbe ? {} : { volumeProbeMinutes: 1 }),
         targetWindowMinutes: 5,
         endOffsetMinutes,
+        ...(agent === 'knowledge' ? { strataEndOffsetMinutes: strata } : {}),
         focus: samplingFocus(agent, source.type),
       };
     });
@@ -132,7 +136,9 @@ export const buildSamplingAgenda = (
   return {
     agent,
     instruction:
-      'Use this deterministic priority list to choose the next bounded reads. Probe volume for one minute before a broad read, then target the listed five-minute time stratum and source-specific question. Complete useful unvisited scopes first; explain any deviation. A probe or a sampled interval is not proof of complete coverage.',
+      agent === 'knowledge'
+        ? 'Use this deterministic priority list to choose the next bounded reads. For each source, probe volume for one minute at each stratum in strataEndOffsetMinutes (least sampled first) and run five-minute targeted reads in at least three strata that hold data before finishing; skip strata whose probe is empty. Rare emitters and dependencies often appear only outside the most recent window. Complete useful unvisited scopes first; explain any deviation. A probe or a sampled interval is not proof of complete coverage.'
+        : 'Use this deterministic priority list to choose the next bounded reads. Probe volume for one minute before a broad read, then target the listed five-minute time stratum and source-specific question. Complete useful unvisited scopes first; explain any deviation. A probe or a sampled interval is not proof of complete coverage.',
     sources: planned,
   };
 };

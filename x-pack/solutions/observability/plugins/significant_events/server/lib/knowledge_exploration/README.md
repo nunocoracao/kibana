@@ -32,7 +32,11 @@ accepts bounded parametersJson for dynamic tool input on fixed-schema providers,
 against the actual selected tool schema, and returns actionable schema details for invalid input. Custom queries must alias aggregates; an exact server
 verification error for SORT COUNT can retry once using the server's suggested COUNT() or
 COUNT(*) column, with a warning and the actual corrected query retained in the trace. Infrastructure inventory includes
-service identity so placement can be attributed. Schema pages and log rows expose run-local
+service identity so placement can be attributed. The technology template groups every emitter by its
+populated SDK, runtime and language fields in one STATS, so technology KIs rest on per-service evidence.
+The knowledge agent's sampling plan lists every time stratum per source, least sampled first, and the
+agent covers at least three strata holding data in one run; the agent still chooses its own reads, and
+the monitoring and event agents keep a single stratum. Schema pages and log rows expose run-local
 evidence references. Writes copy relevant exact source evidence and preserve the existing
 schema, source ownership and extraction run provenance. Reads/upserts use logical KI IDs;
 deletes use storage UUIDs. Same service/dependency identities reuse existing KIs.
@@ -45,7 +49,9 @@ agent owns the inference and confidence judgment, while the tool persists its sc
 
 ## Completion and cost
 
-`finish_exploration` must provide `coverageComplete` and `remainingGaps`. Useful writes do
+`finish_exploration` must provide `coverageComplete`, `remainingGaps` and a `dimensionReview`
+entry per observed namespace and dimension (learned, already_known, unobservable or unexplored);
+unexplored entries are appended to the carried-over gaps and make the run partial. Useful writes do
 not imply complete exploration. Concrete remaining gaps are carried into the next invocation
 so it resumes unfinished work instead of replaying the service inventory. Unfinished runs retain their KIs but do not advance complete
 novelty checkpoints. The prompt reviews every taxonomy dimension and distinguishes already
