@@ -8,8 +8,11 @@
 import type { BaseFeature } from '@kbn/significant-events-schema';
 import {
   documentIdQuery,
+  filterFromEvidence,
   followUpForSavedFeatures,
   languagePatches,
+  languagesFromRows,
+  languageTechnologies,
   mergeUnexploredDimensions,
   normalizeSubtype,
   peerField,
@@ -339,5 +342,88 @@ describe('finish dimension review', () => {
       basis: 'not read',
     }));
     expect(mergeUnexploredDimensions([], review)).toHaveLength(20);
+  });
+});
+
+const serviceEntity = (name: string, extra: Partial<BaseFeature> = {}): BaseFeature =>
+  ({
+    id: `service-${name}`,
+    type: 'entity',
+    subtype: 'service',
+    title: name,
+    description: '',
+    properties: { name, service_namespace: 'demo' },
+    confidence: 90,
+    evidence: [`resource.attributes.service.name=${name}`, 'service.namespace=demo'],
+    evidence_doc_ids: [`doc-${name}`],
+    tags: [],
+    ...extra,
+  } as BaseFeature);
+
+describe('deterministic entity completion', () => {
+  it('reads the language each service reports about itself', () => {
+    const languages = languagesFromRows([
+      { 'resource.attributes.service.name': 'cart', 'telemetry.sdk.language': 'dotnet' },
+      { 'service.name': 'quote', 'resource.attributes.telemetry.sdk.language': 'php' },
+      { 'service.name': 'proxy', 'process.runtime.name': 'envoy' },
+    ]);
+    expect([...languages]).toEqual([
+      ['cart', 'dotnet'],
+      ['quote', 'php'],
+    ]);
+  });
+
+  it('builds a filter from the identity equalities in the entity evidence', () => {
+    expect(filterFromEvidence(serviceEntity('cart'))).toEqual({
+      and: [
+        { field: 'resource.attributes.service.name', eq: 'cart' },
+        { field: 'service.namespace', eq: 'demo' },
+      ],
+    });
+  });
+
+  it('leaves silent components, existing filters and non-services alone', () => {
+    expect(filterFromEvidence(serviceEntity('valkey', { evidence: ['db.system=redis'] }))).toBe(
+      undefined
+    );
+    expect(
+      filterFromEvidence(serviceEntity('cart', { filter: { field: 'service.name', eq: 'cart' } }))
+    ).toBe(undefined);
+    expect(filterFromEvidence(serviceEntity('cart', { subtype: 'database' }))).toBe(undefined);
+  });
+
+  it('writes a programming language KI for languages only recorded on entities', () => {
+    const features = [
+      serviceEntity('cart', { properties: { name: 'cart', language: 'dotnet' } }),
+      serviceEntity('accounting', { properties: { name: 'accounting', language: 'dotnet' } }),
+      serviceEntity('quote', { properties: { name: 'quote', language: 'php' } }),
+      {
+        ...serviceEntity('php'),
+        id: 'technology-php',
+        type: 'technology',
+        subtype: 'programming_language',
+        properties: { name: 'PHP' },
+      } as BaseFeature,
+    ];
+    const derived = languageTechnologies(features);
+    expect(derived).toHaveLength(1);
+    expect(derived[0]).toMatchObject({
+      id: 'technology-language-dotnet',
+      subtype: 'programming_language',
+      properties: { name: 'dotnet', services: ['accounting', 'cart'] },
+      evidence_doc_ids: ['doc-cart', 'doc-accounting'],
+    });
+  });
+});
+
+describe('observed services follow-up', () => {
+  it('lists services seen emitting that have no entity yet', () => {
+    expect(
+      followUpForSavedFeatures(
+        [serviceEntity('cart', { filter: { field: 'service.name', eq: 'cart' } })],
+        [],
+        ['cart', 'frontend']
+      )
+    ).toMatchObject({ servicesWithoutEntity: ['frontend'] });
   });
 });

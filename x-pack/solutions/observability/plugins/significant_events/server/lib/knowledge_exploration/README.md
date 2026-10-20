@@ -39,14 +39,20 @@ The peers template does the same for peer, destination and provider fields a cal
 and trace_links lists sets of two to four services logging under the same trace IDs as undirected
 dependency candidates for the agent to confirm. Upsert responses list saved records that still lack
 evidence or, for emitting services, a filter, and dependency targets without an entity, so the agent
-can refine them. The first inventory of each source in a run also returns the technology and peer
-groupings for the same window, so every run sees languages, frameworks and peer fields.
+can refine them. The first inventory of each source in a run also returns every service emitting in
+the last hour, rarest first, with row references, plus the technology and peer groupings for the same
+window, so every run sees rare emitters, languages, frameworks and peer fields. Upsert responses then
+list observed services that still have no entity.
 
 On write, the tool maps common finer subtypes onto the shared KI contract (for example host to
 operating_system, messaging to service_dependency, log_format to custom) and keeps the original in
 `properties.kind`; resolves up to three real document IDs per KI by re-reading the source's own FROM
 target with `METADATA _id`, the evidence row's window and its field values (views do not expose `_id`);
 and copies the language of programming_language technology KIs onto the service entities they name.
+It also completes service entities from observed data: a filter built from the service name and
+namespace equalities in the entity's own evidence, the language the service reports about itself
+(`telemetry.sdk.language`, `service.language.name`) in technology inventory rows, and a
+programming_language technology KI for each language recorded only on entities.
 The knowledge agent's sampling plan lists every time stratum per source, least sampled first, and the
 agent covers at least three strata holding data in one run; the agent still chooses its own reads, and
 the monitoring and event agents keep a single stratum. Schema pages and log rows expose run-local

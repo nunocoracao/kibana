@@ -421,7 +421,8 @@ type FollowUpFeature = Pick<
 /** Saved KIs that are persisted but still thin: no evidence, a service without a filter, or a dependency target without an entity. */
 export const followUpForSavedFeatures = (
   saved: FollowUpFeature[],
-  known: FollowUpFeature[] = []
+  known: FollowUpFeature[] = [],
+  observedServices: string[] = []
 ) => {
   const withoutEvidence = saved.filter((item) => !item.evidence?.length).map((item) => item.id);
   const servicesWithoutFilter = saved
@@ -441,14 +442,23 @@ export const followUpForSavedFeatures = (
         .filter((target) => target && !entityNames.has(target.toLowerCase()))
     ),
   ];
-  if (!withoutEvidence.length && !servicesWithoutFilter.length && !targetsWithoutEntity.length)
+  const servicesWithoutEntity = [
+    ...new Set(observedServices.filter((name) => name && !entityNames.has(name.toLowerCase()))),
+  ];
+  if (
+    !withoutEvidence.length &&
+    !servicesWithoutFilter.length &&
+    !targetsWithoutEntity.length &&
+    !servicesWithoutEntity.length
+  )
     return undefined;
   return {
     withoutEvidence,
     servicesWithoutFilter,
     targetsWithoutEntity,
+    servicesWithoutEntity,
     nextAction:
-      'These records are saved. Refine them in a later upsert: pass evidence_refs from the rows that support each record (the tool copies the observed evidence and document IDs), and give each emitting service a filter of equalities on the actual service name and namespace columns with the observed values, e.g. {"and":[{"field":"resource.attributes.service.name","eq":"cart"},{"field":"resource.attributes.service.namespace","eq":"shop"}]}. Save an entity for each dependency target without one (database, cache, message_queue or service for an external API), with the dependency evidence; silent or inferred components keep no filter.',
+      'These records are saved. Refine them in a later upsert: pass evidence_refs from the rows that support each record (the tool copies the observed evidence and document IDs), and give each emitting service a filter of equalities on the actual service name and namespace columns with the observed values, e.g. {"and":[{"field":"resource.attributes.service.name","eq":"cart"},{"field":"resource.attributes.service.namespace","eq":"shop"}]}. Save an entity for each dependency target without one (database, cache, message_queue or service for an external API), with the dependency evidence; silent or inferred components keep no filter. servicesWithoutEntity are services that emitted in the first-look service inventory but have no entity yet, often rare emitters: save a service entity for each with the evidence_refs of its firstLook.services row.',
   };
 };
 
@@ -611,6 +621,91 @@ export const languagePatches = (
       return [];
     const language = languageByService.get(String(entity.properties.name ?? '').toLowerCase());
     return language ? [{ ...entity, properties: { ...entity.properties, language } }] : [];
+  });
+};
+
+const LANGUAGE_COLUMN = /(^|\.)(telemetry\.sdk\.language|service\.language\.name)$/;
+
+/** Language each emitting service reports about itself in technology inventory rows. */
+export const languagesFromRows = (rows: Array<Record<string, string>>): Map<string, string> => {
+  const languages = new Map<string, string>();
+  for (const row of rows) {
+    const service = rowIdentity(row).name?.toLowerCase();
+    const column = Object.keys(row).find((key) => LANGUAGE_COLUMN.test(key) && row[key]);
+    if (service && column && !languages.has(service)) languages.set(service, row[column]);
+  }
+  return languages;
+};
+
+const NAMESPACE_COLUMNS = [
+  'resource.attributes.service.namespace',
+  'service.namespace',
+  'namespace',
+];
+
+/** Filter for an emitting service entity, built from the identity equalities in its own evidence. */
+export const filterFromEvidence = (entity: BaseFeature): BaseFeature['filter'] | undefined => {
+  if (entity.type !== 'entity' || entity.subtype !== 'service' || entity.filter) return undefined;
+  const name = String(entity.properties.name ?? '');
+  const namespace = String(entity.properties.service_namespace ?? '');
+  const equalities = (entity.evidence ?? []).map((item) => {
+    const separator = item.indexOf('=');
+    return separator > 0 ? [item.slice(0, separator), item.slice(separator + 1)] : ['', ''];
+  });
+  const service = equalities.find(
+    ([key, value]) => SERVICE_NAME_COLUMNS.includes(key) && name !== '' && value === name
+  );
+  if (!service) return undefined;
+  const scope = equalities.find(
+    ([key, value]) => NAMESPACE_COLUMNS.includes(key) && (namespace === '' || value === namespace)
+  );
+  const serviceCondition = { field: service[0], eq: service[1] };
+  return (
+    scope ? { and: [serviceCondition, { field: scope[0], eq: scope[1] }] } : serviceCondition
+  ) as BaseFeature['filter'];
+};
+
+/** Programming language KIs for languages recorded on service entities but not yet named by any technology KI. */
+export const languageTechnologies = (features: BaseFeature[]): BaseFeature[] => {
+  const named = new Set(
+    features
+      .filter((item) => item.type === 'technology' && !item.meta?.derived_from_entities)
+      .flatMap((item) => [item.properties.name, item.properties.language, item.title])
+      .map((value) => String(value ?? '').toLowerCase())
+      .filter(Boolean)
+  );
+  const byLanguage = new Map<string, BaseFeature[]>();
+  for (const entity of features) {
+    if (entity.type !== 'entity' || entity.subtype !== 'service') continue;
+    const language = String(entity.properties.language ?? '').trim();
+    if (!language || named.has(language.toLowerCase())) continue;
+    byLanguage.set(language, [...(byLanguage.get(language) ?? []), entity]);
+  }
+  return [...byLanguage.entries()].map(([language, entities]) => {
+    const namespaces = [
+      ...new Set(entities.map((item) => String(item.properties.service_namespace ?? ''))),
+    ].filter(Boolean);
+    return {
+      id: `technology-language-${language.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      type: 'technology',
+      subtype: 'programming_language',
+      title: `${language} services`,
+      description: `Programming language ${language}, as each listed service reports it in its own telemetry (SDK or service language attributes) and as recorded on its service entity.`,
+      properties: {
+        name: language,
+        language,
+        services: entities.map((item) => String(item.properties.name)).sort(),
+        ...(namespaces.length === 1 ? { service_namespace: namespaces[0] } : {}),
+      },
+      confidence: Math.min(...entities.map((item) => item.confidence)),
+      evidence: [...new Set(entities.flatMap((item) => item.evidence ?? []))].slice(0, 5),
+      evidence_doc_ids: [...new Set(entities.flatMap((item) => item.evidence_doc_ids ?? []))].slice(
+        0,
+        3
+      ),
+      tags: [],
+      meta: { derived_from_entities: entities.map((item) => item.id) },
+    } as BaseFeature;
   });
 };
 
@@ -908,12 +1003,61 @@ export class ExplorationToolSession {
 
   private documentIdsByReference = new Map<string, string[]>();
   private firstLookSources = new Set<string>();
+  /** Per source: service name (lower case) to the language its own telemetry reports. */
+  private reportedLanguages = new Map<string, Map<string, string>>();
+
+  /** Per source: every service seen emitting in the first-look service inventory. */
+  private observedServices = new Map<string, Set<string>>();
+
+  /** Every emitting service in the last hour, rarest first, so rare emitters are not missed by short samples. */
+  private async serviceInventory(source: NightshiftSource): Promise<object> {
+    const columns = new Set<string>();
+    for (const [key, schema] of this.sourceSchemas.entries())
+      if (key.startsWith(`${source.id}:`)) for (const column of schema) columns.add(column.name);
+    const service = SERVICE_NAME_COLUMNS.find((name) => columns.has(name));
+    if (!service) return { services: [], note: 'No service name column in the loaded schema.' };
+    const namespace = NAMESPACE_COLUMNS.find((name) => columns.has(name));
+    const query = `FROM ${source.view_name} | ${sourceTimeWindow(60, 0)} | WHERE ${field(
+      service
+    )} IS NOT NULL | STATS count=COUNT(*) BY ${[service, namespace]
+      .filter((name): name is string => Boolean(name))
+      .map(field)
+      .join(', ')} | SORT count ASC | LIMIT 200`;
+    const response = await this.clients.streamDataEsClient.esql.query(
+      { query },
+      { signal: this.signal, requestTimeout: 30000 }
+    );
+    const rows = response.values.map((values) =>
+      Object.fromEntries(
+        response.columns
+          .map((column, index): [string, string] => [
+            column.name,
+            values[index] === null ? '' : String(values[index]),
+          ])
+          .filter(([, value]) => value !== '')
+      )
+    );
+    const refs = this.record(source.id, rows, query);
+    const observed = this.observedServices.get(source.id) ?? new Set<string>();
+    for (const row of rows) if (row[service]) observed.add(row[service]);
+    this.observedServices.set(source.id, observed);
+    return {
+      window: 'last 60 minutes',
+      query,
+      services: rows.map((row, index) => ({ ...row, ref: refs[index] })),
+    };
+  }
 
   private async firstLook(
     source: NightshiftSource,
     args: z.infer<typeof sourceQuerySchema>
   ): Promise<object> {
     const look: Record<string, object> = {};
+    try {
+      look.services = await this.serviceInventory(source);
+    } catch (error) {
+      look.services = { error: error instanceof Error ? error.message : String(error) };
+    }
     for (const template of ['technology', 'peers'] as const)
       try {
         look[template] = await this.querySource(source, {
@@ -1003,6 +1147,10 @@ export class ExplorationToolSession {
       )
     );
     const rowRefs = this.record(source.id, rows, query);
+    const reported = this.reportedLanguages.get(source.id) ?? new Map<string, string>();
+    for (const [service, language] of languagesFromRows(rows))
+      if (!reported.has(service)) reported.set(service, language);
+    this.reportedLanguages.set(source.id, reported);
     const nextOffset = args.offset + args.maxRows;
     return {
       sourceId: source.id,
@@ -1159,7 +1307,7 @@ export class ExplorationToolSession {
           ? {
               firstLook,
               firstLookNote:
-                'Automatic once per source on its first inventory: technology and peer groupings for the same window. Use them to save technology KIs (language, runtime, frameworks from scope.name and service.framework.*), service languages and dependencies; page or rerun template=technology|peers for other strata.',
+                'Automatic once per source on its first inventory: services lists every service emitting in the last hour, rarest first, with row refs (save a service entity for each, including rare emitters); technology and peer groupings cover the same window as the inventory. Use them to save technology KIs (language, runtime, frameworks from scope.name and service.framework.*), service languages and dependencies; page or rerun template=technology|peers for other strata.',
             }
           : {}),
         failed: results.some((result) => 'error' in result),
@@ -2450,12 +2598,39 @@ export class ExplorationToolSession {
     }
     const knownById = new Map<string, BaseFeature>(existing.map((item) => [item.id, item]));
     for (const item of validated) knownById.set(item.id, item);
-    if (validated.length)
-      for (const patch of languagePatches([...knownById.values()], [...knownById.values()])) {
-        const position = validated.findIndex((item) => item.id === patch.id);
-        if (position >= 0) validated[position] = patch;
-        else validated.push(patch);
+    const applyPatch = (patch: BaseFeature) => {
+      knownById.set(patch.id, patch);
+      const position = validated.findIndex((item) => item.id === patch.id);
+      if (position >= 0) validated[position] = patch;
+      else validated.push(patch);
+    };
+    if (validated.length) {
+      const reported = this.reportedLanguages.get(args.sourceId) ?? new Map<string, string>();
+      for (const entity of [...knownById.values()]) {
+        if (entity.type !== 'entity' || entity.subtype !== 'service') continue;
+        const language = entity.properties.language
+          ? undefined
+          : reported.get(String(entity.properties.name ?? '').toLowerCase());
+        const filter = filterFromEvidence(entity);
+        if (language || filter)
+          applyPatch({
+            ...entity,
+            ...(filter ? { filter } : {}),
+            properties: { ...entity.properties, ...(language ? { language } : {}) },
+          });
       }
+      for (const patch of languagePatches([...knownById.values()], [...knownById.values()]))
+        applyPatch(patch);
+      for (const technology of languageTechnologies([...knownById.values()])) {
+        const prior = knownById.get(technology.id);
+        if (
+          !prior ||
+          JSON.stringify(prior.properties.services) !==
+            JSON.stringify(technology.properties.services)
+        )
+          applyPatch(technology);
+      }
+    }
     if (validated.length) {
       const scopedClient = await this.clients.getKnowledgeIndicatorClient(source);
       await scopedClient.bulk(
@@ -2477,7 +2652,9 @@ export class ExplorationToolSession {
     const scopedClient = await this.clients.getKnowledgeIndicatorClient(source);
     for (const query of validatedQueries) await scopedClient.upsertQuery(source.id, query);
     this.run.written += validatedQueries.length;
-    const followUp = followUpForSavedFeatures(validated, existing);
+    const followUp = followUpForSavedFeatures(validated, existing, [
+      ...(this.observedServices.get(args.sourceId) ?? []),
+    ]);
     return {
       ...(followUp ? { followUp } : {}),
       sourceId: args.sourceId,
