@@ -38,7 +38,15 @@ The peers template does the same for peer, destination and provider fields a cal
 (peer.service, server.address, db.system, messaging.*, rpc.*, feature_flag.provider.name, url.domain),
 and trace_links lists sets of two to four services logging under the same trace IDs as undirected
 dependency candidates for the agent to confirm. Upsert responses list saved records that still lack
-evidence or, for emitting services, a filter, so the agent can refine them.
+evidence or, for emitting services, a filter, and dependency targets without an entity, so the agent
+can refine them. The first inventory of each source in a run also returns the technology and peer
+groupings for the same window, so every run sees languages, frameworks and peer fields.
+
+On write, the tool maps common finer subtypes onto the shared KI contract (for example host to
+operating_system, messaging to service_dependency, log_format to custom) and keeps the original in
+`properties.kind`; resolves up to three real document IDs per KI by re-reading the source's own FROM
+target with `METADATA _id`, the evidence row's window and its field values (views do not expose `_id`);
+and copies the language of programming_language technology KIs onto the service entities they name.
 The knowledge agent's sampling plan lists every time stratum per source, least sampled first, and the
 agent covers at least three strata holding data in one run; the agent still chooses its own reads, and
 the monitoring and event agents keep a single stratum. Schema pages and log rows expose run-local

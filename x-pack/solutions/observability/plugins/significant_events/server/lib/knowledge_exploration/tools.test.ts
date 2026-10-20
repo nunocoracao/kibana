@@ -5,13 +5,188 @@
  * 2.0.
  */
 
+import type { BaseFeature } from '@kbn/significant-events-schema';
 import {
+  documentIdQuery,
   followUpForSavedFeatures,
+  languagePatches,
   mergeUnexploredDimensions,
+  normalizeSubtype,
   peerField,
   technologyField,
   traceLinksQuery,
 } from './tools';
+
+describe('round 3 field matchers', () => {
+  it('reads frameworks from scope and service.framework fields', () => {
+    for (const name of [
+      'scope.name',
+      'scope.version',
+      'service.framework.name',
+      'scope.attributes.service.framework.version',
+    ])
+      expect(technologyField(name)).toBe(true);
+    expect(technologyField('attributes.scope.name')).toBe(false);
+  });
+
+  it('reads proxy upstream clusters and custom address attributes as peers', () => {
+    for (const name of [
+      'attributes.upstream.cluster',
+      'attributes.quote_service_addr',
+      'payment_url',
+      'db_host',
+      'attributes.gen_ai.system',
+      'gen_ai.provider.name',
+    ])
+      expect(peerField(name)).toBe(true);
+    expect(peerField('attributes.client_ip')).toBe(false);
+  });
+});
+
+describe('subtype contract', () => {
+  it('maps finer subtypes onto the shared contract and keeps the original kind', () => {
+    expect(normalizeSubtype('infrastructure', 'host', { name: 'h1' })).toEqual({
+      subtype: 'operating_system',
+      properties: { kind: 'host', name: 'h1' },
+    });
+    expect(normalizeSubtype('dependency', 'messaging', {}).subtype).toBe('service_dependency');
+    expect(normalizeSubtype('schema', 'log_format', {}).subtype).toBe('custom');
+    expect(normalizeSubtype('technology', 'runtime', {}).subtype).toBe('programming_language');
+  });
+
+  it('leaves contract and unknown subtypes alone', () => {
+    expect(normalizeSubtype('entity', 'service', { a: 1 })).toEqual({
+      subtype: 'service',
+      properties: { a: 1 },
+    });
+    expect(normalizeSubtype('entity', 'mystery', {}).subtype).toBe('mystery');
+    expect(
+      normalizeSubtype('technology', 'programming_language', { kind: 'x' }).properties
+    ).toEqual({
+      kind: 'x',
+    });
+  });
+});
+
+describe('document ID lookup', () => {
+  const columns = new Set(['@timestamp', 'service.name', 'feature_flag.provider.name', 'message']);
+  const reference =
+    'FROM $.view | WHERE `@timestamp` >= NOW() - 5 minutes AND `@timestamp` < NOW() - 60 minutes | STATS count=COUNT(*) BY `service.name`';
+
+  it('re-reads the source FROM target with METADATA _id, the window and the row values', () => {
+    expect(
+      documentIdQuery(
+        'FROM logs-orcabench.otel-default',
+        reference,
+        {
+          'service.name': 'checkout',
+          'feature_flag.provider.name': 'flagd',
+          count: '12',
+          pattern: 'x',
+        },
+        columns
+      )
+    ).toBe(
+      'FROM logs-orcabench.otel-default METADATA _id | WHERE `@timestamp` >= NOW() - 5 minutes AND `@timestamp` < NOW() - 60 minutes | WHERE TO_STRING(`service.name`) == "checkout" AND TO_STRING(`feature_flag.provider.name`) == "flagd" | KEEP _id | LIMIT 3'
+    );
+  });
+
+  it('keeps the source pipeline and an existing METADATA clause', () => {
+    expect(
+      documentIdQuery(
+        'FROM logs-a METADATA _index | WHERE x == 1',
+        reference,
+        { 'service.name': 'a' },
+        columns
+      )
+    ).toMatch(/^FROM logs-a METADATA _index, _id \| WHERE x == 1 \| WHERE `@timestamp`/);
+  });
+
+  it('gives up without a FROM source, a time window or a usable column', () => {
+    expect(
+      documentIdQuery('TS metrics', reference, { 'service.name': 'a' }, columns)
+    ).toBeUndefined();
+    expect(
+      documentIdQuery('FROM a', 'FROM $.view', { 'service.name': 'a' }, columns)
+    ).toBeUndefined();
+    expect(
+      documentIdQuery('FROM a', reference, { pattern: 'x', count: '1' }, columns)
+    ).toBeUndefined();
+  });
+});
+
+describe('language propagation', () => {
+  const entity = (name: string, language?: string) =>
+    ({
+      id: `service-${name}`,
+      type: 'entity',
+      subtype: 'service',
+      title: name,
+      description: '',
+      properties: { name, ...(language ? { language } : {}) },
+      confidence: 80,
+      evidence: [],
+      tags: [],
+    } as unknown as BaseFeature);
+
+  it('writes the technology language onto matching service entities that lack one', () => {
+    const patches = languagePatches(
+      [
+        {
+          type: 'technology',
+          subtype: 'programming_language',
+          title: 'Java services',
+          properties: { name: 'Java', services: ['ad', 'kafka'] },
+        },
+        {
+          type: 'technology',
+          subtype: 'programming_language',
+          title: 'Rust',
+          properties: { name: 'Rust', service_name: 'shipping' },
+        },
+      ],
+      [entity('ad'), entity('kafka', 'Java'), entity('shipping'), entity('cart')]
+    );
+    expect(patches.map((item) => [item.id, item.properties.language])).toEqual([
+      ['service-ad', 'Java'],
+      ['service-shipping', 'Rust'],
+    ]);
+  });
+});
+
+describe('dependency targets without entities', () => {
+  it('lists saved dependency targets that no known entity names', () => {
+    const followUp = followUpForSavedFeatures(
+      [
+        {
+          id: 'dep-1',
+          type: 'dependency',
+          subtype: 'service_dependency',
+          evidence: ['x'],
+          properties: { source: 'cart', target: 'valkey-cart' },
+        },
+        {
+          id: 'dep-2',
+          type: 'dependency',
+          subtype: 'service_dependency',
+          evidence: ['x'],
+          properties: { source: 'checkout', target: 'payment' },
+        },
+      ] as Parameters<typeof followUpForSavedFeatures>[0],
+      [
+        {
+          id: 'svc-payment',
+          type: 'entity',
+          subtype: 'service',
+          evidence: ['x'],
+          filter: { field: 'service.name', eq: 'payment' },
+          properties: { name: 'payment' },
+        },
+      ] as Parameters<typeof followUpForSavedFeatures>[0]
+    );
+    expect(followUp?.targetsWithoutEntity).toEqual(['valkey-cart']);
+  });
+});
 
 describe('peer inventory fields', () => {
   it('matches peer, destination and provider fields in any attribute namespace', () => {
