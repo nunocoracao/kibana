@@ -625,14 +625,36 @@ export const languagePatches = (
 };
 
 const LANGUAGE_COLUMN = /(^|\.)(telemetry\.sdk\.language|service\.language\.name)$/;
+const RUNTIME_COLUMN = /(^|\.)process\.runtime\.name$/;
+/** Runtime names that identify one language; others (PHP's "cli", for example) say nothing. */
+const RUNTIME_LANGUAGES: Record<string, string> = {
+  nodejs: 'nodejs',
+  node: 'nodejs',
+  cpython: 'python',
+  pypy: 'python',
+  go: 'go',
+  gc: 'go',
+  '.net': 'dotnet',
+  'openjdk runtime environment': 'java',
+  'java(tm) se runtime environment': 'java',
+  ruby: 'ruby',
+  jruby: 'ruby',
+};
 
 /** Language each emitting service reports about itself in technology inventory rows. */
 export const languagesFromRows = (rows: Array<Record<string, string>>): Map<string, string> => {
   const languages = new Map<string, string>();
   for (const row of rows) {
     const service = rowIdentity(row).name?.toLowerCase();
+    if (!service || languages.has(service)) continue;
     const column = Object.keys(row).find((key) => LANGUAGE_COLUMN.test(key) && row[key]);
-    if (service && column && !languages.has(service)) languages.set(service, row[column]);
+    const runtime = Object.keys(row).find((key) => RUNTIME_COLUMN.test(key) && row[key]);
+    const language = column
+      ? row[column]
+      : runtime
+      ? RUNTIME_LANGUAGES[row[runtime].trim().toLowerCase()]
+      : undefined;
+    if (language) languages.set(service, language);
   }
   return languages;
 };

@@ -368,10 +368,13 @@ describe('deterministic entity completion', () => {
       { 'resource.attributes.service.name': 'cart', 'telemetry.sdk.language': 'dotnet' },
       { 'service.name': 'quote', 'resource.attributes.telemetry.sdk.language': 'php' },
       { 'service.name': 'proxy', 'process.runtime.name': 'envoy' },
+      { 'service.name': 'payment', 'resource.attributes.process.runtime.name': 'nodejs' },
+      { 'service.name': 'quote2', 'process.runtime.name': 'cli' },
     ]);
     expect([...languages]).toEqual([
       ['cart', 'dotnet'],
       ['quote', 'php'],
+      ['payment', 'nodejs'],
     ]);
   });
 

@@ -51,7 +51,8 @@ target with `METADATA _id`, the evidence row's window and its field values (view
 and copies the language of programming_language technology KIs onto the service entities they name.
 It also completes service entities from observed data: a filter built from the service name and
 namespace equalities in the entity's own evidence, the language the service reports about itself
-(`telemetry.sdk.language`, `service.language.name`) in technology inventory rows, and a
+(`telemetry.sdk.language`, `service.language.name`, or a `process.runtime.name` that identifies one
+language, such as nodejs or CPython) in technology inventory rows, and a
 programming_language technology KI for each language recorded only on entities.
 It rejects entity names and dependency endpoints that are network addresses, placeholders
 (unspecified, unknown) or descriptive phrases, with a reason, so silent components are named by the
