@@ -57,6 +57,8 @@ const sourceQuerySchema = z.object({
     'relationships',
     'infrastructure',
     'technology',
+    'peers',
+    'trace_links',
     'custom',
     'samples',
   ]),
@@ -181,7 +183,7 @@ export const explorationTools: ToolDefinitions = {
   },
   source_esql: {
     description:
-      'Read enabled logs, metrics and traces using bounded source-scoped ES|QL. Batch sourceIds. IMPORTANT: samples, patterns and relationships inspect LOG MESSAGES only. For metrics/traces use schema then template=custom with KEEP of observed fields and LIMIT, or compact STATS. A log-template unavailable result does not mean missing metric/span data. For traces, inspect actual kind, peer and duration rows; for metrics, inspect actual instrument values, types and units. novelty compares compact schema, service/deployment/version and categorized-pattern inventories against the previous successful run; unchanged counts do not cause novelty. Other templates: profile, schema, inventory, patterns, relationships, infrastructure, samples, custom. Use esql_guide topic=change_points for bounded CATEGORIZE + CHANGE_POINT recipes. profile requires fieldSearch (pipe-separated keywords), applies service/namespace scope and counts actual non-null observations for up to 12 mapped fields per page. Use it before interpreting sparse metric rows; schema presence is not populated data. samples provides bounded categorized excerpts per selected service, with sampleKind representative/dependencies/errors/startup; no custom ES|QL needed. Every call REQUIRES explicit lookbackMinutes; there is no default. First use template=volume with an agent-chosen short interval to measure capped document count, docs/sec and latency without schema or pattern scans. Choose subsequent windows based on that result. Use endOffsetMinutes to sample earlier hours/minutes across a day; zero means now. Volume is source-wide, not service-filtered. A capped count is a lower bound, not an exact rate. On remote clusters avoid broad aggregates until probes justify them. Use esql_guide for query strategies and common syntax errors. Widen time for sparse services, startup evidence or unresolved connections; a quiet recent window is not proof of absence. LIMIT bounds output, not scanned data: always bound time and target fields/services before aggregating. Try targeted samples when aggregates omit a needed operation. infrastructure inventories actual non-null Kubernetes clusters/namespaces/nodes/workloads/pods, hosts/hostnames/IPs, containers and cloud resource fields together with service identity. Use fieldSearch for focused resource subsets (e.g. k8s.pod|k8s.node or host.name|host.ip), offset/maxRows to page. Do not group every mapped infrastructure field across a dense estate at once. Empty results mean absent metadata, never invent infrastructure. technology groups every emitting service and namespace by its populated SDK, runtime and language fields (telemetry.sdk.*, telemetry.distro.*, process.runtime.*, service.language.*) in one compact STATS; use it once per source and window to ground technology KIs per service. relationships returns categorized representative dependency log clues grouped by service, with exact evidence references. Use it after the service inventory. candidates offers optional relationship hints from a few recognized formats; it is incomplete and never validates or gates KI writes. Inspect rows and structured payloads yourself even when candidates is empty. Use JSON_EXTRACT for JSON messages, FIELD_EXTRACT for mapped flattened objects, and DISSECT/GROK for plaintext. Schema columns are authoritative: never guess top-level fields; JSON keys inside message are not columns. Novelty/schema results have paging metadata; use offset/maxRows and schema fieldSearch (pipe-separated keywords) to request missing details. Views do not expose _id; use rowRefs, never fabricated document IDs. Include service.name and message for dependencies. For ratios, use floating-point arithmetic (1.0 * failures / total or TO_DOUBLE(failures) / total); integer division can silently turn a real partial failure rate into zero. Retain numerator and denominator while checking the result. CATEGORIZE must be first in STATS BY. Alias aggregates explicitly: STATS count=COUNT(*) BY service.name | SORT count DESC; COUNT is not the column name of an unaliased COUNT(). infrastructure, samples, relationships and custom automatically apply serviceNames and serviceNamespace BEFORE the pipeline; these filters do not scope the source-wide schema/pattern catalog. Use samples for per-service log categories. relationships supports targeted endpoint exploration and offset/maxRows for paging. Empty optional filters mean no filter. Custom pipeline is appended to FROM the selected source view; no FROM/JOIN/ENRICH/FORK allowed. Use KEEP, STATS, CATEGORIZE and small LIMIT. For category shifts, STATS count=COUNT(*) BY pattern=CATEGORIZE(observed_message_field), bucket=BUCKET(@timestamp, 1 hour) | SORT pattern,bucket | CHANGE_POINT count ON bucket BY pattern | WHERE type IS NOT NULL; use at least 22 values per pattern, and treat pvalue as statistical evidence rather than severity. Logs templates do not replace metric/trace exploration: inspect actual populated instruments/span attributes using schema plus bounded custom queries. Preserve service and namespace. Returns compact changed rows first, truncation and query provenance.',
+      'Read enabled logs, metrics and traces using bounded source-scoped ES|QL. Batch sourceIds. IMPORTANT: samples, patterns and relationships inspect LOG MESSAGES only. For metrics/traces use schema then template=custom with KEEP of observed fields and LIMIT, or compact STATS. A log-template unavailable result does not mean missing metric/span data. For traces, inspect actual kind, peer and duration rows; for metrics, inspect actual instrument values, types and units. novelty compares compact schema, service/deployment/version and categorized-pattern inventories against the previous successful run; unchanged counts do not cause novelty. Other templates: profile, schema, inventory, patterns, relationships, infrastructure, samples, custom. Use esql_guide topic=change_points for bounded CATEGORIZE + CHANGE_POINT recipes. profile requires fieldSearch (pipe-separated keywords), applies service/namespace scope and counts actual non-null observations for up to 12 mapped fields per page. Use it before interpreting sparse metric rows; schema presence is not populated data. samples provides bounded categorized excerpts per selected service, with sampleKind representative/dependencies/errors/startup; no custom ES|QL needed. Every call REQUIRES explicit lookbackMinutes; there is no default. First use template=volume with an agent-chosen short interval to measure capped document count, docs/sec and latency without schema or pattern scans. Choose subsequent windows based on that result. Use endOffsetMinutes to sample earlier hours/minutes across a day; zero means now. Volume is source-wide, not service-filtered. A capped count is a lower bound, not an exact rate. On remote clusters avoid broad aggregates until probes justify them. Use esql_guide for query strategies and common syntax errors. Widen time for sparse services, startup evidence or unresolved connections; a quiet recent window is not proof of absence. LIMIT bounds output, not scanned data: always bound time and target fields/services before aggregating. Try targeted samples when aggregates omit a needed operation. infrastructure inventories actual non-null Kubernetes clusters/namespaces/nodes/workloads/pods, hosts/hostnames/IPs, containers and cloud resource fields together with service identity. Use fieldSearch for focused resource subsets (e.g. k8s.pod|k8s.node or host.name|host.ip), offset/maxRows to page. Do not group every mapped infrastructure field across a dense estate at once. Empty results mean absent metadata, never invent infrastructure. technology groups every emitting service and namespace by its populated SDK, runtime and language fields (telemetry.sdk.*, telemetry.distro.*, process.runtime.*, service.language.*) in one compact STATS; use it once per source and window to ground technology KIs per service. peers groups every emitting service by the populated peer, destination and provider fields its own logs carry (peer.service, server.address, db.system, messaging.*, rpc.*, feature_flag.provider.name, url.domain); a caller naming a component there is direct dependency evidence. trace_links lists sets of two to four services that log under the same trace IDs, with trace counts: undirected candidates to confirm with samples before saving. relationships returns categorized representative dependency log clues grouped by service, with exact evidence references. Use it after the service inventory. candidates offers optional relationship hints from a few recognized formats; it is incomplete and never validates or gates KI writes. Inspect rows and structured payloads yourself even when candidates is empty. Use JSON_EXTRACT for JSON messages, FIELD_EXTRACT for mapped flattened objects, and DISSECT/GROK for plaintext. Schema columns are authoritative: never guess top-level fields; JSON keys inside message are not columns. Novelty/schema results have paging metadata; use offset/maxRows and schema fieldSearch (pipe-separated keywords) to request missing details. Views do not expose _id; use rowRefs, never fabricated document IDs. Include service.name and message for dependencies. For ratios, use floating-point arithmetic (1.0 * failures / total or TO_DOUBLE(failures) / total); integer division can silently turn a real partial failure rate into zero. Retain numerator and denominator while checking the result. CATEGORIZE must be first in STATS BY. Alias aggregates explicitly: STATS count=COUNT(*) BY service.name | SORT count DESC; COUNT is not the column name of an unaliased COUNT(). infrastructure, samples, relationships and custom automatically apply serviceNames and serviceNamespace BEFORE the pipeline; these filters do not scope the source-wide schema/pattern catalog. Use samples for per-service log categories. relationships supports targeted endpoint exploration and offset/maxRows for paging. Empty optional filters mean no filter. Custom pipeline is appended to FROM the selected source view; no FROM/JOIN/ENRICH/FORK allowed. Use KEEP, STATS, CATEGORIZE and small LIMIT. For category shifts, STATS count=COUNT(*) BY pattern=CATEGORIZE(observed_message_field), bucket=BUCKET(@timestamp, 1 hour) | SORT pattern,bucket | CHANGE_POINT count ON bucket BY pattern | WHERE type IS NOT NULL; use at least 22 values per pattern, and treat pvalue as statistical evidence rather than severity. Logs templates do not replace metric/trace exploration: inspect actual populated instruments/span attributes using schema plus bounded custom queries. Preserve service and namespace. Returns compact changed rows first, truncation and query provenance.',
     schema: {
       type: 'object',
       properties: {
@@ -198,6 +200,8 @@ export const explorationTools: ToolDefinitions = {
             'relationships',
             'infrastructure',
             'technology',
+            'peers',
+            'trace_links',
             'custom',
             'samples',
           ],
@@ -403,6 +407,50 @@ export const technologyField = (name: string): boolean =>
   /(^|\.)(telemetry\.(sdk|distro|auto)\.(name|language|version)|process\.runtime\.(name|version|description)|service\.language\.(name|version)|webengine\.(name|version))$/.test(
     name
   );
+
+export const peerField = (name: string): boolean =>
+  /(^|\.)(peer\.service|server\.address|net\.peer\.name|network\.peer\.address|db\.system(\.name)?|db\.namespace|messaging\.system|messaging\.destination\.name|rpc\.system|rpc\.service|feature_flag\.provider\.name|feature_flag\.provider_name|url\.domain|http\.host|upstream\.(host|addr|address))$/.test(
+    name
+  );
+
+/** Saved KIs that are persisted but still thin: no evidence, or an emitting service without a filter. */
+export const followUpForSavedFeatures = (
+  saved: Array<Pick<BaseFeature, 'id' | 'type' | 'subtype' | 'evidence' | 'filter'>>
+) => {
+  const withoutEvidence = saved.filter((item) => !item.evidence?.length).map((item) => item.id);
+  const servicesWithoutFilter = saved
+    .filter((item) => item.type === 'entity' && item.subtype === 'service' && !item.filter)
+    .map((item) => item.id);
+  if (!withoutEvidence.length && !servicesWithoutFilter.length) return undefined;
+  return {
+    withoutEvidence,
+    servicesWithoutFilter,
+    nextAction:
+      'These records are saved. Refine them in a later upsert: pass evidence_refs from the rows that support each record (the tool copies the observed evidence), and give each emitting service a filter of equalities on the actual service name and namespace columns with the observed values, e.g. {"and":[{"field":"resource.attributes.service.name","eq":"cart"},{"field":"resource.attributes.service.namespace","eq":"shop"}]}. Silent or inferred components keep no filter.',
+  };
+};
+
+const SERVICE_NAME_COLUMNS = ['resource.attributes.service.name', 'service.name', 'service_name'];
+const TRACE_ID_COLUMNS = ['trace.id', 'trace_id', 'attributes.trace_id', 'traceId'];
+
+/** Services that log under the same trace, as sorted sets of two to four services. */
+export const traceLinksQuery = (
+  sourceView: string,
+  columns: readonly string[],
+  window: string,
+  scope: string
+): string | undefined => {
+  const services = SERVICE_NAME_COLUMNS.filter((name) => columns.includes(name));
+  const trace = TRACE_ID_COLUMNS.find((name) => columns.includes(name));
+  if (!services.length || !trace) return undefined;
+  const service =
+    services.length > 1 ? `COALESCE(${services.map(field).join(', ')})` : field(services[0]);
+  return `FROM ${sourceView} | ${window} | ${scope}WHERE ${field(
+    trace
+  )} IS NOT NULL | EVAL trace_service = ${service} | WHERE trace_service IS NOT NULL | STATS services = VALUES(trace_service) BY trace_key = ${field(
+    trace
+  )} | EVAL size = MV_COUNT(services) | WHERE size >= 2 AND size <= 4 | EVAL link = MV_CONCAT(MV_SORT(services), " + ") | STATS traces = COUNT(*) BY link, size | SORT traces DESC | LIMIT 50`;
+};
 
 const compactResourceRow = (row: Record<string, string>): Record<string, string> => {
   const seen = new Set<string>();
@@ -672,6 +720,64 @@ export class ExplorationToolSession {
     };
     this.infrastructureInventories.set(key, inventory);
     return inventory;
+  }
+
+  /** Emitting service/namespace grouped by populated values of the selected fields. */
+  private async groupedFieldInventory(
+    source: NightshiftSource,
+    columns: string[],
+    fields: string[],
+    args: z.infer<typeof sourceQuerySchema>,
+    guidance: { noFields: string; found: string; empty: string }
+  ): Promise<object> {
+    if (!fields.length)
+      return { sourceId: source.id, fields: [], records: [], nextAction: guidance.noFields };
+    const identity = [
+      ...SERVICE_NAME_COLUMNS,
+      'resource.attributes.service.namespace',
+      'service.namespace',
+      'namespace',
+    ].filter((name) => columns.includes(name));
+    const scope = buildServiceScopeFilter(columns, args.serviceNames, args.serviceNamespace);
+    const query = `FROM ${source.view_name} | ${sourceTimeWindow(
+      args.lookbackMinutes,
+      args.endOffsetMinutes
+    )} | ${scope}WHERE ${fields
+      .map((name) => `${field(name)} IS NOT NULL`)
+      .join(' OR ')} | STATS count=COUNT(*) BY ${[...identity, ...fields]
+      .map(field)
+      .join(', ')} | LIMIT 501`;
+    const response = await this.clients.streamDataEsClient.esql.query(
+      { query },
+      { signal: this.signal, requestTimeout: 30000 }
+    );
+    const rows = response.values.map((values) =>
+      Object.fromEntries(
+        response.columns
+          .map((column, index): [string, string] => [
+            column.name,
+            values[index] === null ? '' : String(values[index]),
+          ])
+          .filter(([, value]) => value !== '')
+      )
+    );
+    const rowRefs = this.record(source.id, rows, query);
+    const nextOffset = args.offset + args.maxRows;
+    return {
+      sourceId: source.id,
+      fields: fields.filter((name) => rows.some((row) => row[name])),
+      query,
+      totalGroups: rows.length,
+      records: rows.slice(args.offset, nextOffset).map((row, index) => ({
+        ...row,
+        observedService: rowIdentity(row),
+        evidenceRef: rowRefs[args.offset + index],
+      })),
+      hasMore: nextOffset < rows.length,
+      nextOffset: nextOffset < rows.length ? nextOffset : null,
+      truncated: rows.length > 500,
+      nextAction: rows.length ? guidance.found : guidance.empty,
+    };
   }
 
   private checkpoint(key: string, value: object): boolean {
@@ -1185,65 +1291,66 @@ export class ExplorationToolSession {
           : 'No non-null infrastructure metadata in these fields. Check another fieldSearch subset or relevant read-only Kibana/APM tools; do not fabricate hosts or pods.',
       };
     }
-    if (args.template === 'technology') {
-      const fields = columns.filter(technologyField);
-      if (!fields.length)
+    if (args.template === 'technology' || args.template === 'peers') {
+      const technology = args.template === 'technology';
+      return this.groupedFieldInventory(
+        source,
+        columns,
+        columns.filter(technology ? technologyField : peerField),
+        args,
+        technology
+          ? {
+              noFields:
+                'No SDK/runtime/language fields are mapped in this interval. Look for startup lines, stack traces or version banners with samples sampleKind=startup|errors before concluding technologies are unobservable.',
+              found:
+                'Save technology KIs per observed service with evidence_refs: programming_language from service.language.* or process.runtime.*, and from telemetry.sdk.language of an in-process SDK at moderate confidence when no runtime field exists; runtime and versions from process.runtime.*; telemetry_agent from telemetry.sdk.name/distro. Attribute each to its emitting service and namespace. Then refine each service entity KI with properties.language (and properties.runtime when observed) so the service itself carries its language. A collector or proxy that forwards telemetry is not evidence for another service.',
+              empty:
+                'No populated SDK/runtime/language values in this interval and scope. Rotate the time stratum or inspect startup/error samples before concluding technologies are unobservable.',
+            }
+          : {
+              noFields:
+                'No structured peer/destination/provider fields are mapped in this interval. Use trace_links, relationships and samples sampleKind=dependencies, and enumerate target keys inside message bodies.',
+              found:
+                'Each record is an emitting service with the populated peer-side fields its own logs name (peer.service, server.address, db.system, messaging.*, rpc.*, feature_flag.provider.name, url.domain...). A caller naming a component in these fields supports a directed dependency caller -> component; resolve addresses to known services only when the host part names that service. Save dependency KIs with evidence_refs, protocol and endpoint from the observed fields.',
+              empty:
+                'No populated peer/destination/provider values in this interval and scope. Rotate the time stratum, try trace_links, or inspect message bodies before concluding dependencies are unobservable.',
+            }
+      );
+    }
+    if (args.template === 'trace_links') {
+      const query = traceLinksQuery(
+        source.view_name,
+        columns,
+        sourceTimeWindow(lookbackMinutes, endOffsetMinutes),
+        buildServiceScopeFilter(columns, args.serviceNames, args.serviceNamespace)
+      );
+      if (!query)
         return {
           sourceId: source.id,
-          fields: [],
-          records: [],
+          links: [],
           nextAction:
-            'No SDK/runtime/language fields are mapped in this interval. Look for startup lines, stack traces or version banners with samples sampleKind=startup|errors before concluding technologies are unobservable.',
+            'This source exposes no service name and trace ID columns together; use peers, relationships or samples instead.',
         };
-      const identity = [
-        'resource.attributes.service.name',
-        'service.name',
-        'service_name',
-        'resource.attributes.service.namespace',
-        'service.namespace',
-        'namespace',
-      ].filter((name) => columns.includes(name));
-      const scope = buildServiceScopeFilter(columns, args.serviceNames, args.serviceNamespace);
-      const query = `FROM ${source.view_name} | ${sourceTimeWindow(
-        lookbackMinutes,
-        endOffsetMinutes
-      )} | ${scope}WHERE ${fields
-        .map((name) => `${field(name)} IS NOT NULL`)
-        .join(' OR ')} | STATS count=COUNT(*) BY ${[...identity, ...fields]
-        .map(field)
-        .join(', ')} | LIMIT 501`;
       const response = await this.clients.streamDataEsClient.esql.query(
         { query },
         { signal: this.signal, requestTimeout: 30000 }
       );
       const rows = response.values.map((values) =>
         Object.fromEntries(
-          response.columns
-            .map((column, index): [string, string] => [
-              column.name,
-              values[index] === null ? '' : String(values[index]),
-            ])
-            .filter(([, value]) => value !== '')
+          response.columns.map((column, index): [string, string] => [
+            column.name,
+            values[index] === null ? '' : String(values[index]),
+          ])
         )
       );
       const rowRefs = this.record(source.id, rows, query);
-      const nextOffset = args.offset + args.maxRows;
       return {
         sourceId: source.id,
-        fields: fields.filter((name) => rows.some((row) => row[name])),
         query,
-        totalGroups: rows.length,
-        records: rows.slice(args.offset, nextOffset).map((row, index) => ({
-          ...row,
-          observedService: rowIdentity(row),
-          evidenceRef: rowRefs[args.offset + index],
-        })),
-        hasMore: nextOffset < rows.length,
-        nextOffset: nextOffset < rows.length ? nextOffset : null,
-        truncated: rows.length > 500,
+        links: rows.map((row, index) => ({ ...row, evidenceRef: rowRefs[index] })),
         nextAction: rows.length
-          ? 'Save technology KIs per observed service with evidence_refs: programming_language from service.language.* or process.runtime.*, and from telemetry.sdk.language of an in-process SDK at moderate confidence when no runtime field exists; runtime and versions from process.runtime.*; telemetry_agent from telemetry.sdk.name/distro. Attribute each to its emitting service and namespace. A collector or proxy that forwards telemetry is not evidence for another service.'
-          : 'No populated SDK/runtime/language values in this interval and scope. Rotate the time stratum or inspect startup/error samples before concluding technologies are unobservable.',
+          ? 'Each link is a set of services that log under the same trace IDs, with the number of traces. Co-occurrence is undirected and a trace can span services that never call each other. Pairs (size 2) are the strongest candidates. Confirm direction and the actual caller with samples or relationships from both services (for example a caller logging a call or outcome and the callee logging its handling), then save the dependency at moderate confidence with that basis. Do not save every pair of a larger set as edges.'
+          : 'No trace shared by two to four services in this interval and scope. Rotate the time stratum or use peers and relationships.',
       };
     }
     const names = identityFields.filter((name) => columns.includes(name));
@@ -2100,7 +2207,9 @@ export class ExplorationToolSession {
     const scopedClient = await this.clients.getKnowledgeIndicatorClient(source);
     for (const query of validatedQueries) await scopedClient.upsertQuery(source.id, query);
     this.run.written += validatedQueries.length;
+    const followUp = followUpForSavedFeatures(validated);
     return {
+      ...(followUp ? { followUp } : {}),
       sourceId: args.sourceId,
       saved: validated.map((feature) => ({ id: feature.id, type: feature.type })),
       savedQueries: validatedQueries.map(({ id, title }) => ({

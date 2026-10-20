@@ -34,6 +34,11 @@ verification error for SORT COUNT can retry once using the server's suggested CO
 COUNT(*) column, with a warning and the actual corrected query retained in the trace. Infrastructure inventory includes
 service identity so placement can be attributed. The technology template groups every emitter by its
 populated SDK, runtime and language fields in one STATS, so technology KIs rest on per-service evidence.
+The peers template does the same for peer, destination and provider fields a caller's own logs carry
+(peer.service, server.address, db.system, messaging.*, rpc.*, feature_flag.provider.name, url.domain),
+and trace_links lists sets of two to four services logging under the same trace IDs as undirected
+dependency candidates for the agent to confirm. Upsert responses list saved records that still lack
+evidence or, for emitting services, a filter, so the agent can refine them.
 The knowledge agent's sampling plan lists every time stratum per source, least sampled first, and the
 agent covers at least three strata holding data in one run; the agent still chooses its own reads, and
 the monitoring and event agents keep a single stratum. Schema pages and log rows expose run-local
