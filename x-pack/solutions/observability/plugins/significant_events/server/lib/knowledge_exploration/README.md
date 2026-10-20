@@ -53,6 +53,9 @@ It also completes service entities from observed data: a filter built from the s
 namespace equalities in the entity's own evidence, the language the service reports about itself
 (`telemetry.sdk.language`, `service.language.name`) in technology inventory rows, and a
 programming_language technology KI for each language recorded only on entities.
+It rejects entity names and dependency endpoints that are network addresses, placeholders
+(unspecified, unknown) or descriptive phrases, with a reason, so silent components are named by the
+short identifier the evidence carries.
 The knowledge agent's sampling plan lists every time stratum per source, least sampled first, and the
 agent covers at least three strata holding data in one run; the agent still chooses its own reads, and
 the monitoring and event agents keep a single stratum. Schema pages and log rows expose run-local

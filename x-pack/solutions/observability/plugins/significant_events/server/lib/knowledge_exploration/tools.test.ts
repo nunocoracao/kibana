@@ -7,7 +7,9 @@
 
 import type { BaseFeature } from '@kbn/significant-events-schema';
 import {
+  componentNameProblem,
   documentIdQuery,
+  featureNameProblem,
   filterFromEvidence,
   followUpForSavedFeatures,
   languagePatches,
@@ -425,5 +427,37 @@ describe('observed services follow-up', () => {
         ['cart', 'frontend']
       )
     ).toMatchObject({ servicesWithoutEntity: ['frontend'] });
+  });
+});
+
+describe('component names', () => {
+  it('accepts identifiers', () => {
+    for (const name of ['valkey-cart', 'valkey', 'postgresql', 'flagd', 'gpt-4o', 'quote'])
+      expect(componentNameProblem(name)).toBeUndefined();
+  });
+
+  it('rejects addresses, placeholders and descriptive phrases', () => {
+    for (const name of [
+      '172.18.0.27:8080',
+      '10.0.0.1',
+      'unspecified database',
+      'unknown',
+      'Valkey cart cache',
+      'Valkey cart store',
+    ])
+      expect(componentNameProblem(name)).toBeDefined();
+  });
+
+  it('checks entity names and dependency endpoints only', () => {
+    expect(
+      featureNameProblem({
+        type: 'dependency',
+        properties: { source: 'cart', target: 'Valkey cart store' },
+      })
+    ).toBeDefined();
+    expect(featureNameProblem({ type: 'entity', properties: { name: 'valkey' } })).toBeUndefined();
+    expect(
+      featureNameProblem({ type: 'technology', properties: { name: 'ASP.NET Core' } })
+    ).toBeUndefined();
   });
 });

@@ -709,6 +709,40 @@ export const languageTechnologies = (features: BaseFeature[]): BaseFeature[] => 
   });
 };
 
+const PLACEHOLDER_NAME = /\b(unspecified|unknown|unidentified|unresolved|inferred|generic|n\/a)\b/i;
+const ADDRESS_NAME = /^(\d{1,3}\.){3}\d{1,3}(:\d+)?$|^\[?[0-9a-f:]+\]?:\d+$/i;
+
+/** Why a component name cannot identify a component: an address, a placeholder or a descriptive phrase. */
+export const componentNameProblem = (name: string): string | undefined => {
+  const value = name.trim();
+  if (!value) return undefined;
+  if (ADDRESS_NAME.test(value))
+    return `"${value}" is a network address, not a component. Use the service or cluster name the same evidence carries (for example an Envoy upstream cluster), or leave the target as a gap.`;
+  if (PLACEHOLDER_NAME.test(value))
+    return `"${value}" is a placeholder. Name the component only when the evidence identifies it (product, host or service name); otherwise report it as a gap.`;
+  if (/\s/.test(value))
+    return `"${value}" is a description, not an identifier. Use the short lowercase product, host or service name as observed (for example valkey, postgresql, kafka) and keep the description in description.`;
+  return undefined;
+};
+
+/** Name problems for an entity's name or a dependency's source/target. */
+export const featureNameProblem = (
+  feature: Pick<BaseFeature, 'type' | 'properties'>
+): string | undefined => {
+  const names =
+    feature.type === 'entity'
+      ? [feature.properties.name]
+      : feature.type === 'dependency'
+      ? [feature.properties.source, feature.properties.target]
+      : [];
+  for (const name of names)
+    if (typeof name === 'string') {
+      const problem = componentNameProblem(name);
+      if (problem) return problem;
+    }
+  return undefined;
+};
+
 const SERVICE_NAME_COLUMNS = ['resource.attributes.service.name', 'service.name', 'service_name'];
 const TRACE_ID_COLUMNS = ['trace.id', 'trace_id', 'attributes.trace_id', 'traceId'];
 
@@ -2499,6 +2533,11 @@ export class ExplorationToolSession {
           ];
         });
         feature.evidence = [...new Set(copied)].slice(0, 5);
+      }
+      const nameProblem = featureNameProblem(feature);
+      if (nameProblem) {
+        rejected.push({ id: feature.id, reason: nameProblem, evidence: [] });
+        continue;
       }
       const normalized = normalizeSubtype(feature.type, feature.subtype, feature.properties);
       feature.subtype = normalized.subtype;
