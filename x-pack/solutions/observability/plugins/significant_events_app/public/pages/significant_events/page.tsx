@@ -43,6 +43,7 @@ import { DetectionsTab } from './components/detections_tab';
 import { SignificantEventsTab } from './components/significant_events_tab';
 import { PausedActivityCallout } from './components/paused_activity_callout';
 import { RunLimitsBanner } from './components/run_limits_banner';
+import { agentExplorerOptions } from '../../components/agent_explorer_navigation';
 
 export function SignificantEventsPage() {
   const {
@@ -120,7 +121,15 @@ export function SignificantEventsPage() {
                 label: i18n.translate('xpack.significantEventsApp.knowledgeExplorer.link', {
                   defaultMessage: 'Agent Explorer',
                 }),
-                href: getUrlForApp('significant_events', { path: '/knowledge-exploration' }),
+                items: agentExplorerOptions.map((agent) => ({
+                  id: `agentExplorer-${agent.id}`,
+                  label: agent.label,
+                  description: agent.description,
+                  iconType: agent.iconType,
+                  href: getUrlForApp('significant_events', {
+                    path: `/knowledge-exploration?agent=${agent.id}`,
+                  }),
+                })),
               },
               {
                 id: 'settings',

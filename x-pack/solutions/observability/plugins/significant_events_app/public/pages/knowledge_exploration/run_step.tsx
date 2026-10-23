@@ -4,18 +4,18 @@
  * 2.0; you may not use this file except in compliance with the Elastic License
  * 2.0.
  */
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { i18n } from '@kbn/i18n';
 import { css } from '@emotion/react';
 import {
   EuiBadge,
-  EuiButtonEmpty,
+  EuiCode,
   EuiCodeBlock,
   EuiFlexGroup,
   EuiFlexItem,
   EuiIcon,
   EuiLoadingSpinner,
-  EuiPanel,
+  EuiScreenReaderOnly,
   EuiSpacer,
   EuiText,
   useEuiTheme,
@@ -42,6 +42,7 @@ export function RunStep({
 }) {
   const { euiTheme } = useEuiTheme();
   const [expanded, setExpanded] = useState(false);
+  const detailsId = useId();
   const description = getStepDescription(step);
   const model = step.kind === 'model';
   const running = description.status === 'running';
@@ -52,7 +53,7 @@ export function RunStep({
       ? euiTheme.colors.warning
       : model
       ? euiTheme.colors.vis.euiColorVis0
-      : euiTheme.colors.primary;
+      : euiTheme.colors.textSubdued;
   const duration = running ? Math.max(0, Date.now() - Date.parse(step.startedAt)) : step.durationMs;
   const commentary = model ? step.output : '';
   return (
@@ -61,8 +62,9 @@ export function RunStep({
       css={css`
         display: grid;
         grid-template-columns: 24px minmax(0, 1fr);
-        gap: 8px;
-        margin-bottom: 8px;
+        gap: ${euiTheme.size.s};
+        padding: ${euiTheme.size.m} 0;
+        border-bottom: ${euiTheme.border.thin};
       `}
     >
       <div
@@ -70,13 +72,13 @@ export function RunStep({
           position: relative;
           display: flex;
           justify-content: center;
-          padding-top: 10px;
+          padding-top: 3px;
           &::after {
             content: '';
             position: absolute;
             width: 1px;
-            top: 30px;
-            bottom: -18px;
+            top: 24px;
+            bottom: -16px;
             background: ${euiTheme.border.color};
           }
         `}
@@ -88,7 +90,6 @@ export function RunStep({
             display: grid;
             place-items: center;
             border-radius: 50%;
-            border: 1px solid ${color};
             color: ${color};
           `}
         >
@@ -97,63 +98,112 @@ export function RunStep({
           ) : (
             <EuiIcon
               size="s"
-              type={description.status === 'failed' ? 'warning' : model ? 'sparkles' : 'check'}
+              type={
+                description.status === 'failed' || description.status === 'partial'
+                  ? 'warning'
+                  : model
+                  ? 'sparkles'
+                  : 'check'
+              }
               color={color}
               aria-hidden={true}
             />
           )}
         </div>
       </div>
-      <EuiPanel
-        paddingSize="s"
-        hasShadow={false}
-        hasBorder={!model || running}
+      <div
         css={css`
           min-width: 0;
-          flex: 0 0 auto;
-          border-left: 2px solid ${color};
-          background: ${model
-            ? euiTheme.colors.backgroundBaseSubdued
-            : euiTheme.colors.backgroundBasePlain};
         `}
       >
-        <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
-          <EuiFlexItem
+        <button
+          type="button"
+          aria-label={
+            expanded ? 'Hide details' : model ? 'Commentary and usage' : 'Inspect tool call'
+          }
+          aria-expanded={expanded}
+          aria-controls={detailsId}
+          data-test-subj="significantEventsAppStepButton"
+          onClick={() => {
+            if (!expanded) onInspect();
+            setExpanded(!expanded);
+          }}
+          css={css`
+            display: flex;
+            align-items: center;
+            gap: ${euiTheme.size.s};
+            width: 100%;
+            min-height: ${euiTheme.size.l};
+            padding: 0;
+            border: 0;
+            border-radius: ${euiTheme.border.radius.small};
+            background: transparent;
+            color: ${euiTheme.colors.textParagraph};
+            text-align: left;
+            cursor: pointer;
+            &:hover {
+              color: ${euiTheme.colors.primaryText};
+            }
+            &:focus-visible {
+              outline: ${euiTheme.focus.width} solid ${euiTheme.colors.primary};
+              outline-offset: ${euiTheme.size.xs};
+            }
+          `}
+        >
+          <span
             css={css`
+              flex: 1;
               min-width: 0;
+              font-size: ${euiTheme.font.scale.s}rem;
+              font-weight: ${euiTheme.font.weight.semiBold};
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
             `}
+            title={description.title}
           >
-            <EuiText size="s">
-              <strong>{description.title}</strong>
-            </EuiText>
-          </EuiFlexItem>
-          <EuiFlexItem grow={false}>
+            {description.title}
+          </span>
+          {description.status !== 'completed' ? (
             <EuiBadge
               color={
                 description.status === 'failed'
                   ? 'danger'
                   : description.status === 'partial'
                   ? 'warning'
-                  : running
-                  ? 'primary'
-                  : 'hollow'
+                  : 'primary'
               }
             >
               {description.status}
             </EuiBadge>
-          </EuiFlexItem>
-          <EuiFlexItem grow={false}>
-            <EuiText size="xs" color="subdued">
-              {(duration / 1000).toFixed(1)}s
-            </EuiText>
-          </EuiFlexItem>
-        </EuiFlexGroup>
+          ) : (
+            <EuiScreenReaderOnly>
+              <span>{description.status}</span>
+            </EuiScreenReaderOnly>
+          )}
+          <span
+            css={css`
+              color: ${euiTheme.colors.textSubdued};
+              font-size: ${euiTheme.font.scale.xs}rem;
+              font-variant-numeric: tabular-nums;
+              white-space: nowrap;
+            `}
+          >
+            {(duration / 1000).toFixed(1)}s
+          </span>
+          <EuiIcon
+            type={expanded ? 'arrowDown' : 'arrowRight'}
+            size="s"
+            color="subdued"
+            aria-hidden={true}
+          />
+        </button>
         {(description.scope || (model && previousTool)) && (
           <EuiText
             size="xs"
             color="subdued"
             css={css`
-              margin-top: 3px;
+              margin-top: ${euiTheme.size.xs};
               overflow: hidden;
               text-overflow: ellipsis;
               white-space: nowrap;
@@ -165,7 +215,7 @@ export function RunStep({
               : description.scope}
           </EuiText>
         )}
-        {description.result && !model && (
+        {!model && description.result && (
           <EuiText
             size="xs"
             color={
@@ -173,23 +223,66 @@ export function RunStep({
                 ? 'danger'
                 : description.status === 'partial'
                 ? 'warning'
-                : 'subdued'
+                : 'default'
             }
             css={css`
-              margin-top: 4px;
+              margin-top: ${euiTheme.size.xs};
             `}
           >
             {description.result}
           </EuiText>
         )}
+        {!expanded && description.queryPreview && (
+          <code
+            css={css`
+              display: -webkit-box;
+              -webkit-line-clamp: 2;
+              -webkit-box-orient: vertical;
+              overflow: hidden;
+              overflow-wrap: anywhere;
+              white-space: pre-wrap;
+              margin-top: ${euiTheme.size.s};
+              padding: ${euiTheme.size.s};
+              border-radius: ${euiTheme.border.radius.small};
+              background: ${euiTheme.colors.backgroundBaseSubdued};
+              color: ${euiTheme.colors.textSubdued};
+              font-family: ${euiTheme.font.familyCode};
+              font-size: ${euiTheme.font.scale.xs}rem;
+              line-height: 1.5;
+            `}
+            title={description.queryPreview}
+          >
+            {description.queryPreview}
+          </code>
+        )}
         {description.items.length > 0 && (
           <EuiText
             size="xs"
             css={css`
-              margin-top: 4px;
+              margin-top: ${euiTheme.size.xs};
+              overflow-wrap: anywhere;
+              ${!expanded &&
+              'display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;'}
             `}
+            title={description.items.join(' · ')}
           >
+            {description.itemLabel && <strong>{description.itemLabel}: </strong>}
             {description.items.join(' · ')}
+          </EuiText>
+        )}
+        {description.note && (
+          <EuiText
+            size="xs"
+            color="subdued"
+            css={css`
+              margin-top: ${euiTheme.size.xs};
+              overflow-wrap: anywhere;
+              ${!expanded &&
+              'display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;'}
+            `}
+            title={description.note}
+          >
+            {description.note}
           </EuiText>
         )}
         {description.error && (
@@ -197,11 +290,13 @@ export function RunStep({
             size="xs"
             color="danger"
             css={css`
-              margin-top: 4px;
+              margin-top: ${euiTheme.size.xs};
               overflow-wrap: anywhere;
+              ${!expanded &&
+              'display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;'}
             `}
           >
-            {description.error.slice(0, 400)}
+            {description.error}
           </EuiText>
         )}
         {commentary && (
@@ -209,7 +304,8 @@ export function RunStep({
             size="s"
             css={css`
               white-space: pre-wrap;
-              margin-top: 6px;
+              margin-top: ${euiTheme.size.s};
+              line-height: 1.6;
               overflow-wrap: anywhere;
               ${!expanded &&
               'display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;'}
@@ -218,104 +314,107 @@ export function RunStep({
             {commentary}
           </EuiText>
         )}
-        <EuiButtonEmpty
-          size="xs"
-          iconType={expanded ? 'arrowDown' : 'arrowRight'}
-          data-test-subj="significantEventsAppStepButton"
-          onClick={() => {
-            if (!expanded) onInspect();
-            setExpanded(!expanded);
-          }}
-          css={css`
-            padding-left: 0;
-            margin-top: 4px;
-          `}
-        >
-          {expanded ? 'Hide details' : model ? 'Commentary and usage' : 'Inspect tool call'}
-        </EuiButtonEmpty>
-        {expanded && (
-          <>
-            <EuiSpacer size="s" />
-            {model ? (
-              <>
-                {!commentary && (
+        <div id={detailsId} hidden={!expanded}>
+          {expanded && (
+            <>
+              <EuiSpacer size="s" />
+              {model ? (
+                <>
+                  {!commentary && (
+                    <EuiText size="xs" color="subdued">
+                      {i18n.translate(
+                        'xpack.significantEventsApp.runStep.thisModelReturnedNoTextLabel',
+                        {
+                          defaultMessage:
+                            'This model returned no commentary for this turn. Private thinking text is not included in the run trace.',
+                        }
+                      )}
+                    </EuiText>
+                  )}
                   <EuiText size="xs" color="subdued">
-                    {i18n.translate(
-                      'xpack.significantEventsApp.runStep.thisModelReturnedNoTextLabel',
-                      {
-                        defaultMessage:
-                          'This model returned no commentary for this turn. Private thinking text is not included in the run trace.',
-                      }
-                    )}
+                    {step.input}
                   </EuiText>
-                )}
-                <EuiText size="xs" color="subdued">
-                  {step.input}
-                </EuiText>
-                {step.tokens && (
-                  <EuiText size="xs" color="subdued">
-                    {step.tokens.prompt.toLocaleString()}{' '}
-                    {i18n.translate('xpack.significantEventsApp.runStep.inputTextLabel', {
-                      defaultMessage: 'input ·',
-                    })}{' '}
-                    {step.tokens.completion.toLocaleString()}{' '}
-                    {i18n.translate('xpack.significantEventsApp.runStep.outputTextLabel', {
-                      defaultMessage: 'output ·',
-                    })}{' '}
-                    {step.tokens.cached.toLocaleString()}{' '}
-                    {i18n.translate('xpack.significantEventsApp.runStep.cachedTextLabel', {
-                      defaultMessage: 'cached ·',
-                    })}{' '}
-                    {step.tokens.thinking
-                      ? `${step.tokens.thinking.toLocaleString()} thinking`
-                      : 'Thinking tokens not reported'}{' '}
-                    ·{' '}
-                    {step.estimatedCostUsd === undefined
-                      ? 'Cost unavailable'
-                      : `$${step.estimatedCostUsd.toFixed(4)}`}
+                  {step.tokens && (
+                    <EuiText size="xs" color="subdued">
+                      {step.tokens.prompt.toLocaleString()}{' '}
+                      {i18n.translate('xpack.significantEventsApp.runStep.inputTextLabel', {
+                        defaultMessage: 'input ·',
+                      })}{' '}
+                      {step.tokens.completion.toLocaleString()}{' '}
+                      {i18n.translate('xpack.significantEventsApp.runStep.outputTextLabel', {
+                        defaultMessage: 'output ·',
+                      })}{' '}
+                      {step.tokens.cached.toLocaleString()}{' '}
+                      {i18n.translate('xpack.significantEventsApp.runStep.cachedTextLabel', {
+                        defaultMessage: 'cached ·',
+                      })}{' '}
+                      {step.tokens.thinking
+                        ? `${step.tokens.thinking.toLocaleString()} thinking`
+                        : 'Thinking tokens not reported'}{' '}
+                      ·{' '}
+                      {step.estimatedCostUsd === undefined
+                        ? 'Cost unavailable'
+                        : `$${step.estimatedCostUsd.toFixed(4)}`}
+                    </EuiText>
+                  )}
+                </>
+              ) : (
+                <>
+                  <EuiFlexGroup
+                    alignItems="center"
+                    justifyContent="spaceBetween"
+                    gutterSize="s"
+                    responsive={false}
+                  >
+                    <EuiFlexItem grow={false}>
+                      <EuiCode>{step.name}</EuiCode>
+                    </EuiFlexItem>
+                    <EuiFlexItem grow={false}>
+                      <EuiText size="xs" color="subdued">
+                        {new Date(step.startedAt).toLocaleTimeString()}
+                      </EuiText>
+                    </EuiFlexItem>
+                  </EuiFlexGroup>
+                  <EuiSpacer size="s" />
+                  <EuiText size="xs">
+                    <strong>
+                      {i18n.translate('xpack.significantEventsApp.runStep.strong.inputLabel', {
+                        defaultMessage: 'Input',
+                      })}
+                    </strong>
                   </EuiText>
-                )}
-              </>
-            ) : (
-              <>
-                <EuiText size="xs">
-                  <strong>
-                    {i18n.translate('xpack.significantEventsApp.runStep.strong.inputLabel', {
-                      defaultMessage: 'Input',
-                    })}
-                  </strong>
-                </EuiText>
-                <EuiCodeBlock
-                  language="json"
-                  fontSize="s"
-                  paddingSize="s"
-                  overflowHeight={200}
-                  isCopyable
-                >
-                  {formatted(step.input)}
-                </EuiCodeBlock>
-                <EuiSpacer size="s" />
-                <EuiText size="xs">
-                  <strong>
-                    {i18n.translate('xpack.significantEventsApp.runStep.strong.resultLabel', {
-                      defaultMessage: 'Result',
-                    })}
-                  </strong>
-                </EuiText>
-                <EuiCodeBlock
-                  language="json"
-                  fontSize="s"
-                  paddingSize="s"
-                  overflowHeight={280}
-                  isCopyable
-                >
-                  {formatted(step.output)}
-                </EuiCodeBlock>
-              </>
-            )}
-          </>
-        )}
-      </EuiPanel>
+                  <EuiCodeBlock
+                    language="json"
+                    fontSize="s"
+                    paddingSize="s"
+                    overflowHeight={240}
+                    isCopyable
+                  >
+                    {formatted(step.input)}
+                  </EuiCodeBlock>
+                  <EuiSpacer size="s" />
+                  <EuiText size="xs">
+                    <strong>
+                      {i18n.translate('xpack.significantEventsApp.runStep.strong.resultLabel', {
+                        defaultMessage: 'Result',
+                      })}
+                    </strong>
+                  </EuiText>
+                  <EuiCodeBlock
+                    language="json"
+                    fontSize="s"
+                    paddingSize="s"
+                    overflowHeight={400}
+                    isCopyable
+                  >
+                    {formatted(step.output)}
+                  </EuiCodeBlock>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

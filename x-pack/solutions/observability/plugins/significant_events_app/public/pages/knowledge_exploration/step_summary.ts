@@ -23,6 +23,46 @@ const names = (values: unknown[]): string => {
   const labels = values.map(text).filter(Boolean);
   return labels.slice(0, 3).join(', ') + (labels.length > 3 ? ` +${labels.length - 3}` : '');
 };
+const scalar = (value: unknown): string =>
+  typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+    ? String(value)
+    : Array.isArray(value)
+    ? value
+        .map((entry) => text(entry))
+        .filter(Boolean)
+        .join(', ')
+    : '';
+const describeRow = (value: unknown, columns: unknown[]): string => {
+  const row = Array.isArray(value)
+    ? Object.fromEntries(
+        value.map((entry, index) => [
+          text(object(columns[index]).name) || `value ${index + 1}`,
+          entry,
+        ])
+      )
+    : object(value);
+  const identity = object(row.service ?? row.observedService);
+  const service = [text(identity.name), text(identity.namespace)].filter(Boolean).join(' / ');
+  const sample = text(row.sample);
+  if (sample) return [service, sample].filter(Boolean).join(': ');
+  const values = Object.entries(row)
+    .filter(
+      ([key]) =>
+        ![
+          'evidenceRef',
+          'evidence_ref',
+          'rowRefs',
+          'sampleSelection',
+          'observedService',
+          'service',
+        ].includes(key)
+    )
+    .map(([key, entry]) => ({ key, value: scalar(entry) }))
+    .filter((entry) => entry.value !== '')
+    .slice(0, 3)
+    .map(({ key, value: entry }) => `${key}=${entry}`);
+  return [service, ...values].filter(Boolean).join(' · ');
+};
 
 export const getStepDescription = (step: ExplorationStep) => {
   const input = parseStepValue(step.input);
@@ -43,6 +83,9 @@ export const getStepDescription = (step: ExplorationStep) => {
   let title = step.name.replaceAll('_', ' ');
   let result = '';
   let items: string[] = [];
+  let queryPreview = '';
+  let note = '';
+  let itemLabel = '';
   const scope = [names(array(input.serviceNames)), text(input.serviceNamespace)];
   if (typeof input.lookbackMinutes === 'number') {
     const minutes = input.lookbackMinutes;
@@ -71,24 +114,74 @@ export const getStepDescription = (step: ExplorationStep) => {
           patterns: 'Discover log categories',
           relationships: 'Investigate dependencies',
           infrastructure: 'Map infrastructure',
+          technology: 'Discover runtimes and frameworks',
+          peers: 'Inspect peer endpoints',
+          trace_links: 'Find services sharing traces',
+          profile: 'Check populated fields',
+          volume: 'Measure source volume',
           samples: `Read ${text(input.sampleKind) || 'representative'} logs`,
           custom: 'Run a focused source query',
         } as Record<string, string>
       )[template] ?? 'Explore source evidence';
-    if (template === 'custom') scope.push(text(input.pipeline));
+    if (template === 'custom') queryPreview = text(input.pipeline);
+    if (typeof input.endOffsetMinutes === 'number' && input.endOffsetMinutes > 0)
+      scope.push(`ending ${input.endOffsetMinutes}m ago`);
     if (template === 'schema') result = `${sum('totalColumns')} fields · ${sum('columns')} shown`;
     else if (template === 'novelty' || template === 'inventory')
       result = `${sum('serviceGroups')} service groups · ${sum(
         'patternGroups'
       )} log categories · ${sum('entityGapCount')} new entities`;
-    else result = `${sum('rows')} rows`;
+    else if (['infrastructure', 'technology', 'peers'].includes(template))
+      result = `${sum('totalGroups') || sum('records')} ${
+        template === 'infrastructure'
+          ? 'resource'
+          : template === 'technology'
+          ? 'technology'
+          : 'peer'
+      } groups · ${sum('records')} shown`;
+    else if (template === 'trace_links') result = `${sum('links')} shared-trace groups`;
+    else if (template === 'profile')
+      result = `${sum('rows')} fields checked · ${sum('documents').toLocaleString()} documents`;
+    else if (template === 'volume') {
+      const capped = results.some((entry) => entry.countRelation === 'gte');
+      const rate = results.reduce(
+        (total, entry) =>
+          total + (typeof entry.documentsPerSecond === 'number' ? entry.documentsPerSecond : 0),
+        0
+      );
+      result = `${sum('documents').toLocaleString()}${capped ? '+' : ''} documents · ${rate.toFixed(
+        1
+      )}${capped ? '+' : ''} docs/s`;
+    } else result = `${sum('rows')} rows`;
     if (results.some((entry) => entry.truncated || entry.hasMore)) result += ' · more available';
-    items = results
-      .flatMap((entry) => array(entry.rows))
-      .flatMap((row) => {
-        const service = object(object(row).service);
-        return text(service.name) ? [text(service.name)] : [];
-      });
+    if (template === 'schema') {
+      itemLabel = 'Fields';
+      items = results
+        .flatMap((entry) => array(entry.columns))
+        .map((column) => {
+          const field = object(column);
+          return [text(field.name), text(field.type)].filter(Boolean).join(' · ');
+        });
+    } else {
+      items = results.flatMap((entry) =>
+        array(entry.rows ?? entry.records ?? entry.links ?? entry.services ?? entry.patterns)
+          .slice(0, 2)
+          .map((row) => describeRow(row, array(entry.columns)))
+      );
+    }
+    note =
+      results
+        .map(
+          (entry) =>
+            text(entry.unavailable) ||
+            (entry.empty ? text(entry.note) : '') ||
+            (entry.needsDetails
+              ? 'This call returned a summary; row details are not included.'
+              : '')
+        )
+        .find(Boolean) ?? '';
+    if (!note && !items.some(Boolean) && template !== 'volume')
+      note = results.map((entry) => text(entry.nextAction)).find(Boolean) ?? '';
   } else if (step.name === 'knowledge_indicators') {
     title =
       action === 'upsert'
@@ -100,6 +193,8 @@ export const getStepDescription = (step: ExplorationStep) => {
       result = `${saved.length} saved · ${array(output.unchanged).length} unchanged · ${
         rejected.length
       } rejected`;
+      if (array(output.savedQueries).length)
+        result += ` · ${array(output.savedQueries).length} query KIs saved`;
       let features = array(input.features);
       try {
         if (input.featuresJson) features = array(JSON.parse(text(input.featuresJson)));
@@ -110,6 +205,7 @@ export const getStepDescription = (step: ExplorationStep) => {
         const id = text(object(entry).id);
         return text(object(features.find((feature) => object(feature).id === id)).title) || id;
       });
+      items.push(...array(output.savedQueries).map((entry) => text(object(entry).title)));
     } else {
       result = `${count(output.total ?? output.features ?? output.records)} KIs${
         output.hasMore ? ' · more available' : ''
@@ -127,6 +223,13 @@ export const getStepDescription = (step: ExplorationStep) => {
     if (action === 'catalog') result = `${array(output.tools).length} available tools`;
     else if (action === 'describe') result = 'Input schema available';
     else result = `${results.length} result groups`;
+    if (action === 'catalog') {
+      itemLabel = 'Tools';
+      items = array(output.tools).map(
+        (tool) =>
+          text(tool) || text(object(tool).name) || text(object(tool).title) || text(object(tool).id)
+      );
+    }
   } else if (step.name === 'monitoring_inventory') {
     title = 'Review existing monitoring';
     result = `${count(output.total ?? output.rules)} rules${
@@ -146,15 +249,20 @@ export const getStepDescription = (step: ExplorationStep) => {
         } as Record<string, string>
       )[action] ?? 'Maintain monitoring';
     scope.push(text(input.title), text(input.reason));
+    queryPreview = text(input.query) || text(object(input.esql).query);
     if (action === 'upsert')
       result = output.unchanged ? 'Rule already matches' : `${saved.length} rule saved`;
     else if (action === 'baseline') result = `${array(output.groups).length} baseline groups`;
     else if (action === 'validate') result = 'Validation result available';
     else result = output.ruleId ? `Rule ${action} completed` : '';
+    items = array(output.groups).map((group) => describeRow(group, []));
   } else if (step.name === 'fired_rules') {
     title = action === 'read' ? 'Inspect selected rule signals' : 'Review recent rule firings';
     scope.push('Last 30 minutes');
     result = `${count(output.total ?? output.signals ?? output.groups)} signal groups`;
+    items = array(output.signals ?? output.groups).map(
+      (signal) => text(object(signal).ruleName) || text(object(signal).title)
+    );
   } else if (step.name === 'rule_change_points') {
     title = 'Investigate changes in a metric';
     result = 'Change-point analysis available';
@@ -172,6 +280,15 @@ export const getStepDescription = (step: ExplorationStep) => {
           ? 'Assessment unchanged'
           : `Assessment saved · ${text(output.status) || text(input.status)}`
         : `${count(output.total ?? output.events)} assessments`;
+    if (action === 'upsert') {
+      items = [
+        text(input.severity) ? `${text(input.severity)} severity` : '',
+        typeof input.confidence === 'number'
+          ? `${Math.round(input.confidence * 100)}% confidence`
+          : '',
+      ];
+      note = text(input.assessmentNote) || text(input.summary);
+    } else items = array(output.events).map((event) => text(object(event).title));
   } else if (step.name === 'finish_exploration') {
     title = 'Complete the run';
     result = text(output.outcome ?? input.outcome).replaceAll('_', ' ');
@@ -189,7 +306,12 @@ export const getStepDescription = (step: ExplorationStep) => {
     title,
     scope: scope.filter(Boolean).join(' · '),
     result,
-    items: [...new Set(items.filter(Boolean))].slice(0, 4),
+    items: [...new Set(items.filter(Boolean))]
+      .slice(0, 4)
+      .map((item) => (item.length > 200 ? `${item.slice(0, 200)}…` : item)),
+    itemLabel,
+    queryPreview,
+    note,
     status,
     error,
   };

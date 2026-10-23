@@ -124,4 +124,69 @@ describe('Agent Explorer run activity', () => {
       getStepDescription({ ...step, input: 'not JSON', output: 'truncated' })
     ).not.toThrow();
   });
+
+  it('shows infrastructure counts and observed resource details before expanding', () => {
+    const { container } = render(
+      <RunStep
+        step={{
+          ...step,
+          input: JSON.stringify({ template: 'infrastructure', sourceIds: ['source-id'] }),
+          output: JSON.stringify({
+            results: [
+              {
+                totalGroups: 12,
+                records: [{ 'host.name': 'worker-01', observedService: { name: 'search' } }],
+                hasMore: true,
+              },
+            ],
+          }),
+        }}
+        onInspect={jest.fn()}
+      />
+    );
+    expect(screen.getByText('12 resource groups · 1 shown · more available')).toBeInTheDocument();
+    expect(container.textContent).toContain('host.name=worker-01');
+    expect(screen.getByRole('button', { name: 'Inspect tool call' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    );
+    expect(container.textContent).not.toContain('source-id');
+  });
+
+  it('previews query text and returned values while retaining the full tool inspector', () => {
+    const pipeline = '| WHERE service.name == "search" | STATS requests=COUNT(*)';
+    render(
+      <RunStep
+        step={{
+          ...step,
+          input: JSON.stringify({ template: 'custom', pipeline }),
+          output: JSON.stringify({ results: [{ columns: [{ name: 'requests' }], rows: [[42]] }] }),
+        }}
+        onInspect={jest.fn()}
+      />
+    );
+    expect(screen.getByText(pipeline)).toBeInTheDocument();
+    expect(screen.getByText('requests=42')).toBeInTheDocument();
+    expect(screen.queryByText('Input')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect tool call' }));
+    expect(screen.getByText('Input')).toBeInTheDocument();
+    expect(screen.getByText('Result')).toBeInTheDocument();
+  });
+
+  it('distinguishes shared-trace results and summary-only resource responses from zero rows', () => {
+    expect(
+      getStepDescription({
+        ...step,
+        input: '{"template":"trace_links"}',
+        output: '{"results":[{"links":[{},{}]}]}',
+      }).result
+    ).toBe('2 shared-trace groups');
+    const description = getStepDescription({
+      ...step,
+      input: '{"template":"infrastructure"}',
+      output: '{"results":[{"totalGroups":20,"needsDetails":true}]}',
+    });
+    expect(description.result).toBe('20 resource groups · 0 shown');
+    expect(description.note).toContain('row details are not included');
+  });
 });

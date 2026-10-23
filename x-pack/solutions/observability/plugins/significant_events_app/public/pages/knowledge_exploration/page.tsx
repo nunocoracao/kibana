@@ -19,15 +19,13 @@ import {
   EuiPanel,
   EuiSelect,
   EuiSpacer,
-  EuiStat,
+  EuiIcon,
   EuiSwitch,
   EuiFieldNumber,
   EuiText,
   EuiTitle,
   EuiBasicTable,
   EuiLink,
-  EuiTabs,
-  EuiTab,
   useEuiTheme,
 } from '@elastic/eui';
 import { KbnDangerCallout } from '@kbn/ui-callout';
@@ -42,6 +40,7 @@ import { AnatomyDrawer } from './anatomy_drawer';
 import { RunStep } from './run_step';
 import { getStepDescription } from './step_summary';
 import { useKibana } from '../../hooks/use_kibana';
+import { AgentExplorerNavigation } from '../../components/agent_explorer_navigation';
 import {
   SignificantEventsAppHeader,
   SignificantEventsAppPageTemplate,
@@ -115,16 +114,16 @@ const copy = {
     defaultMessage: 'Total cost',
   }),
   average: i18n.translate('xpack.significantEventsApp.knowledgeExplorer.averageRunCost', {
-    defaultMessage: 'Average cost per run',
+    defaultMessage: 'Avg. cost / run',
   }),
   runDuration: i18n.translate('xpack.significantEventsApp.agentPanel.runDuration', {
     defaultMessage: 'Run duration',
   }),
   averageRunDuration: i18n.translate('xpack.significantEventsApp.agentPanel.averageRunDuration', {
-    defaultMessage: 'Average run duration',
+    defaultMessage: 'Avg. duration',
   }),
   stored: i18n.translate('xpack.significantEventsApp.knowledgeExplorer.stored', {
-    defaultMessage: 'Stored feature KIs',
+    defaultMessage: 'Feature KIs',
   }),
   resetSuccess: i18n.translate('xpack.significantEventsApp.knowledgeExplorer.resetSuccess', {
     defaultMessage: 'Feature knowledge reset',
@@ -133,7 +132,7 @@ const copy = {
     defaultMessage: 'KI writes this run',
   }),
   sources: i18n.translate('xpack.significantEventsApp.knowledgeExplorer.sources', {
-    defaultMessage: 'Enabled sources',
+    defaultMessage: 'Sources',
   }),
   history: i18n.translate('xpack.significantEventsApp.knowledgeExplorer.history', {
     defaultMessage: 'Run history',
@@ -374,7 +373,7 @@ function AgentPanel({
     },
     {
       title: status.data?.featureCount ?? 0,
-      description: events ? 'Event assessments' : monitoring ? 'Managed rules' : copy.stored,
+      description: events ? 'Assessments' : monitoring ? 'Managed rules' : copy.stored,
     },
     {
       title: status.data?.sources.filter((source) => source.enabled).length ?? 0,
@@ -387,34 +386,19 @@ function AgentPanel({
         title={copy.title}
         back={{ label: copy.management, href: core.application.getUrlForApp('significant_events') }}
       />
-      <EuiTabs>
-        <EuiTab isSelected={agent === 'knowledge'} onClick={() => onAgentChange('knowledge')}>
-          {i18n.translate('xpack.significantEventsApp.agentPanel.vKnowledgeExtractorTabLabel', {
-            defaultMessage: 'v2 Knowledge Extractor',
-          })}
-        </EuiTab>
-        <EuiTab isSelected={monitoring} onClick={() => onAgentChange('monitoring')}>
-          {i18n.translate('xpack.significantEventsApp.agentPanel.vMonitoringSetupTabLabel', {
-            defaultMessage: 'v2 Monitoring Setup',
-          })}
-        </EuiTab>
-        <EuiTab isSelected={events} onClick={() => onAgentChange('events')}>
-          {i18n.translate('xpack.significantEventsApp.agentPanel.vEventDiscoveryTabLabel', {
-            defaultMessage: 'V2 Event Discovery',
-          })}
-        </EuiTab>
-      </EuiTabs>
       <SignificantEventsAppPageTemplate.Body grow>
         <div
           css={css`
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: ${euiTheme.size.m};
             min-height: 0;
             height: 100%;
           `}
         >
+          <AgentExplorerNavigation agent={agent} onAgentChange={onAgentChange} />
           <EuiPanel
+            paddingSize="m"
             grow={false}
             hasShadow={false}
             hasBorder
@@ -422,14 +406,9 @@ function AgentPanel({
               flex: 0 0 auto;
               min-height: 0;
               height: auto;
-              background: linear-gradient(
-                115deg,
-                ${euiTheme.colors.backgroundBaseSubdued},
-                ${euiTheme.colors.backgroundBasePlain}
-              );
             `}
           >
-            <EuiFlexGroup alignItems="center" gutterSize="m" wrap>
+            <EuiFlexGroup alignItems="center" gutterSize="s" wrap responsive={false}>
               <EuiFlexItem grow={false}>
                 <EuiBadge color="primary" iconType="sparkles">
                   {copy.thinking}
@@ -441,10 +420,10 @@ function AgentPanel({
                 </EuiBadge>
               </EuiFlexItem>
               <EuiFlexItem
-                grow={false}
                 css={css`
-                  width: 320px;
-                  max-width: 100%;
+                  flex: 1 1 200px;
+                  min-width: 180px;
+                  max-width: 320px;
                 `}
               >
                 <EuiToolTip
@@ -502,16 +481,19 @@ function AgentPanel({
                 <EuiButtonEmpty
                   data-test-subj="significantEventsAppKnowledgeExplorationPageButton"
                   iconType="inspect"
-                  size="s"
+                  size="xs"
+                  aria-label={copy.anatomy}
                   onClick={() => setShowAnatomy(true)}
                 >
-                  {copy.anatomy}
+                  {i18n.translate('xpack.significantEventsApp.agentPanel.anatomyShortLabel', {
+                    defaultMessage: 'Anatomy',
+                  })}
                 </EuiButtonEmpty>
               </EuiFlexItem>
               <EuiFlexItem grow={false}>
                 <EuiButtonEmpty
                   data-test-subj="significantEventsAppAgentPanelAgentBuilderButton"
-                  size="s"
+                  size="xs"
                   iconType="external"
                   href={core.application.getUrlForApp('agent_builder', {
                     path: `/agents/nightshift-v2-${
@@ -531,9 +513,10 @@ function AgentPanel({
               </EuiFlexItem>
             </EuiFlexGroup>
             <EuiSpacer size="s" />
-            <EuiFlexGroup alignItems="center" gutterSize="s" wrap>
+            <EuiFlexGroup alignItems="center" gutterSize="s" wrap responsive={false}>
               <EuiFlexItem grow={false}>
                 <EuiSwitch
+                  compressed
                   label={copy.schedule}
                   checked={status.data?.enabled ?? false}
                   disabled={busy || !status.data}
@@ -568,7 +551,7 @@ function AgentPanel({
                   step={1}
                   append="min"
                   css={css`
-                    width: 120px;
+                    width: 104px;
                   `}
                   disabled={busy || !status.data}
                   isInvalid={!validFrequency}
@@ -577,7 +560,7 @@ function AgentPanel({
               </EuiFlexItem>
               <EuiFlexItem grow={false}>
                 <EuiButtonEmpty
-                  size="s"
+                  size="xs"
                   aria-label={copy.saveFrequency}
                   data-test-subj="significantEventsAppSaveAgentFrequency"
                   disabled={
@@ -619,6 +602,7 @@ function AgentPanel({
                 <EuiButtonEmpty
                   data-test-subj="significantEventsAppKnowledgeExplorationPageButton"
                   iconType="refresh"
+                  size="xs"
                   disabled={running || busy || !status.data}
                   onClick={() => setConfirmReset(true)}
                 >
@@ -633,6 +617,7 @@ function AgentPanel({
               <EuiFlexItem grow={false}>
                 {running ? (
                   <EuiButton
+                    size="s"
                     data-test-subj="significantEventsAppKnowledgeExplorationPageButton"
                     iconType="stop"
                     color="warning"
@@ -654,6 +639,7 @@ function AgentPanel({
                   </EuiButton>
                 ) : (
                   <EuiButton
+                    size="s"
                     data-test-subj="significantEventsAppKnowledgeExplorationPageButton"
                     fill
                     iconType="play"
@@ -680,160 +666,261 @@ function AgentPanel({
                 )}
               </EuiFlexItem>
             </EuiFlexGroup>
-            <EuiSpacer size="m" />
-            <EuiFlexGroup gutterSize="l" wrap>
-              {stats.map((stat) => (
-                <EuiFlexItem key={stat.description}>
-                  <EuiStat title={stat.title} description={stat.description} titleSize="s" />
-                </EuiFlexItem>
-              ))}
-              <EuiFlexItem grow={false}>
-                <EuiButtonEmpty
+            <div
+              css={css`
+                display: flex;
+                gap: ${euiTheme.size.s};
+                align-items: center;
+                border-top: ${euiTheme.border.thin};
+                margin-top: ${euiTheme.size.m};
+                padding-top: ${euiTheme.size.m};
+              `}
+            >
+              <dl
+                css={css`
+                  display: grid;
+                  grid-template-columns: repeat(6, minmax(0, 1fr));
+                  gap: ${euiTheme.size.m};
+                  flex: 1;
+                  min-width: 0;
+                  margin: 0;
+                  @media (max-width: 640px) {
+                    grid-template-columns: repeat(3, minmax(0, 1fr));
+                  }
+                `}
+              >
+                {stats.map((stat) => (
+                  <div key={stat.description}>
+                    <dt
+                      css={css`
+                        font-size: ${euiTheme.font.scale.xs}rem;
+                        color: ${euiTheme.colors.textSubdued};
+                        margin-bottom: ${euiTheme.size.xs};
+                        white-space: nowrap;
+                      `}
+                    >
+                      {stat.description === copy.total ? (
+                        <EuiToolTip content={copy.costNote}>
+                          <span tabIndex={0}>
+                            {stat.description} <EuiIcon type="info" size="s" aria-hidden={true} />
+                          </span>
+                        </EuiToolTip>
+                      ) : (
+                        stat.description
+                      )}
+                    </dt>
+                    <dd
+                      css={css`
+                        font-size: ${euiTheme.font.scale.l}rem;
+                        font-weight: ${euiTheme.font.weight.semiBold};
+                        font-variant-numeric: tabular-nums;
+                        line-height: 1.3;
+                        margin: 0;
+                      `}
+                    >
+                      {stat.title}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <EuiToolTip content={copy.resetTotals} disableScreenReaderOutput>
+                <EuiButtonIcon
                   data-test-subj="significantEventsAppKnowledgeExplorationPageButton"
-                  size="xs"
+                  aria-label={copy.resetTotals}
                   iconType="refresh"
                   disabled={busy || !status.data}
                   onClick={() => setConfirmResetTotals(true)}
-                >
-                  {copy.resetTotals}
-                </EuiButtonEmpty>
-              </EuiFlexItem>
-            </EuiFlexGroup>
+                />
+              </EuiToolTip>
+            </div>
           </EuiPanel>
           {(actionError || status.error || detail.error) && (
             <KbnDangerCallout announceOnMount title={copy.error} size="s">
               <p>{actionError ?? status.error?.message ?? detail.error?.message}</p>
             </KbnDangerCallout>
           )}
-          <div
+          <EuiPanel
+            paddingSize="none"
+            hasBorder
+            hasShadow={false}
             css={css`
               display: grid;
-              grid-template-columns: 240px minmax(0, 1fr);
-              gap: 16px;
+              grid-template-columns: 212px minmax(0, 1fr);
               flex: 1;
               min-height: 0;
-              @media (max-width: 800px) {
+              overflow: hidden;
+              @media (max-width: 700px) {
                 grid-template-columns: 1fr;
               }
             `}
           >
-            <EuiPanel
-              paddingSize="m"
-              hasShadow={false}
-              hasBorder
+            <aside
+              aria-label={copy.history}
               css={css`
-                overflow-y: auto;
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+                border-right: ${euiTheme.border.thin};
+                background: ${euiTheme.colors.backgroundBaseSubdued};
+                @media (max-width: 700px) {
+                  border-right: 0;
+                  border-bottom: ${euiTheme.border.thin};
+                  max-height: 220px;
+                }
               `}
             >
-              <EuiTitle size="xs">
-                <h2>{copy.history}</h2>
-              </EuiTitle>
-              <EuiSpacer size="m" />
-              <EuiButtonEmpty
-                data-test-subj="significantEventsAppKnowledgeExplorationPageButton"
-                size="xs"
-                iconType="refresh"
-                disabled={busy || !status.data}
-                onClick={() => setConfirmResetRuns(true)}
+              <div
+                css={css`
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  padding: ${euiTheme.size.m};
+                  border-bottom: ${euiTheme.border.thin};
+                  min-height: 56px;
+                `}
               >
-                {copy.resetRuns}
-              </EuiButtonEmpty>
-              <EuiSpacer size="s" />
-              {!status.data?.runs.length && (
-                <EuiText size="s" color="subdued">
-                  {copy.noHistory}
-                </EuiText>
-              )}
-              {status.data?.runs.map((item) => (
-                <div
-                  key={item.id}
-                  css={css`
-                    position: relative;
-                  `}
-                >
-                  <button
-                    onClick={() => setSelectedId(item.id)}
+                <EuiTitle size="xxs">
+                  <h2>{copy.history}</h2>
+                </EuiTitle>
+                <EuiToolTip content={copy.resetRuns} disableScreenReaderOutput>
+                  <EuiButtonIcon
+                    data-test-subj="significantEventsAppKnowledgeExplorationPageButton"
+                    aria-label={copy.resetRuns}
+                    iconType="refresh"
+                    disabled={busy || !status.data}
+                    onClick={() => setConfirmResetRuns(true)}
+                  />
+                </EuiToolTip>
+              </div>
+              <div
+                css={css`
+                  overflow-y: auto;
+                  flex: 1;
+                  min-height: 0;
+                `}
+              >
+                {!status.data?.runs.length && (
+                  <EuiText
+                    size="s"
+                    color="subdued"
                     css={css`
-                      display: block;
-                      width: 100%;
-                      text-align: left;
-                      padding: 8px 32px 8px 10px;
-                      margin-bottom: 8px;
-                      border: 1px solid
-                        ${activeId === item.id ? euiTheme.colors.primary : euiTheme.border.color};
-                      border-radius: ${euiTheme.border.radius.medium};
-                      background: ${activeId === item.id
-                        ? euiTheme.colors.backgroundBaseSubdued
-                        : 'transparent'};
-                      color: ${euiTheme.colors.textParagraph};
-                      cursor: pointer;
+                      padding: ${euiTheme.size.m};
                     `}
                   >
-                    <EuiFlexGroup gutterSize="s" alignItems="center" justifyContent="spaceBetween">
-                      <EuiFlexItem>
-                        <EuiText size="s">
-                          <strong>{new Date(item.startedAt).toLocaleTimeString()}</strong>
-                        </EuiText>
-                      </EuiFlexItem>
-                      <EuiFlexItem grow={false}>
-                        <EuiBadge
-                          color={
-                            item.status === 'failed'
-                              ? 'danger'
-                              : item.outcome === 'partial'
-                              ? 'warning'
-                              : item.status === 'running'
-                              ? 'primary'
-                              : 'hollow'
-                          }
-                        >
-                          {outcomeLabel(item)}
-                        </EuiBadge>
-                      </EuiFlexItem>
-                    </EuiFlexGroup>
-                    <EuiSpacer size="s" />
-                    <EuiText size="xs" color="subdued">
-                      {new Date(item.startedAt).toLocaleDateString()} ·{' '}
-                      {item.reason.replaceAll('_', ' ')}
-                      <br />
-                      {item.written}{' '}
-                      {events ? 'event updates' : monitoring ? 'rule changes' : 'KI writes'} ·{' '}
-                      {dollars(item.estimatedCostUsd)} · {formatDuration(durationForRun(item))}
-                      <br />
-                      {status.data?.availableModels.find(
-                        (model) => model.connectorId === item.connectorId
-                      )?.model ?? item.model}
-                    </EuiText>
-                  </button>
-                  <EuiToolTip content={copy.deleteRun} disableScreenReaderOutput>
-                    <EuiButtonIcon
-                      data-test-subj="significantEventsAppKnowledgeExplorationPageButton"
-                      iconType="trash"
-                      color="danger"
-                      aria-label={copy.deleteRun}
-                      disabled={busy}
-                      onClick={() => setDeleteId(item.id)}
+                    {copy.noHistory}
+                  </EuiText>
+                )}
+                {status.data?.runs.map((item) => (
+                  <div
+                    key={item.id}
+                    css={css`
+                      position: relative;
+                    `}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(item.id)}
+                      aria-current={activeId === item.id ? 'true' : undefined}
+                      title={
+                        status.data?.availableModels.find(
+                          (model) => model.connectorId === item.connectorId
+                        )?.model ?? item.model
+                      }
                       css={css`
-                        position: absolute;
-                        right: 4px;
-                        top: 8px;
+                        display: block;
+                        width: 100%;
+                        text-align: left;
+                        padding: ${euiTheme.size.m} 32px ${euiTheme.size.m} ${euiTheme.size.m};
+                        border: 0;
+                        border-bottom: ${euiTheme.border.thin};
+                        border-left: 2px solid
+                          ${activeId === item.id ? euiTheme.colors.primary : 'transparent'};
+                        background: ${activeId === item.id
+                          ? `color-mix(in srgb, ${euiTheme.colors.primary} 8%, ${euiTheme.colors.backgroundBasePlain})`
+                          : 'transparent'};
+                        color: ${euiTheme.colors.textParagraph};
+                        cursor: pointer;
+                        &:hover {
+                          background: ${euiTheme.colors.backgroundBasePlain};
+                        }
+                        &:focus-visible {
+                          outline: ${euiTheme.focus.width} solid ${euiTheme.colors.primary};
+                          outline-offset: -2px;
+                        }
                       `}
-                    />
-                  </EuiToolTip>
-                </div>
-              ))}
-            </EuiPanel>
+                    >
+                      <EuiFlexGroup
+                        gutterSize="s"
+                        alignItems="center"
+                        justifyContent="spaceBetween"
+                        responsive={false}
+                      >
+                        <EuiFlexItem>
+                          <EuiText size="s">
+                            <strong>
+                              {new Date(item.startedAt).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </strong>
+                          </EuiText>
+                        </EuiFlexItem>
+                        <EuiFlexItem grow={false}>
+                          <EuiBadge
+                            color={
+                              item.status === 'failed'
+                                ? 'danger'
+                                : item.outcome === 'partial'
+                                ? 'warning'
+                                : item.status === 'running'
+                                ? 'primary'
+                                : 'hollow'
+                            }
+                          >
+                            {outcomeLabel(item)}
+                          </EuiBadge>
+                        </EuiFlexItem>
+                      </EuiFlexGroup>
+                      <EuiText
+                        size="xs"
+                        color="subdued"
+                        css={css`
+                          margin-top: ${euiTheme.size.xs};
+                          line-height: 1.6;
+                        `}
+                      >
+                        {new Date(item.startedAt).toLocaleDateString()} ·{' '}
+                        {item.reason.replaceAll('_', ' ')}
+                        <br />
+                        {dollars(item.estimatedCostUsd)} · {formatDuration(durationForRun(item))} ·{' '}
+                        {item.written} {events ? 'events' : monitoring ? 'rules' : 'KIs'}
+                      </EuiText>
+                    </button>
+                    <EuiToolTip content={copy.deleteRun} disableScreenReaderOutput>
+                      <EuiButtonIcon
+                        data-test-subj="significantEventsAppKnowledgeExplorationPageButton"
+                        iconType="trash"
+                        color="text"
+                        aria-label={copy.deleteRun}
+                        disabled={busy}
+                        onClick={() => setDeleteId(item.id)}
+                        css={css`
+                          position: absolute;
+                          right: 4px;
+                          top: 12px;
+                        `}
+                      />
+                    </EuiToolTip>
+                  </div>
+                ))}
+              </div>
+            </aside>
             <div
-              ref={activityRef}
-              onScroll={(event) => {
-                const element = event.currentTarget;
-                if (element.scrollHeight - element.clientHeight - element.scrollTop >= 60)
-                  setFollowLive(false);
-              }}
               css={css`
+                display: flex;
+                flex-direction: column;
                 min-width: 0;
-                overflow-y: auto;
-                padding-right: 4px;
+                min-height: 0;
               `}
             >
               {!run ? (
@@ -858,13 +945,11 @@ function AgentPanel({
                 />
               ) : (
                 <>
-                  <EuiPanel
-                    paddingSize="s"
-                    hasBorder
-                    hasShadow={false}
+                  <header
                     css={css`
-                      margin-bottom: 12px;
                       flex: 0 0 auto;
+                      padding: ${euiTheme.size.m} ${euiTheme.size.l};
+                      border-bottom: ${euiTheme.border.thin};
                       background: ${euiTheme.colors.backgroundBasePlain};
                     `}
                   >
@@ -875,7 +960,7 @@ function AgentPanel({
                       responsive={false}
                     >
                       <EuiFlexItem>
-                        <EuiTitle size="xs">
+                        <EuiTitle size="xxs">
                           <h2>{run.status === 'running' ? 'Live activity' : 'Run activity'}</h2>
                         </EuiTitle>
                       </EuiFlexItem>
@@ -885,6 +970,26 @@ function AgentPanel({
                         </EuiBadge>
                       </EuiFlexItem>
                     </EuiFlexGroup>
+                    <EuiText
+                      size="xs"
+                      color="subdued"
+                      css={css`
+                        margin-top: ${euiTheme.size.xs};
+                        overflow: hidden;
+                        white-space: nowrap;
+                        text-overflow: ellipsis;
+                      `}
+                      title={
+                        status.data?.availableModels.find(
+                          (model) => model.connectorId === run.connectorId
+                        )?.model ?? run.model
+                      }
+                    >
+                      {status.data?.availableModels.find(
+                        (model) => model.connectorId === run.connectorId
+                      )?.model ?? run.model}{' '}
+                      · {new Date(run.startedAt).toLocaleString()}
+                    </EuiText>
                     <EuiText
                       size="xs"
                       color="subdued"
@@ -900,46 +1005,42 @@ function AgentPanel({
                       {i18n.translate('xpack.significantEventsApp.agentPanel.modelTurnsTextLabel', {
                         defaultMessage: 'model turns ·',
                       })}
-                      {issueCount}{' '}
-                      {i18n.translate('xpack.significantEventsApp.agentPanel.issuesTextLabel', {
-                        defaultMessage: 'issues ·',
-                      })}
+                      {issueCount > 0 && (
+                        <>
+                          {issueCount}{' '}
+                          {i18n.translate('xpack.significantEventsApp.agentPanel.issuesTextLabel', {
+                            defaultMessage: 'issues ·',
+                          })}
+                        </>
+                      )}
                       {run.written}{' '}
                       {events ? 'event updates' : monitoring ? 'rule changes' : 'KI writes'} ·{' '}
-                      {copy.runDuration.toLowerCase()} {formatDuration(durationForRun(run))}
+                      {formatDuration(durationForRun(run))} · {dollars(run.estimatedCostUsd)}
                     </EuiText>
-                    {run.status === 'running' && latestStep && (
+                    {run.summary && (
                       <EuiText
-                        size="s"
+                        size="xs"
+                        color="subdued"
                         css={css`
-                          margin-top: 8px;
+                          margin-top: 4px;
+                          display: -webkit-box;
+                          -webkit-line-clamp: 2;
+                          -webkit-box-orient: vertical;
+                          overflow: hidden;
                         `}
+                        title={run.summary}
                       >
-                        <strong>{getStepDescription(latestStep).title}</strong>
+                        {run.summary}
                       </EuiText>
                     )}
-                    <EuiText
-                      size="xs"
-                      color="subdued"
-                      css={css`
-                        margin-top: 4px;
-                        display: -webkit-box;
-                        -webkit-line-clamp: 3;
-                        -webkit-box-orient: vertical;
-                        overflow: hidden;
-                      `}
-                      title={run.summary}
-                    >
-                      {run.summary}
-                    </EuiText>
                     <EuiSpacer size="s" />
-                    <EuiFlexGroup gutterSize="m" wrap alignItems="center">
+                    <EuiFlexGroup gutterSize="m" wrap alignItems="center" responsive={false}>
                       <EuiFlexItem grow={false}>
                         <EuiSwitch
                           compressed
                           label={i18n.translate(
                             'xpack.significantEventsApp.agentPanel.euiSwitch.modelActivityLabel',
-                            { defaultMessage: 'Model activity' }
+                            { defaultMessage: 'Commentary' }
                           )}
                           checked={showModelActivity}
                           onChange={(event) => setShowModelActivity(event.target.checked)}
@@ -970,155 +1071,170 @@ function AgentPanel({
                         </EuiFlexItem>
                       )}
                     </EuiFlexGroup>
-                  </EuiPanel>
-                  {monitoring && Boolean(run.coverage?.length) && (
-                    <>
-                      <EuiPanel paddingSize="m" hasBorder>
-                        <EuiTitle size="xs">
-                          <h3>
-                            {i18n.translate(
-                              'xpack.significantEventsApp.agentPanel.h3.monitoringCoverageLabel',
-                              { defaultMessage: 'Monitoring coverage' }
-                            )}
-                          </h3>
-                        </EuiTitle>
-                        <EuiSpacer size="s" />
-                        <EuiBasicTable
-                          tableCaption="Monitoring coverage for configured sources"
-                          items={run.coverage ?? []}
-                          columns={[
-                            {
-                              field: 'entity',
-                              name: 'Entity',
-                              width: '18%',
-                              render: (
-                                entity: string,
-                                item: NonNullable<ExplorationRun['coverage']>[number]
-                              ) => (
-                                <>
-                                  <strong>{entity}</strong>
-                                  <EuiText size="xs" color="subdued">
-                                    {status.data?.sources.find(
-                                      (source) => source.id === item.sourceId
-                                    )?.title ?? item.sourceId}
-                                  </EuiText>
-                                </>
-                              ),
-                            },
-                            { field: 'concern', name: 'Concern', width: '22%' },
-                            {
-                              field: 'priority',
-                              name: 'Priority',
-                              width: '12%',
-                              render: (
-                                priority: string | undefined,
-                                item: NonNullable<ExplorationRun['coverage']>[number]
-                              ) => (
-                                <EuiToolTip content={item.priorityReason}>
-                                  <EuiBadge
-                                    tabIndex={0}
-                                    color={priority === 'high' ? 'warning' : 'hollow'}
-                                  >
-                                    {priority ?? 'Not assessed'}
-                                  </EuiBadge>
-                                </EuiToolTip>
-                              ),
-                            },
-                            {
-                              field: 'state',
-                              name: 'Coverage',
-                              width: '15%',
-                              render: (state: string) => (
-                                <EuiBadge
-                                  color={
-                                    state === 'covered'
-                                      ? 'success'
-                                      : state === 'blind_spot'
-                                      ? 'warning'
-                                      : 'hollow'
-                                  }
-                                >
-                                  {state.replaceAll('_', ' ')}
-                                </EuiBadge>
-                              ),
-                            },
-                            {
-                              field: 'evidence',
-                              name: 'Evidence / monitors',
-                              render: (
-                                evidence: string,
-                                item: NonNullable<ExplorationRun['coverage']>[number]
-                              ) => (
-                                <>
-                                  <EuiText size="s">{evidence}</EuiText>
-                                  {item.ruleIds.map((id, index) => (
-                                    <EuiLink
-                                      data-test-subj="significantEventsAppAgentPanelLink"
-                                      key={id}
-                                      href={core.application.getUrlForApp('significant_events', {
-                                        path: `/detection?view=rules&source=${encodeURIComponent(
-                                          item.sourceId
-                                        )}&ruleId=${encodeURIComponent(id)}`,
-                                      })}
+                  </header>
+                  <div
+                    ref={activityRef}
+                    onScroll={(event) => {
+                      const element = event.currentTarget;
+                      if (element.scrollHeight - element.clientHeight - element.scrollTop >= 60)
+                        setFollowLive(false);
+                    }}
+                    css={css`
+                      overflow-y: auto;
+                      flex: 1;
+                      min-height: 0;
+                      padding: 0 ${euiTheme.size.l} ${euiTheme.size.l};
+                      scrollbar-gutter: stable;
+                    `}
+                    aria-label={copy.activity}
+                    role="region"
+                  >
+                    {monitoring && Boolean(run.coverage?.length) && (
+                      <>
+                        <EuiPanel paddingSize="m" hasBorder>
+                          <EuiTitle size="xs">
+                            <h3>
+                              {i18n.translate(
+                                'xpack.significantEventsApp.agentPanel.h3.monitoringCoverageLabel',
+                                { defaultMessage: 'Monitoring coverage' }
+                              )}
+                            </h3>
+                          </EuiTitle>
+                          <EuiSpacer size="s" />
+                          <EuiBasicTable
+                            tableCaption="Monitoring coverage for configured sources"
+                            items={run.coverage ?? []}
+                            columns={[
+                              {
+                                field: 'entity',
+                                name: 'Entity',
+                                width: '18%',
+                                render: (
+                                  entity: string,
+                                  item: NonNullable<ExplorationRun['coverage']>[number]
+                                ) => (
+                                  <>
+                                    <strong>{entity}</strong>
+                                    <EuiText size="xs" color="subdued">
+                                      {status.data?.sources.find(
+                                        (source) => source.id === item.sourceId
+                                      )?.title ?? item.sourceId}
+                                    </EuiText>
+                                  </>
+                                ),
+                              },
+                              { field: 'concern', name: 'Concern', width: '22%' },
+                              {
+                                field: 'priority',
+                                name: 'Priority',
+                                width: '12%',
+                                render: (
+                                  priority: string | undefined,
+                                  item: NonNullable<ExplorationRun['coverage']>[number]
+                                ) => (
+                                  <EuiToolTip content={item.priorityReason}>
+                                    <EuiBadge
+                                      tabIndex={0}
+                                      color={priority === 'high' ? 'warning' : 'hollow'}
                                     >
-                                      {i18n.translate(
-                                        'xpack.significantEventsApp.agentPanel.monitorLinkLabel',
-                                        { defaultMessage: 'Monitor' }
-                                      )}
-                                      {index + 1}{' '}
-                                    </EuiLink>
-                                  ))}
-                                </>
-                              ),
-                            },
-                          ]}
-                        />
+                                      {priority ?? 'Not assessed'}
+                                    </EuiBadge>
+                                  </EuiToolTip>
+                                ),
+                              },
+                              {
+                                field: 'state',
+                                name: 'Coverage',
+                                width: '15%',
+                                render: (state: string) => (
+                                  <EuiBadge
+                                    color={
+                                      state === 'covered'
+                                        ? 'success'
+                                        : state === 'blind_spot'
+                                        ? 'warning'
+                                        : 'hollow'
+                                    }
+                                  >
+                                    {state.replaceAll('_', ' ')}
+                                  </EuiBadge>
+                                ),
+                              },
+                              {
+                                field: 'evidence',
+                                name: 'Evidence / monitors',
+                                render: (
+                                  evidence: string,
+                                  item: NonNullable<ExplorationRun['coverage']>[number]
+                                ) => (
+                                  <>
+                                    <EuiText size="s">{evidence}</EuiText>
+                                    {item.ruleIds.map((id, index) => (
+                                      <EuiLink
+                                        data-test-subj="significantEventsAppAgentPanelLink"
+                                        key={id}
+                                        href={core.application.getUrlForApp('significant_events', {
+                                          path: `/detection?view=rules&source=${encodeURIComponent(
+                                            item.sourceId
+                                          )}&ruleId=${encodeURIComponent(id)}`,
+                                        })}
+                                      >
+                                        {i18n.translate(
+                                          'xpack.significantEventsApp.agentPanel.monitorLinkLabel',
+                                          { defaultMessage: 'Monitor' }
+                                        )}
+                                        {index + 1}{' '}
+                                      </EuiLink>
+                                    ))}
+                                  </>
+                                ),
+                              },
+                            ]}
+                          />
+                        </EuiPanel>
+                        <EuiSpacer size="l" />
+                      </>
+                    )}
+                    {visibleSteps.map(({ step, previousTool }) => (
+                      <RunStep
+                        key={step.id}
+                        step={step}
+                        previousTool={previousTool}
+                        onInspect={() => setFollowLive(false)}
+                      />
+                    ))}
+                    {!visibleSteps.length && (
+                      <EuiText size="s" color="subdued">
+                        {issuesOnly
+                          ? 'No recorded issues in this run.'
+                          : 'Waiting for the first action…'}
+                      </EuiText>
+                    )}
+                    {Boolean(run.remainingGaps?.length) && (
+                      <EuiPanel paddingSize="s" hasBorder hasShadow={false}>
+                        <EuiText size="s">
+                          <strong>
+                            {i18n.translate(
+                              'xpack.significantEventsApp.agentPanel.strong.remainingQuestionsLabel',
+                              { defaultMessage: 'Remaining questions' }
+                            )}
+                          </strong>
+                        </EuiText>
+                        <EuiText size="xs">
+                          <ul>
+                            {run.remainingGaps?.map((gap) => (
+                              <li key={gap}>{gap}</li>
+                            ))}
+                          </ul>
+                        </EuiText>
                       </EuiPanel>
-                      <EuiSpacer size="l" />
-                    </>
-                  )}
-                  {visibleSteps.map(({ step, previousTool }) => (
-                    <RunStep
-                      key={step.id}
-                      step={step}
-                      previousTool={previousTool}
-                      onInspect={() => setFollowLive(false)}
-                    />
-                  ))}
-                  {!visibleSteps.length && (
-                    <EuiText size="s" color="subdued">
-                      {issuesOnly
-                        ? 'No recorded issues in this run.'
-                        : 'Waiting for the first action…'}
-                    </EuiText>
-                  )}
-                  {Boolean(run.remainingGaps?.length) && (
-                    <EuiPanel paddingSize="s" hasBorder hasShadow={false}>
-                      <EuiText size="s">
-                        <strong>
-                          {i18n.translate(
-                            'xpack.significantEventsApp.agentPanel.strong.remainingQuestionsLabel',
-                            { defaultMessage: 'Remaining questions' }
-                          )}
-                        </strong>
-                      </EuiText>
-                      <EuiText size="xs">
-                        <ul>
-                          {run.remainingGaps?.map((gap) => (
-                            <li key={gap}>{gap}</li>
-                          ))}
-                        </ul>
-                      </EuiText>
-                    </EuiPanel>
-                  )}
-                  {run.error && <KbnDangerCallout announceOnMount title={run.error} size="s" />}
+                    )}
+                    {run.error && <KbnDangerCallout announceOnMount title={run.error} size="s" />}
+                  </div>
                 </>
               )}
             </div>
-          </div>
-          <EuiText size="xs" color="subdued">
-            {copy.costNote}
-          </EuiText>
+          </EuiPanel>
         </div>
       </SignificantEventsAppPageTemplate.Body>
       {showAnatomy && <AnatomyDrawer agent={agent} onClose={() => setShowAnatomy(false)} />}

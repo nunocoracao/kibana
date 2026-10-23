@@ -23,6 +23,7 @@ import { labels } from '../pages/detection/translations';
 import { journey } from '../pages/detection/journey_translations';
 import { evidenceSearch } from './evidence_chain/evidence_context';
 import { sourcesPageLabels } from '../pages/detection/sources_translations';
+import { agentExplorerOptions } from './agent_explorer_navigation';
 
 export const WorkspacePage = ({
   knowledge = false,
@@ -91,9 +92,15 @@ export const WorkspacePage = ({
               id: 'knowledgeExplorer',
               label: 'Agent Explorer',
               iconType: 'machineLearningApp',
-              href: application.getUrlForApp(SIGNIFICANT_EVENTS_APP_ID, {
-                path: '/knowledge-exploration',
-              }),
+              items: agentExplorerOptions.map((agent) => ({
+                id: `agentExplorer-${agent.id}`,
+                label: agent.label,
+                description: agent.description,
+                iconType: agent.iconType,
+                href: application.getUrlForApp(SIGNIFICANT_EVENTS_APP_ID, {
+                  path: `/knowledge-exploration?agent=${agent.id}`,
+                }),
+              })),
             },
             ...(!knowledge && !sources
               ? [
