@@ -28,6 +28,7 @@ import {
   SETTINGS_PAGE_TITLE,
   SOURCES_PAGE_TITLE,
 } from '../components/app_header';
+import { useSyncDetectionAgentOutputs } from '../data/detection_agent/use_sync_detection_agent_outputs';
 import { useKibana } from '../hooks/use_kibana';
 import { useDeveloperMode } from '../hooks/use_developer_mode';
 import { useIntroBannerDismissal } from '../components/use_intro_banner_dismissal';
@@ -192,6 +193,11 @@ export function NightshiftPage(): React.ReactElement | null {
     path: '/sources',
   });
   const nightshiftEnabled = featureFlags.useBooleanValue(NIGHTSHIFT_ENABLED_FLAG, false);
+  useSyncDetectionAgentOutputs(
+    nightshiftEnabled &&
+      canManageAndConfigure &&
+      /^\/(detections|knowledge|sources)(?:\/|$)/.test(pathname)
+  );
   const canUseAutomations =
     nightshiftEnabled && nightshiftInvestigations?.investigationsClient != null;
   const automationsHref = application.getUrlForApp(NIGHTSHIFT_APP_ID, {

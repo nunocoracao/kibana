@@ -50,7 +50,9 @@ import { useKibana } from '../../../hooks/use_kibana';
 import { RunStep } from './run_step';
 
 const copy = {
-  title: i18n.translate('xpack.nightshift.problemAgent.title', { defaultMessage: 'Problem Agent' }),
+  title: i18n.translate('xpack.nightshift.problemAgent.title', {
+    defaultMessage: 'Detection Agent',
+  }),
   run: i18n.translate('xpack.nightshift.problemAgent.run', { defaultMessage: 'Run now' }),
   stop: i18n.translate('xpack.nightshift.problemAgent.stop', { defaultMessage: 'Stop' }),
   model: i18n.translate('xpack.nightshift.problemAgent.model', { defaultMessage: 'Model' }),
@@ -209,11 +211,11 @@ export const AgentExplorer = (): React.ReactElement => {
         <>
           <KbnWarningCallout
             title={i18n.translate('xpack.nightshift.problemAgent.incompleteEstimate', {
-              defaultMessage: 'Cost estimate incomplete',
+              defaultMessage: 'Total cost estimate incomplete',
             })}
             text={i18n.translate('xpack.nightshift.problemAgent.incompleteEstimateDescription', {
               defaultMessage:
-                'Some requests have missing usage or pricing. The displayed total can understate incurred model charges.',
+                'The cumulative total includes runs with missing usage or pricing. Timed-out or interrupted model requests can be billed without returning usage. Affected runs are marked *; later runs can still have complete estimates.',
             })}
           />
           <EuiSpacer />
@@ -421,7 +423,8 @@ export const AgentExplorer = (): React.ReactElement => {
                   name: i18n.translate('xpack.nightshift.problemAgent.cost', {
                     defaultMessage: 'Est. cost',
                   }),
-                  render: (value: number) => money(value),
+                  render: (value: number, item: ExplorationRun) =>
+                    `${money(value)}${item.costEstimateComplete === false ? ' *' : ''}`,
                 },
               ]}
             />

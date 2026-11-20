@@ -17,6 +17,8 @@ export const automationRunActivityQueryKey = (id: string) =>
 export const DISCOVERY_QUERIES_QUERY_KEY = ['discoveryQueries'] as const;
 export const SOURCES_QUERY_KEY = ['nightshiftSources'] as const;
 export const FEATURES_QUERY_KEY = ['features'] as const;
+export const SOURCE_FEATURES_QUERY_KEY = ['nightshift.sourceFeatures'] as const;
+export const QUERY_OCCURRENCE_STATS_QUERY_KEY = ['queryOccurrenceStats'] as const;
 export const TOPOLOGY_QUERY_KEY = ['nightshiftTopology'] as const;
 export const NIGHTSHIFT_ONBOARDING_QUERY_KEY = ['nightshift.onboarding'] as const;
 

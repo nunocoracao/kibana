@@ -94,8 +94,11 @@ const queryKiInputSchema = lazySchema(() =>
     severity_score: z.number().min(0).max(100).optional(),
     evidence: z.array(z.string().max(2000)).max(5).optional(),
     features: z
-      .array(z.object({ id: z.string().max(255) }))
+      .array(z.union([z.string().min(1).max(255), z.object({ id: z.string().min(1).max(255) })]))
       .max(25)
+      .transform((features) =>
+        features.map((feature) => (typeof feature === 'string' ? { id: feature } : feature))
+      )
       .optional(),
   })
 );
@@ -112,6 +115,7 @@ const knowledgeSchema = lazySchema(() =>
     queryLimit: z.number().int().min(1).max(100).default(50),
     featuresJson: z.string().max(64000).optional(),
     queriesJson: z.string().max(64000).optional(),
+    queries: z.array(queryKiInputSchema).max(25).optional(),
     features: z
       .array(
         identifiedFeatureSchema.and(
@@ -261,7 +265,7 @@ export const explorationTools: ToolDefinitions = {
   },
   knowledge_indicators: {
     description:
-      'Read/write existing-schema feature KIs and non-rule-backed stats query KIs. The first unfiltered index page includes namespaceInventory with deduplicated KI counts and relationshipInvestigationNeeded hints. Use this to prioritize service-only namespaces; counts are stored knowledge, not completeness or observability scores. index returns the canonical logical id to use for KI reads, featureIds and causalFeatureIds; storage UUIDs are not agent references. It otherwise returns only identity/title/type/confidence/namespace: page with offset/limit (AT MOST 100 per page; follow hasMore/nextOffset) and optional sourceId/query (query matches any whitespace/pipe/comma-separated keyword). index also returns compact queryRecords (reusable source-scoped query KIs), paged independently with queryOffset/queryLimit. read fetches selected feature/query IDs (max 25) across enabled sources or one sourceId, details later. read defaults to compact semantic details and bounded exact evidence; keep includeProvenance=false for ordinary monitoring/investigation; includeProvenance=true requests the stored extraction history. Follow hasMore/nextOffset for detail pages. upsert batches schema-valid features for one enabled source (featuresJson accepts up to 100 and is split into batches of 25 server-side; features accepts 25). queriesJson accepts up to 25 query KIs with stable id/title/description/esql.query and optional evidence/features; only stats queries are accepted, so extraction never creates alert rules. Reuse IDs; prefer evidence_refs from source_esql rowRefs/entityGaps/patterns with evidence=[] so the server copies exact evidence; only observed document IDs. The tool checks schema and ID/type collisions, not the quality or interpretation of evidence. Writes are merged and provenance is recorded. Each observing source needs its own service entity anchor for downstream native-rule associations: an entity saved on logs is not a source-local entity on metrics/traces. Reuse logical IDs across sources, deduplicate within each source. needsDetails means evidence was not delivered: narrow to one namespace with maxRows=5 before judging completeness. Write dependencies with properties.source/target as actual service names and properties.source_namespace/target_namespace, not top-level fields or KI IDs. Use evidence_refs for exact observed log rows. Infrastructure KIs use type=infrastructure and subtype=kubernetes_cluster/kubernetes_namespace/kubernetes_node/kubernetes_workload/kubernetes_pod/host/container/cloud_resource/network_endpoint. Properties are extensible; use name plus actual cluster/node/pod/workload/host_name/host_id/hostname/ip/ips/container_id/image/provider/region/zone/service_name/service_namespace as observed. Reuse identities and link only services observed on that resource. Also persist observed technology, infrastructure and schema KIs, including log formats (schema/log_format with properties.format and properties.services naming every emitting service that uses it) and recurring operational patterns as schema/log_pattern. Never infer languages from log formatting alone. Omit sourceId for an index/read across all enabled sources. Upsert requires one exact sourceId; send one write call at a time per source and retry a source-write-in-progress error only after its current write finishes. Prefer featuresJson for upsert: a compact JSON-encoded array using only needed property keys, avoiding fixed-schema placeholder fields. The same KI schema and 25-item limit apply; features remains supported. Valid evidence_refs are authoritative: the server copies real evidence, so omit redundant literal evidence. Upsert responses echo sourceId and non-blocking warnings for evidence references from another source or unknown handles; inspect them and correct ownership rather than ignoring a successful-but-misattributed batch. Never combine metric and trace contracts under one sourceId. Save useful discoveries immediately in small coherent batches as evidence is established; do not hold all KIs until the end of exploration. Each dependency has one actual caller and one actual target, never a pipe-joined endpoint family. This tool does not generate alert rules.',
+      'Read/write existing-schema feature KIs and non-rule-backed stats query KIs. The first unfiltered index page includes namespaceInventory with deduplicated KI counts and relationshipInvestigationNeeded hints. Use this to prioritize service-only namespaces; counts are stored knowledge, not completeness or observability scores. index returns the canonical logical id to use for KI reads, featureIds and causalFeatureIds; storage UUIDs are not agent references. It otherwise returns only identity/title/type/confidence/namespace: page with offset/limit (AT MOST 100 per page; follow hasMore/nextOffset) and optional sourceId/query (query matches any whitespace/pipe/comma-separated keyword). index also returns compact queryRecords (reusable source-scoped query KIs), paged independently with queryOffset/queryLimit. read fetches selected feature/query IDs (max 25) across enabled sources or one sourceId, details later. read defaults to compact semantic details and bounded exact evidence; keep includeProvenance=false for ordinary monitoring/investigation; includeProvenance=true requests the stored extraction history. Follow hasMore/nextOffset for detail pages. upsert batches schema-valid features for one enabled source (featuresJson accepts up to 100 and is split into batches of 25 server-side; features accepts 25). Prefer queries: a structured array of up to 25 query KIs with id/title/description/esql.query and optional evidence/features (logical KI ID strings). esql.query may be a validated source-scoped pipeline; the server adds the exact configured FROM view. Complete queries must use detection_sources.viewName. Do not double-escape ES|QL quotes. queriesJson remains a JSON-string alternative accepting feature ID strings or {id} objects; only stats queries are accepted, so extraction never creates alert rules. Reuse IDs; prefer evidence_refs from source_esql rowRefs/entityGaps/patterns with evidence=[] so the server copies exact evidence; only observed document IDs. The tool checks schema and ID/type collisions, not the quality or interpretation of evidence. Writes are merged and provenance is recorded. Each observing source needs its own service entity anchor for downstream native-rule associations: an entity saved on logs is not a source-local entity on metrics/traces. Reuse logical IDs across sources, deduplicate within each source. needsDetails means evidence was not delivered: narrow to one namespace with maxRows=5 before judging completeness. Write dependencies with properties.source/target as actual service names and properties.source_namespace/target_namespace, not top-level fields or KI IDs. Use evidence_refs for exact observed log rows. Infrastructure KIs use type=infrastructure and subtype=kubernetes_cluster/kubernetes_namespace/kubernetes_node/kubernetes_workload/kubernetes_pod/host/container/cloud_resource/network_endpoint. Properties are extensible; use name plus actual cluster/node/pod/workload/host_name/host_id/hostname/ip/ips/container_id/image/provider/region/zone/service_name/service_namespace as observed. Reuse identities and link only services observed on that resource. Also persist observed technology, infrastructure and schema KIs, including log formats (schema/log_format with properties.format and properties.services naming every emitting service that uses it) and recurring operational patterns as schema/log_pattern. Never infer languages from log formatting alone. Omit sourceId for an index/read across all enabled sources. Upsert requires one exact sourceId; send one write call at a time per source and retry a source-write-in-progress error only after its current write finishes. Prefer featuresJson for upsert: a compact JSON-encoded array using only needed property keys, avoiding fixed-schema placeholder fields. The same KI schema and 25-item limit apply; features remains supported. Valid evidence_refs are authoritative: the server copies real evidence, so omit redundant literal evidence. Upsert responses echo sourceId and non-blocking warnings for evidence references from another source or unknown handles; inspect them and correct ownership rather than ignoring a successful-but-misattributed batch. Never combine metric and trace contracts under one sourceId. Save useful discoveries immediately in small coherent batches as evidence is established; do not hold all KIs until the end of exploration. Each dependency has one actual caller and one actual target, never a pipe-joined endpoint family. This tool does not generate alert rules.',
     schema: {
       type: 'object',
       properties: {
@@ -276,6 +280,27 @@ export const explorationTools: ToolDefinitions = {
         includeProvenance: { type: 'boolean' },
         featuresJson: boundedString(64000),
         queriesJson: boundedString(64000),
+        queries: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: boundedString(255),
+              title: boundedString(255),
+              description: boundedString(2000),
+              esql: {
+                type: 'object',
+                properties: { query: boundedString(10000) },
+                required: ['query'],
+              },
+              features: { type: 'array', items: boundedString(255) },
+              evidence: { type: 'array', items: boundedString(2000) },
+              severity_score: { type: 'number' },
+            },
+            required: ['id', 'title', 'description', 'esql'],
+          },
+        },
+
         features: {
           type: 'array',
           items: {
@@ -1261,6 +1286,7 @@ export class ExplorationToolSession {
           slug: source.slug,
           title: source.title,
           type: source.type,
+          viewName: source.view_name,
           revision: source.esql_updated_at,
           lastChecked: this.checkpoints[`${source.id}:novelty`]?.checkedAt ?? null,
         })),
@@ -2445,8 +2471,9 @@ export class ExplorationToolSession {
     if (!args.sourceId && sourceIds.length === 1) args.sourceId = sourceIds[0];
     if (!args.sourceId)
       throw new Error('Upsert requires sourceId when several sources are enabled');
-    let queryInputs: Array<z.infer<typeof queryKiInputSchema>> = [];
+    let queryInputs: Array<z.infer<typeof queryKiInputSchema>> = args.queries ?? [];
     if (args.queriesJson?.trim()) {
+      if (queryInputs.length) throw new Error('Use queries or queriesJson, not both.');
       try {
         queryInputs = z.array(queryKiInputSchema).max(25).parse(JSON.parse(args.queriesJson));
       } catch (error) {
@@ -2458,7 +2485,7 @@ export class ExplorationToolSession {
       }
     }
     if (!args.features?.length && !queryInputs.length)
-      throw new Error('Upsert requires features or queriesJson');
+      throw new Error('Upsert requires features, queries or queriesJson');
     const source = this.source(args.sourceId);
     const existingQueries = queryInputs.length
       ? await client.bulkGetQueriesByIds(
@@ -2468,19 +2495,32 @@ export class ExplorationToolSession {
         )
       : [];
     const validatedQueries: StreamQuery[] = queryInputs.map((input) => {
+      const supplied = input.esql.query.trim();
+      const pipeline =
+        /^(?:\||WHERE\b|EVAL\b|STATS\b|KEEP\b|DISSECT\b|GROK\b|RENAME\b|DROP\b)/i.test(supplied);
+      const query = pipeline
+        ? `FROM ${source.view_name} | ${supplied.replace(/^\|\s*/, '')}`
+        : supplied;
       validateEsqlQueryForSourceOrThrow({
-        esqlQuery: input.esql.query,
+        esqlQuery: query,
         viewName: source.view_name,
       });
-      const type = deriveQueryType(input.esql.query);
+      const type = deriveQueryType(query);
       if (type !== 'stats')
         throw new Error(
           'Knowledge extraction query KIs must be stats queries; match queries can create managed rules.'
         );
-      const prior = existingQueries.find(({ query }) => query.id === input.id);
+      const prior = existingQueries.find(
+        ({ query: existingQuery }) => existingQuery.id === input.id
+      );
+      if (prior?.rule_backed)
+        throw new Error(
+          `Query ${input.id} belongs to a native rule. Use monitoring_rules to maintain that rule, or choose a separate query KI ID.`
+        );
       const owned = !prior || prior.query.evidence?.includes(PROBLEM_AGENT_KNOWLEDGE_MARKER);
       return {
         ...input,
+        esql: { query },
         type,
         evidence: [
           ...(input.evidence ?? []).filter((value) => value !== PROBLEM_AGENT_KNOWLEDGE_MARKER),
@@ -2745,8 +2785,16 @@ export class ExplorationToolSession {
         this.needsServiceEntities = false;
     }
     const scopedClient = await this.clients.getKnowledgeIndicatorClient(source);
-    for (const query of validatedQueries) await scopedClient.upsertQuery(source.id, query);
-    this.run.written += validatedQueries.length;
+    if (validatedQueries.length) {
+      // Standalone measurements must not reconcile unrelated agent-owned metric rules.
+      const result = await scopedClient.bulk(
+        source.id,
+        validatedQueries.map((query) => ({ index: { query: { ...query, rule_backed: false } } }))
+      );
+      if (result.applied !== validatedQueries.length)
+        throw new Error('Not all query KIs were persisted');
+      this.run.written += result.applied;
+    }
     const followUp = followUpForSavedFeatures(validated, existing, [
       ...(this.observedServices.get(args.sourceId) ?? []),
     ]);

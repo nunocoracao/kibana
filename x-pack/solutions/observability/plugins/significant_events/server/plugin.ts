@@ -451,14 +451,14 @@ export class SignificantEventsPlugin
 
     plugins.taskManager.registerTaskDefinitions({
       'nightshiftProblemAgent:run': {
-        title: 'Nightshift Problem Agent',
-        description: 'Runs the unified problem agent with the scheduling user credentials.',
+        title: 'Nightshift Detection Agent',
+        description: 'Runs the unified detection agent with the scheduling user credentials.',
         timeout: '22m',
         createTaskRunner: ({ taskInstance, fakeRequest, signal }) => ({
           run: async () => {
             if (!fakeRequest)
               throw new Error(
-                'Problem agent schedule has no credentials; save the schedule again.'
+                'Detection agent schedule has no credentials; save the schedule again.'
               );
             const agent = this.server?.problemAgent;
             if (

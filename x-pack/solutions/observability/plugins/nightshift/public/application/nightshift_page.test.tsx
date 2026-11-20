@@ -21,6 +21,9 @@ import { useSignificantEventsAvailability } from '../data/availability/use_signi
 import { useOnboardingVisibility } from '../pages/landing/onboarding/use_onboarding_visibility';
 import type { NightshiftAppHeaderProps } from '../components/app_header';
 
+jest.mock('../data/detection_agent/use_sync_detection_agent_outputs', () => ({
+  useSyncDetectionAgentOutputs: jest.fn(),
+}));
 jest.mock('@kbn/observability-shared-plugin/public', () => ({ useBreadcrumbs: jest.fn() }));
 jest.mock('@elastic/eui', () => ({
   ...jest.requireActual('@elastic/eui'),

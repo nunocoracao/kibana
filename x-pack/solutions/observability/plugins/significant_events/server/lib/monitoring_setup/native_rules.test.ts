@@ -105,3 +105,33 @@ it.each([false, true])(
     }
   }
 );
+
+it.each([
+  'STATS bucket=BUCKET(@timestamp,1 minute), metric_value=COUNT(*) BY bucket, service.name',
+  'STATS metric_value=COUNT(*) BY service.name',
+])('returns an actionable repair for a malformed metric baseline: %s', async (pipeline) => {
+  const query = jest.fn();
+  const session = new MonitoringToolSession(
+    {} as SignificantEventsServer,
+    {
+      getSignificantEventsAlertingContext: async () => ({}),
+      getKnowledgeIndicatorClient: async () => ({}),
+      streamDataEsClient: { esql: { query } },
+    } as unknown as RouteHandlerScopedClients,
+    httpServerMock.createKibanaRequest(),
+    { id: 'run', written: 0 } as ExplorationRun,
+    [{ id: 'source', enabled: true, view_name: '$.source' } as NightshiftSource],
+    {},
+    new AbortController().signal
+  );
+  await expect(
+    session.execute('monitoring_rules', {
+      action: 'baseline',
+      sourceId: 'source',
+      mode: 'metric',
+      pipeline,
+      reason: 'Evaluate observed failures',
+    })
+  ).rejects.toThrow('BY bucket=BUCKET(@timestamp, 1 minute)');
+  expect(query).not.toHaveBeenCalled();
+});

@@ -39,6 +39,7 @@ import { countMonitoringRules, resetMonitoringRules } from '../monitoring_setup/
 import prompt from './problem_prompt.text';
 import { problemTools, ProblemToolSession } from './problem_tools';
 import { mergeSamplingAttempts, summarizeSamplingAttempts } from './sampling_strategy';
+import { collectModelResponse } from './model_response';
 import {
   EVENT_DISCOVERY_RUN_TYPE,
   EVENT_DISCOVERY_STATE_TYPE,
@@ -508,7 +509,7 @@ export class KnowledgeExplorationService {
 
   async anatomy(request: KibanaRequest) {
     return {
-      name: 'Nightshift Problem Agent',
+      name: 'Nightshift Detection Agent',
       ...(await this.model(request)),
       systemPrompt: this.systemPrompt,
       tools: Object.entries(this.tools).map(([name, definition]) => ({ name, ...definition })),
@@ -901,7 +902,7 @@ export class KnowledgeExplorationService {
             now: run.startedAt,
             limits,
             instruction:
-              'Find current problems or verify recovery of existing problems. Use knowledge and native monitoring tools only when useful. Begin with source and existing-event inventories, then investigate current evidence. Call finish_exploration with honest coverage and unfinished work.',
+              'Find current problems or verify recovery of existing problems. Read existing native knowledge/query and monitoring inventories, persist newly confirmed system knowledge and reusable measurements, and create or improve useful native monitoring coverage. Begin with source and existing-event inventories, then investigate current evidence. Call finish_exploration with honest coverage and unfinished work.',
           }),
         },
       ];
@@ -933,31 +934,35 @@ export class KnowledgeExplorationService {
         const started = Date.now();
         const requestModel = (modelSignal: AbortSignal) =>
           awaitModel(
-            clients.inferenceClient.chatComplete({
-              connectorId: run.connectorId,
-              system: this.systemPrompt,
-              messages,
-              tools: this.tools,
-              reasoning: { enabled: true, effort: 'low' },
-              temperature: 1,
-              stream: false,
-              abortSignal: modelSignal,
-              timeout: MAX_MODEL_REQUEST_MS,
-              maxRetries: 0,
-              cacheControl: { type: 'ephemeral', ttl: '1h' },
-              sessionId: `${this.agent}-exploration:${request.spaceId}`,
-              metadata: {
-                connectorTelemetry: {
-                  pluginId: 'nightshift_ki_extraction',
-                  aggregateBy: 'nightshift',
-                  interactionId: run.id,
-                  spaceId: request.spaceId,
+            collectModelResponse(
+              clients.inferenceClient.chatComplete({
+                connectorId: run.connectorId,
+                system: this.systemPrompt,
+                messages,
+                tools: this.tools,
+                reasoning: { enabled: true, effort: 'low' },
+                temperature: 1,
+                stream: true,
+                abortSignal: modelSignal,
+                timeout: MAX_MODEL_REQUEST_MS,
+                maxRetries: 0,
+                cacheControl: { type: 'ephemeral', ttl: '1h' },
+                sessionId: `${this.agent}-exploration:${request.spaceId}`,
+                metadata: {
+                  connectorTelemetry: {
+                    pluginId: 'nightshift_ki_extraction',
+                    aggregateBy: 'nightshift',
+                    interactionId: run.id,
+                    spaceId: request.spaceId,
+                  },
                 },
-              },
-            }),
+              }),
+              modelSignal
+            ),
             modelSignal
           );
         let response: Awaited<ReturnType<typeof requestModel>>;
+        const requestWarnings: string[] = [];
         for (let attempt = 1; ; attempt++) {
           const modelDeadline = timeoutSignal(MAX_MODEL_REQUEST_MS);
           try {
@@ -972,9 +977,12 @@ export class KnowledgeExplorationService {
             if (!timedOut || attempt >= MAX_MODEL_ATTEMPTS) throw error;
             // The abandoned request may still be billed without reported usage.
             run.costEstimateComplete = false;
-            step.output = `Model request exceeded ${
-              MAX_MODEL_REQUEST_MS / 1000
-            } seconds; retried (attempt ${attempt + 1}).`;
+            requestWarnings.push(
+              `Model request exceeded ${MAX_MODEL_REQUEST_MS / 1000} seconds; retried (attempt ${
+                attempt + 1
+              }). The timed-out request returned no usage; its cost is unknown.`
+            );
+            step.output = requestWarnings.join('\n\n');
             await store.saveRun(run);
           } finally {
             modelDeadline.dispose();
@@ -985,8 +993,11 @@ export class KnowledgeExplorationService {
         if (!response.tokens || cost === undefined) run.costEstimateComplete = false;
         Object.assign(step, {
           durationMs: Date.now() - started,
-          status: 'completed',
-          output: response.content.slice(0, 12000),
+          status: response.validationError ? 'partial' : 'completed',
+          output: [
+            ...requestWarnings,
+            response.validationError ?? response.content.slice(0, 12000),
+          ].join('\n\n'),
           tokens,
           estimatedCostUsd: cost,
         });
@@ -1008,6 +1019,14 @@ export class KnowledgeExplorationService {
           controller.signal.throwIfAborted();
         }
         if (response.model) run.model = response.model;
+        if (response.validationError) {
+          messages.push({
+            role: MessageRole.User,
+            content: `Your last tool-call batch was rejected before any tools executed. Correct the arguments against the tool schema and continue: ${response.validationError}`,
+          });
+          await store.saveRun(run);
+          continue;
+        }
         messages.push({
           role: MessageRole.Assistant,
           content: response.content || null,

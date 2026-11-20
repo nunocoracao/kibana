@@ -30,8 +30,8 @@ interface SourceActionsColumnProps {
   /** Run expected but not reported yet: a schedule in flight or a just-created or edited source. */
   isOnboardPending: boolean;
   onboardTooltip: string;
-  onOnboard: (sourceId: string) => void;
-  onStopOnboarding: (sourceId: string) => void | Promise<void>;
+  onOnboard?: (sourceId: string) => void;
+  onStopOnboarding?: (sourceId: string) => void | Promise<void>;
   /** Left out for users who cannot change sources, which hides the delete button. */
   onDelete?: (source: NightshiftSource) => void;
 }
@@ -65,7 +65,7 @@ export function SourceActionsColumn({
   const handleStopOnboarding = async () => {
     setIsStopPending(true);
     try {
-      await onStopOnboarding(source.id);
+      await onStopOnboarding?.(source.id);
     } catch {
       // Status will not move, so the button has to accept another attempt.
       setIsStopPending(false);
@@ -79,41 +79,45 @@ export function SourceActionsColumn({
       responsive={false}
       wrap={false}
     >
-      <EuiFlexItem grow={false}>
-        {isRunActive || isRunStarting ? (
-          <EuiToolTip
-            content={
-              isRunStarting ? ONBOARDING_STARTING_TOOLTIP : STOP_SOURCE_ONBOARDING_BUTTON_LABEL
-            }
-            disableScreenReaderOutput
-          >
-            <EuiButtonIcon
-              data-test-subj="significantEventsAppSourcesTableStopButton"
-              iconType="stop"
-              aria-label={STOP_SOURCE_ONBOARDING_BUTTON_LABEL}
-              isDisabled={
-                isRunStarting ||
-                isStopPending ||
-                onboardingStatus === SignificantEventsWorkflowStatus.BeingCanceled
+      {onOnboard && (
+        <EuiFlexItem grow={false}>
+          {isRunActive || isRunStarting ? (
+            <EuiToolTip
+              content={
+                isRunStarting ? ONBOARDING_STARTING_TOOLTIP : STOP_SOURCE_ONBOARDING_BUTTON_LABEL
               }
-              onClick={() => {
-                void handleStopOnboarding();
-              }}
-            />
-          </EuiToolTip>
-        ) : (
-          <EuiToolTip content={source.enabled ? onboardTooltip : ENABLE_SOURCE_TO_ONBOARD_TOOLTIP}>
-            <EuiButtonIcon
-              data-test-subj="significantEventsAppSourcesTableOnboardButton"
-              iconType="radar"
-              aria-label={RUN_SOURCE_ONBOARDING_BUTTON_LABEL}
-              // The onboarding route rejects disabled sources.
-              isDisabled={!source.enabled || blocksActivity}
-              onClick={() => onOnboard(source.id)}
-            />
-          </EuiToolTip>
-        )}
-      </EuiFlexItem>
+              disableScreenReaderOutput
+            >
+              <EuiButtonIcon
+                data-test-subj="significantEventsAppSourcesTableStopButton"
+                iconType="stop"
+                aria-label={STOP_SOURCE_ONBOARDING_BUTTON_LABEL}
+                isDisabled={
+                  isRunStarting ||
+                  isStopPending ||
+                  onboardingStatus === SignificantEventsWorkflowStatus.BeingCanceled
+                }
+                onClick={() => {
+                  void handleStopOnboarding();
+                }}
+              />
+            </EuiToolTip>
+          ) : (
+            <EuiToolTip
+              content={source.enabled ? onboardTooltip : ENABLE_SOURCE_TO_ONBOARD_TOOLTIP}
+            >
+              <EuiButtonIcon
+                data-test-subj="significantEventsAppSourcesTableOnboardButton"
+                iconType="radar"
+                aria-label={RUN_SOURCE_ONBOARDING_BUTTON_LABEL}
+                // The onboarding route rejects disabled sources.
+                isDisabled={!source.enabled || blocksActivity}
+                onClick={() => onOnboard?.(source.id)}
+              />
+            </EuiToolTip>
+          )}
+        </EuiFlexItem>
+      )}
       {onDelete && (
         <EuiFlexItem grow={false}>
           <EuiToolTip content={DELETE_SOURCE_ACTION_DESCRIPTION}>

@@ -40,7 +40,7 @@ const SECTION_DESCRIPTION = i18n.translate(
   'xpack.nightshift.settings.maintenance.spaceDescription',
   {
     defaultMessage:
-      'Pauses the Problem Agent and detection activity in this space. Existing data persists. Model, frequency, run history and reset controls are in Agent Explorer.',
+      'Pauses the Detection Agent and detection activity in this space. Existing data persists. Model, frequency, run history and reset controls are in Agent Explorer.',
   }
 );
 
@@ -251,11 +251,11 @@ export function MaintenanceSection({ canManage }: { canManage: boolean }) {
                 {paused
                   ? i18n.translate('xpack.nightshift.settings.maintenance.spaceResumeConfirmBody', {
                       defaultMessage:
-                        'This allows manual and scheduled Problem Agent runs again and re-enables alerting rules that Pause disabled in this space. Cancelled runs are not restarted.',
+                        'This allows manual and scheduled Detection Agent runs again and re-enables alerting rules that Pause disabled in this space. Cancelled runs are not restarted.',
                     })
                   : i18n.translate('xpack.nightshift.settings.maintenance.spacePauseConfirmBody', {
                       defaultMessage:
-                        'This stops the current Problem Agent run and blocks new runs in this space. It also pauses legacy detection activity and its alerting rules. No data is deleted.',
+                        'This stops the current Detection Agent run and blocks new runs in this space. It also pauses legacy detection activity and its alerting rules. No data is deleted.',
                     })}
               </p>
             </EuiText>

@@ -7,6 +7,7 @@
 
 import type { TimeRange } from '@kbn/es-query';
 import { type QueryFunctionContext, useQuery } from '@kbn/react-query';
+import { QUERY_OCCURRENCE_STATS_QUERY_KEY } from '../query_keys';
 import { getQueryBucketParams, toTimeState } from './get_query_bucket_params';
 import { useKibana } from '../../hooks/use_kibana';
 import { useTimefilter } from '../../hooks/use_timefilter';
@@ -84,7 +85,7 @@ export const useFetchQueryOccurrenceStats = (
 
   return useQuery<SignificantEventsStatsFetchResult, Error>({
     queryKey: [
-      'queryOccurrenceStats',
+      ...QUERY_OCCURRENCE_STATS_QUERY_KEY,
       name,
       ...(timeRange ? [timeRange.from, timeRange.to] : [timeState.start, timeState.end]),
       query,

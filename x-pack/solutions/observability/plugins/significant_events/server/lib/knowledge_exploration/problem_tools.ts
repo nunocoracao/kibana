@@ -75,6 +75,7 @@ export class ProblemToolSession {
   private reviewed = new Set<string>();
   private prepared?: Promise<void>;
   private inventoryComplete = true;
+  private monitoringAssessed = false;
   finished = false;
 
   constructor(
@@ -152,6 +153,24 @@ export class ProblemToolSession {
     this.signal.throwIfAborted();
     await this.prepare();
     if (name === 'events') return this.events(parameters);
+    if (name === 'source_esql') {
+      const result = await this.reads.execute(name, parameters);
+      if (Array.isArray(result.results)) {
+        for (const read of result.results) {
+          if (
+            read &&
+            typeof read === 'object' &&
+            'sourceId' in read &&
+            typeof read.sourceId === 'string' &&
+            !('error' in read && read.error)
+          ) {
+            this.reads.examined.add(read.sourceId);
+          }
+        }
+      }
+      return result;
+    }
+
     if (name === 'finish_exploration') {
       const args = z
         .object({
@@ -170,6 +189,26 @@ export class ProblemToolSession {
           inventoryComplete: this.inventoryComplete,
         };
       }
+      const limits = this.run.limits;
+      const budgetRemaining =
+        !limits ||
+        (Date.now() - Date.parse(this.run.startedAt) < (limits.maxDurationMinutes - 1) * 60000 &&
+          this.run.tokens.total < limits.maxCumulativeTokens &&
+          this.run.estimatedCostUsd < limits.maxEstimatedCostUsd);
+      if (
+        !this.monitoringAssessed &&
+        this.reads.examined.size > 0 &&
+        this.initialActive.size === 0 &&
+        !this.run.discovery?.active &&
+        !this.reads.blocked &&
+        budgetRemaining &&
+        this.run.costEstimateComplete !== false
+      ) {
+        return {
+          error:
+            'Current telemetry was inspected, but useful ongoing monitoring was never evaluated. Before finishing an otherwise healthy run, baseline/validate a source-local measurement or inspect existing external coverage. Save a useful reusable query and justified native rule, or report the concrete validation/data/coverage reason for leaving them unchanged. There is no rule-count target and no need to re-query silent historical namespaces.',
+        };
+      }
       this.run.outcome = args.outcome;
       this.run.summary = args.summary;
       this.run.coverageComplete =
@@ -181,8 +220,30 @@ export class ProblemToolSession {
       this.finished = true;
       return { finished: true, ...args, uncheckedEventIds: unchecked };
     }
-    if (name === 'monitoring_rules' || name === 'monitoring_inventory')
+    if (name === 'monitoring_rules') {
+      this.monitoringAssessed = true;
       return this.monitoring.execute(name, parameters);
+    }
+    if (name === 'monitoring_inventory') {
+      const result = await this.monitoring.execute(name, parameters);
+      if (
+        'includeOtherRules' in parameters &&
+        parameters.includeOtherRules === true &&
+        Array.isArray(result.rules) &&
+        result.rules.length > 0
+      )
+        this.monitoringAssessed = true;
+      return result;
+    }
+    if (
+      name === 'kibana_information' &&
+      'action' in parameters &&
+      parameters.action === 'execute'
+    ) {
+      const result = await this.reads.execute(name, parameters);
+      if (!result.error && !result.failed) this.monitoringAssessed = true;
+      return result;
+    }
     if (name === 'fired_rules' || name === 'rule_change_points')
       return this.discovery.execute(name, parameters);
     return this.reads.execute(name, parameters);

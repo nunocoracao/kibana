@@ -9,6 +9,7 @@ import { useQuery } from '@kbn/react-query';
 import { getNightshiftCapabilities } from '@kbn/nightshift-shared';
 import type { SignificantEventsRepositoryClient } from '@kbn/significant-events-plugin/public';
 import { isComputedFeature, type Feature } from '@kbn/significant-events-schema';
+import { SOURCE_FEATURES_QUERY_KEY } from '../query_keys';
 import { useKibana } from '../../hooks/use_kibana';
 
 const NO_FEATURES: Feature[] = [];
@@ -95,7 +96,7 @@ export const useFetchSourceFeatures = (sourceIds: string[]): SourceFeaturesResul
     SourceFeaturesQueryData,
     Error
   >({
-    queryKey: ['nightshift.sourceFeatures', uniqueSourceIds],
+    queryKey: [...SOURCE_FEATURES_QUERY_KEY, uniqueSourceIds],
     enabled: canShow && uniqueSourceIds.length > 0,
     queryFn: async ({ signal }) =>
       collectSourceFeatures(

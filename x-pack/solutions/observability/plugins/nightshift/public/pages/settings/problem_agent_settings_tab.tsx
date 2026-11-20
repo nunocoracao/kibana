@@ -21,7 +21,7 @@ export const ProblemAgentSettingsTab = () => {
   return (
     <SettingsSection
       title={i18n.translate('xpack.nightshift.settings.problemAgent.title', {
-        defaultMessage: 'Problem Agent',
+        defaultMessage: 'Detection Agent',
       })}
       data-test-subj="nightshiftDetectionProcessSection"
     >

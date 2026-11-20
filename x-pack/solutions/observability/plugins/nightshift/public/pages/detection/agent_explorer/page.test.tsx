@@ -123,8 +123,8 @@ it('keeps Run disabled until an enabled source exists', async () => {
 it('marks totals as incomplete when a provider request has unreported usage', async () => {
   status.costEstimateComplete = false;
   mount();
-  expect(await screen.findByText('Cost estimate incomplete')).toBeInTheDocument();
+  expect(await screen.findByText('Total cost estimate incomplete')).toBeInTheDocument();
   expect(
-    screen.getByText(/displayed total can understate incurred model charges/)
+    screen.getByText(/cumulative total includes runs with missing usage or pricing/)
   ).toBeInTheDocument();
 });

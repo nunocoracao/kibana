@@ -15,13 +15,15 @@ import type { SignificantEventsServer } from '../../types';
 import { ProblemToolSession, PROBLEM_EVENT_PREFIX } from './problem_tools';
 
 const mockEvidenceChecks = jest.fn();
+const mockReadExecute = jest.fn();
+const mockExaminedSources = new Set<string>();
 jest.mock('./tools', () => ({
   ...jest.requireActual('./tools'),
   ExplorationToolSession: jest.fn().mockImplementation(() => ({
     pendingCheckpoints: {},
-    examined: new Set(),
+    examined: mockExaminedSources,
     blocked: false,
-    execute: jest.fn(),
+    execute: mockReadExecute,
     getEvidenceChecks: mockEvidenceChecks,
   })),
 }));
@@ -105,6 +107,8 @@ describe('unified problem lifecycle', () => {
     return event;
   };
   beforeEach(() => {
+    mockExaminedSources.clear();
+    mockReadExecute.mockReset();
     jest.clearAllMocks();
     events = new Map();
     deactivations.mockResolvedValue([]);
@@ -199,5 +203,26 @@ describe('unified problem lifecycle', () => {
     const result = await session().execute('events', { ...input, eventId: prior.event_id });
     expect(result.operatorDismissalHonored).toBe(true);
     expect(events.get(prior.event_id)?.status).toBe('inactive');
+  });
+  it('does not finish a healthy observed estate without evaluating ongoing monitoring', async () => {
+    const current = session();
+    mockReadExecute.mockResolvedValue({
+      results: [{ sourceId: 'source-a', rows: [{ operations: 42 }] }],
+    });
+    await current.execute('source_esql', {
+      sourceIds: ['source-a'],
+      template: 'custom',
+      lookbackMinutes: 3,
+      pipeline: 'STATS operations=COUNT(*)',
+    });
+    const result = await current.execute('finish_exploration', {
+      outcome: 'partial',
+      summary: 'Healthy current operations; monitoring not assessed.',
+      coverageComplete: false,
+      remainingGaps: ['No monitor was evaluated.'],
+    });
+    expect(result).toMatchObject({
+      error: expect.stringContaining('monitoring was never evaluated'),
+    });
   });
 });

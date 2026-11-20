@@ -69,8 +69,8 @@ interface ISourcesTableProps {
   /** Opens the source flyout; it is read-only without `canChangeSources`. */
   onOpenSource: (source: NightshiftSource) => void;
   onToggleSourceEnabled: (source: NightshiftSource, enabled: boolean) => void;
-  onOnboardSource: (sourceId: string) => void;
-  onStopOnboarding: (sourceId: string) => void;
+  onOnboardSource?: (sourceId: string) => void;
+  onStopOnboarding?: (sourceId: string) => void;
   onDeleteSource: (source: NightshiftSource) => void;
 }
 
@@ -163,44 +163,50 @@ export function SourcesTable({
         />
       ),
     },
-    {
-      name: ONBOARDING_STATUS_COLUMN_HEADER,
-      width: '120px',
-      align: 'left',
-      render: (source: NightshiftSource) => {
-        const onboardingResult = onboardingResultMap[source.id];
+    ...(onOnboardSource
+      ? [
+          {
+            name: ONBOARDING_STATUS_COLUMN_HEADER,
+            width: '120px',
+            align: 'left' as const,
+            render: (source: NightshiftSource) => {
+              const onboardingResult = onboardingResultMap[source.id];
 
-        // Generating before its status says so: a just-created or edited source, or a run that is
-        // being scheduled. Keeps the spinner up until the poll reports the real state.
-        if (generatingSourceIds.includes(source.id)) {
-          return <EuiLoadingSpinner size="m" />;
-        }
+              // Generating before its status says so: a just-created or edited source, or a run that is
+              // being scheduled. Keeps the spinner up until the poll reports the real state.
+              if (generatingSourceIds.includes(source.id)) {
+                return <EuiLoadingSpinner size="m" />;
+              }
 
-        if (onboardingResult === undefined) {
-          return '-';
-        }
+              if (onboardingResult === undefined) {
+                return '-';
+              }
 
-        switch (onboardingResult.status) {
-          case SignificantEventsWorkflowStatus.InProgress:
-          case SignificantEventsWorkflowStatus.BeingCanceled:
-            return <EuiLoadingSpinner size="m" />;
-          case SignificantEventsWorkflowStatus.NotStarted:
-          case SignificantEventsWorkflowStatus.Canceled:
-            return '-';
-          case SignificantEventsWorkflowStatus.Completed:
-            return <EuiIcon type="checkCircleFill" color="success" size="m" aria-hidden={true} />;
-          case SignificantEventsWorkflowStatus.Failed:
-            return (
-              <EuiIconTip
-                size="m"
-                type="crossCircle"
-                color="danger"
-                content={onboardingResult.error}
-              />
-            );
-        }
-      },
-    },
+              switch (onboardingResult.status) {
+                case SignificantEventsWorkflowStatus.InProgress:
+                case SignificantEventsWorkflowStatus.BeingCanceled:
+                  return <EuiLoadingSpinner size="m" />;
+                case SignificantEventsWorkflowStatus.NotStarted:
+                case SignificantEventsWorkflowStatus.Canceled:
+                  return '-';
+                case SignificantEventsWorkflowStatus.Completed:
+                  return (
+                    <EuiIcon type="checkCircleFill" color="success" size="m" aria-hidden={true} />
+                  );
+                case SignificantEventsWorkflowStatus.Failed:
+                  return (
+                    <EuiIconTip
+                      size="m"
+                      type="crossCircle"
+                      color="danger"
+                      content={onboardingResult.error}
+                    />
+                  );
+              }
+            },
+          },
+        ]
+      : []),
     {
       name: KNOWLEDGE_INDICATORS_COLUMN_HEADER,
       width: '120px',

@@ -9,11 +9,9 @@ import { getEbtProps } from '@kbn/ebt-click';
 import React, { lazy, Suspense, useState } from 'react';
 import {
   EuiButton,
-  EuiButtonEmpty,
-  EuiInMemoryTable,
+  EuiFieldSearch,
   EuiLoadingSpinner,
   EuiSpacer,
-  EuiSwitch,
   EuiText,
   EuiTitle,
 } from '@elastic/eui';
@@ -25,6 +23,9 @@ import { useFetchSources } from '../../data/sources/use_fetch_sources';
 import { useSourcesApi } from '../../data/sources/use_sources_api';
 import { ConfirmSourceActionModal } from '../../components/entities/source/confirm_source_action_modal';
 
+import { SourcesTable } from './sources_table';
+import { SOURCES_TABLE_SEARCH_PLACEHOLDER } from './translations';
+
 const SourceFlyout = lazy(() =>
   import('../../components/entities/source/source_flyout/source_flyout').then(
     ({ SourceFlyout: Flyout }) => ({ default: Flyout })
@@ -34,7 +35,7 @@ const labels = {
   title: i18n.translate('xpack.nightshift.agentSources.title', { defaultMessage: 'Sources' }),
   description: i18n.translate('xpack.nightshift.agentSources.description', {
     defaultMessage:
-      'Choose the telemetry the Problem Agent can read. Adding a source does not start a run. Use Agent Explorer to run or schedule the agent.',
+      'Choose the telemetry the Detection Agent can read. Adding a source does not start a run. Use Agent Explorer to run or schedule the agent.',
   }),
   create: i18n.translate('xpack.nightshift.agentSources.create', { defaultMessage: 'Add source' }),
   name: i18n.translate('xpack.nightshift.agentSources.name', { defaultMessage: 'Name' }),
@@ -46,12 +47,15 @@ const labels = {
 
 export function AgentSourcesView() {
   const { application } = useKibana().services;
-  const { canManageAndConfigure } = getNightshiftCapabilities(application.capabilities.nightshift);
+  const { canManage, canManageAndConfigure } = getNightshiftCapabilities(
+    application.capabilities.nightshift
+  );
   const { data: sources = [], isLoading, isError, refetch } = useFetchSources();
   const { setSourceEnabled, deleteSource } = useSourcesApi();
   const history = useHistory();
   const { sourceId } = useParams<{ sourceId?: string }>();
   const source = sources.find(({ id }) => id === sourceId);
+  const [searchText, setSearchText] = useState('');
   const [pendingDelete, setPendingDelete] = useState<NightshiftSource>();
   return (
     <>
@@ -66,7 +70,7 @@ export function AgentSourcesView() {
         <EuiButton
           {...getEbtProps({ action: 'agentSources1', element: 'problemAgent' })}
           onClick={() => history.push('/sources/new')}
-          data-test-subj="nightshiftAddAgentSource"
+          data-test-subj="significantEventsAppCreateSourceButton"
         >
           {labels.create}
         </EuiButton>
@@ -81,62 +85,33 @@ export function AgentSourcesView() {
           {labels.retry}
         </EuiButton>
       )}
-      <EuiInMemoryTable<NightshiftSource>
-        tableCaption={labels.title}
-        items={sources}
-        loading={isLoading}
-        pagination
-        sorting
-        search={{ box: { incremental: true } }}
-        columns={[
-          {
-            field: 'title',
-            name: labels.name,
-            sortable: true,
-            render: (title: string, row: NightshiftSource) => (
-              <EuiButtonEmpty
-                {...getEbtProps({ action: 'agentSources3', element: 'problemAgent' })}
-                flush="left"
-                onClick={() => history.push(`/sources/${row.id}`)}
-                data-test-subj="nightshiftOpenAgentSource"
-              >
-                {title}
-              </EuiButtonEmpty>
-            ),
-          },
-          { field: 'esql', name: labels.query, truncateText: true },
-          {
-            field: 'enabled',
-            name: labels.enabled,
-            render: (enabled: boolean, row: NightshiftSource) => (
-              <EuiSwitch
-                id={`agent-source-enabled-${row.id}`}
-                label={labels.enabled}
-                showLabel={false}
-                checked={enabled}
-                disabled={!canManageAndConfigure || setSourceEnabled.isLoading}
-                onChange={(event) =>
-                  setSourceEnabled.mutate({ sourceId: row.id, enabled: event.target.checked })
-                }
-              />
-            ),
-          },
-          {
-            name: labels.remove,
-            render: (row: NightshiftSource) =>
-              canManageAndConfigure && (
-                <EuiButtonEmpty
-                  {...getEbtProps({ action: 'agentSources4', element: 'problemAgent' })}
-                  color="danger"
-                  onClick={() => setPendingDelete(row)}
-                  data-test-subj="nightshiftDeleteAgentSource"
-                >
-                  {labels.remove}
-                </EuiButtonEmpty>
-              ),
-          },
-        ]}
+      <EuiFieldSearch
+        placeholder={SOURCES_TABLE_SEARCH_PLACEHOLDER}
+        aria-label={SOURCES_TABLE_SEARCH_PLACEHOLDER}
+        value={searchText}
+        onChange={(event) => setSearchText(event.target.value)}
+        data-test-subj="significantEventsAppSourcesSearch"
       />
+      <EuiSpacer />
+      {isLoading ? (
+        <EuiLoadingSpinner />
+      ) : (
+        <SourcesTable
+          sources={sources}
+          onboardingResultMap={{}}
+          searchText={searchText}
+          canManage={canManage}
+          canChangeSources={canManageAndConfigure}
+          pendingEnabledSourceId={
+            setSourceEnabled.isLoading ? setSourceEnabled.variables?.sourceId : undefined
+          }
+          onOpenSource={(row) => history.push(`/sources/${row.id}`)}
+          onToggleSourceEnabled={(row, enabled) =>
+            setSourceEnabled.mutate({ sourceId: row.id, enabled })
+          }
+          onDeleteSource={setPendingDelete}
+        />
+      )}
       {((sourceId === 'new' && canManageAndConfigure) || source) && (
         <Suspense fallback={<EuiLoadingSpinner />}>
           <SourceFlyout
