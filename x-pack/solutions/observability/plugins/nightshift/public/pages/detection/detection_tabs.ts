@@ -38,4 +38,4 @@ export const isDeveloperModeTab = (id: DetectionTabId): boolean =>
   DEVELOPER_MODE_TAB_IDS.includes(id);
 
 export const getVisibleDetectionTabs = (isDeveloperMode: boolean): DetectionTabId[] =>
-  DETECTION_TAB_IDS.filter((id) => isDeveloperMode || !isDeveloperModeTab(id));
+  DETECTION_TAB_IDS.filter((id) => id !== 'agent' && (isDeveloperMode || !isDeveloperModeTab(id)));

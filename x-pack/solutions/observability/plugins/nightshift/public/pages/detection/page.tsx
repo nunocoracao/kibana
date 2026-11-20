@@ -218,26 +218,28 @@ export const DetectionPage = ({
           `,
         }}
       >
-        <EuiTabs size="m">
-          {getVisibleDetectionTabs(isDeveloperMode)
-            .filter((id) => view.type === 'workspace' || id === 'agent')
-            .map((id) => (
-              <EuiTab
-                key={id}
-                isSelected={tab === id}
-                {...reactRouterNavigate(history, `/detections/${id}${tabSearch}`)}
-                data-test-subj={`nightshiftDetectionTab-${id}`}
-                {...getEbtProps({
-                  action: NIGHTSHIFT_EBT_ACTIONS.VIEW_DETECTION_TAB,
-                  element: NIGHTSHIFT_EBT_ELEMENTS.DETECTION_WORKSPACE_TABS,
-                  detail: id,
-                })}
-              >
-                {DETECTION_TAB_LABELS[id]}
-              </EuiTab>
-            ))}
-        </EuiTabs>
-        <EuiSpacer size="m" />
+        {view.type === 'workspace' && (
+          <>
+            <EuiTabs size="m">
+              {getVisibleDetectionTabs(isDeveloperMode).map((id) => (
+                <EuiTab
+                  key={id}
+                  isSelected={tab === id}
+                  {...reactRouterNavigate(history, `/detections/${id}${tabSearch}`)}
+                  data-test-subj={`nightshiftDetectionTab-${id}`}
+                  {...getEbtProps({
+                    action: NIGHTSHIFT_EBT_ACTIONS.VIEW_DETECTION_TAB,
+                    element: NIGHTSHIFT_EBT_ELEMENTS.DETECTION_WORKSPACE_TABS,
+                    detail: id,
+                  })}
+                >
+                  {DETECTION_TAB_LABELS[id]}
+                </EuiTab>
+              ))}
+            </EuiTabs>
+            <EuiSpacer size="m" />
+          </>
+        )}
         {tab === 'agent' ? (
           <Suspense fallback={<EuiLoadingSpinner />}>
             <AgentExplorer />
