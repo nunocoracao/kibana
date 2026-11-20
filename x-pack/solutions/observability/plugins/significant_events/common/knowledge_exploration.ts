@@ -70,7 +70,18 @@ export interface MonitoringCoverage {
   evidence: string;
 }
 
+export interface DetectionLearningFocus {
+  mode: ExplorationLimits['mode'];
+  sources: Array<{
+    sourceId: string;
+    focus: 'learn_system' | 'operate_and_improve';
+    missingFoundations: string[];
+  }>;
+  note: string;
+}
+
 export interface ExplorationRun {
+  learningFocus?: DetectionLearningFocus;
   agent?: ExplorerAgent;
   coverage?: MonitoringCoverage[];
   discovery?: {
@@ -135,7 +146,19 @@ export interface ExplorationSamplingAttempt {
   }>;
 }
 
+export interface DetectionRunFeedback {
+  runId: string;
+  status: ExplorationRun['status'];
+  summary: string;
+  written: number;
+  durationMs: number;
+  estimatedCostUsd: number;
+  sourceReadCalls: number;
+  toolFailures: Array<{ tool: string; input: string; error: string }>;
+}
+
 export interface ExplorationState {
+  recentRunFeedback?: DetectionRunFeedback[];
   samplingAttempts?: ExplorationSamplingAttempt[];
   hourlyEnabled?: boolean;
   intervalMinutes?: number;

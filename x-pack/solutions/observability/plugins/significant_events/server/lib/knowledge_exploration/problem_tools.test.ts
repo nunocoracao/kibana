@@ -224,5 +224,17 @@ describe('unified problem lifecycle', () => {
     expect(result).toMatchObject({
       error: expect.stringContaining('monitoring was never evaluated'),
     });
+    await current.execute('finish_exploration', {
+      outcome: 'partial',
+      summary: 'Observed outcomes are healthy; monitoring has an explicit data blocker.',
+      coverageComplete: false,
+      remainingGaps: [],
+      monitoringBlocker:
+        'No parsed operation-failure field was validated; broad keyword counts match benign JSON keys.',
+    });
+    expect(current.finished).toBe(true);
+    expect(run.remainingGaps).toContain(
+      'Monitoring: No parsed operation-failure field was validated; broad keyword counts match benign JSON keys.'
+    );
   });
 });

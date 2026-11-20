@@ -41,6 +41,11 @@ import { problemTools, ProblemToolSession } from './problem_tools';
 import { mergeSamplingAttempts, summarizeSamplingAttempts } from './sampling_strategy';
 import { collectModelResponse } from './model_response';
 import {
+  carryForwardDetectionLearning,
+  loadDetectionLearnings,
+  loadDetectionLearningFocus,
+} from './learning_context';
+import {
   EVENT_DISCOVERY_RUN_TYPE,
   EVENT_DISCOVERY_STATE_TYPE,
   EXPLORATION_RUN_TYPE,
@@ -51,12 +56,6 @@ import {
 } from './store';
 import { type ExplorationToolSession, PROBLEM_AGENT_KNOWLEDGE_MARKER } from './tools';
 
-const progressGaps = (summary: string): string[] => [
-  `Previous run was incomplete: ${summary.slice(
-    0,
-    450
-  )}. Recheck unfinished problem assessments and source coverage.`,
-];
 const LEASE_MS = 90_000;
 const MAX_AGENT_RUN_COST_USD = 50;
 const MAX_MODEL_REQUEST_MS = 180000;
@@ -495,6 +494,7 @@ export class KnowledgeExplorationService {
     if (current.state.activeRunId)
       throw new StatusError('Stop the active worker before clearing run history', 409);
     const removed = await store.clearRuns();
+    current.state.recentRunFeedback = [];
     current.state.unpricedRuns = 0;
     current.state.costTotalsResetAt = new Date().toISOString();
     current.state.repricedRunIds = [];
@@ -648,6 +648,16 @@ export class KnowledgeExplorationService {
         'Model pricing is unavailable; choose a priced model so the run cost limit can be enforced',
         409
       );
+    const learningFocus = await loadDetectionLearningFocus(
+      await this.getScopedClients({ request }),
+      enabledSources
+    ).catch((error) => ({
+      mode: 'initial_learning' as const,
+      sources: [],
+      note: `Learning readiness could not be read; check current problems and retry native knowledge/coverage reads: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    }));
     const run: ExplorationRun = {
       id: randomUUID(),
       agent: this.agent,
@@ -656,8 +666,9 @@ export class KnowledgeExplorationService {
       status: 'running',
       startedAt: new Date().toISOString(),
       thinking: true,
+      learningFocus,
       limits:
-        previous.state.totalRuns === 0
+        learningFocus.mode === 'initial_learning'
           ? { ...initialExplorationLimits }
           : { ...incrementalExplorationLimits },
       summary:
@@ -812,6 +823,7 @@ export class KnowledgeExplorationService {
     latest.state.checkpoints = {};
     latest.state.remainingGaps = [];
     latest.state.samplingAttempts = [];
+    latest.state.recentRunFeedback = [];
     await store.setState(latest.state, latest.version);
     return { features };
   }
@@ -841,6 +853,7 @@ export class KnowledgeExplorationService {
     store: ExplorationStore
   ): Promise<void> {
     const limits = run.limits ?? incrementalExplorationLimits;
+    const runCostLimit = Math.min(limits.maxEstimatedCostUsd, MAX_AGENT_RUN_COST_USD);
     const timeout = setTimeout(
       () =>
         controller.abort(new Error(`Reached the ${limits.maxDurationMinutes}-minute run limit`)),
@@ -886,6 +899,13 @@ export class KnowledgeExplorationService {
         priority: 'Current problems and unresolved prior assessments',
         sources: sources.filter((source) => source.enabled).map(({ id, title }) => ({ id, title })),
       };
+      const learnedDetectionContext = await loadDetectionLearnings(clients, sources).catch(
+        (error) => ({
+          error: error instanceof Error ? error.message : String(error),
+          nextAction:
+            'Continue current problem checks and use knowledge_indicators to retry learning retrieval.',
+        })
+      );
       const messages: Message[] = [
         {
           role: MessageRole.User,
@@ -897,6 +917,9 @@ export class KnowledgeExplorationService {
                 ? 'Choose explicit time windows using source volume/latency probes; sample historical intervals and scope by service before expensive exploration'
                 : 'Agent-selected bounded windows; start small and widen with evidence',
             unfinishedExploration: progress.remainingGaps ?? [],
+            learningFocus: run.learningFocus,
+            learnedDetectionContext,
+            recentRunFeedback: progress.recentRunFeedback ?? [],
             previousSamplingAttempts: progress.samplingAttempts ?? [],
             samplingPlan,
             now: run.startedAt,
@@ -926,7 +949,16 @@ export class KnowledgeExplorationService {
           startedAt: new Date().toISOString(),
           durationMs: 0,
           status: 'running' as 'running' | 'completed' | 'partial' | 'failed',
-          input: `Context: ${messages.length} messages; thinking enabled`,
+          input:
+            round === 0
+              ? JSON.stringify({
+                  messages: messages.length,
+                  learningFocus: run.learningFocus,
+                  learnedDetectionContext,
+                  recentRunFeedback: progress.recentRunFeedback ?? [],
+                  unfinishedExploration: progress.remainingGaps ?? [],
+                }).slice(0, 32000)
+              : `Context: ${messages.length} messages; thinking enabled`,
           output: '',
         };
         run.steps.push(step);
@@ -1003,17 +1035,13 @@ export class KnowledgeExplorationService {
         });
         addTokens(run.tokens, tokens);
         run.estimatedCostUsd += cost ?? 0;
-        if (
-          !response.tokens ||
-          cost === undefined ||
-          run.estimatedCostUsd >= MAX_AGENT_RUN_COST_USD
-        ) {
+        if (!response.tokens || cost === undefined || run.estimatedCostUsd >= runCostLimit) {
           await store.saveRun(run);
           controller.abort(
             new Error(
               !response.tokens || cost === undefined
                 ? 'Stopped: reported usage cannot be priced; cost protection is unavailable'
-                : 'Stopped: reached the $50 estimated run cost ceiling'
+                : `Stopped: reached the $${runCostLimit} estimated run cost ceiling`
             )
           );
           controller.signal.throwIfAborted();
@@ -1071,7 +1099,8 @@ export class KnowledgeExplorationService {
               result.failed || result.error
                 ? 'failed'
                 : Array.isArray(result.rejected) && result.rejected.length > 0
-                ? Array.isArray(result.saved) && result.saved.length > 0
+                ? (Array.isArray(result.saved) && result.saved.length > 0) ||
+                  (Array.isArray(result.savedQueries) && result.savedQueries.length > 0)
                   ? 'partial'
                   : 'failed'
                 : result.truncated
@@ -1153,9 +1182,7 @@ export class KnowledgeExplorationService {
           latest.state.samplingAttempts ?? [],
           summarizeSamplingAttempts(run.steps, this.agent)
         );
-        latest.state.remainingGaps = run.coverageComplete
-          ? []
-          : run.remainingGaps ?? progressGaps(run.summary);
+        Object.assign(latest.state, carryForwardDetectionLearning(latest.state, run));
         latest.state.activeRunId = undefined;
         latest.state.leaseUntil = undefined;
         latest.state.totalCostUsd += run.estimatedCostUsd;

@@ -265,7 +265,7 @@ export const explorationTools: ToolDefinitions = {
   },
   knowledge_indicators: {
     description:
-      'Read/write existing-schema feature KIs and non-rule-backed stats query KIs. The first unfiltered index page includes namespaceInventory with deduplicated KI counts and relationshipInvestigationNeeded hints. Use this to prioritize service-only namespaces; counts are stored knowledge, not completeness or observability scores. index returns the canonical logical id to use for KI reads, featureIds and causalFeatureIds; storage UUIDs are not agent references. It otherwise returns only identity/title/type/confidence/namespace: page with offset/limit (AT MOST 100 per page; follow hasMore/nextOffset) and optional sourceId/query (query matches any whitespace/pipe/comma-separated keyword). index also returns compact queryRecords (reusable source-scoped query KIs), paged independently with queryOffset/queryLimit. read fetches selected feature/query IDs (max 25) across enabled sources or one sourceId, details later. read defaults to compact semantic details and bounded exact evidence; keep includeProvenance=false for ordinary monitoring/investigation; includeProvenance=true requests the stored extraction history. Follow hasMore/nextOffset for detail pages. upsert batches schema-valid features for one enabled source (featuresJson accepts up to 100 and is split into batches of 25 server-side; features accepts 25). Prefer queries: a structured array of up to 25 query KIs with id/title/description/esql.query and optional evidence/features (logical KI ID strings). esql.query may be a validated source-scoped pipeline; the server adds the exact configured FROM view. Complete queries must use detection_sources.viewName. Do not double-escape ES|QL quotes. queriesJson remains a JSON-string alternative accepting feature ID strings or {id} objects; only stats queries are accepted, so extraction never creates alert rules. Reuse IDs; prefer evidence_refs from source_esql rowRefs/entityGaps/patterns with evidence=[] so the server copies exact evidence; only observed document IDs. The tool checks schema and ID/type collisions, not the quality or interpretation of evidence. Writes are merged and provenance is recorded. Each observing source needs its own service entity anchor for downstream native-rule associations: an entity saved on logs is not a source-local entity on metrics/traces. Reuse logical IDs across sources, deduplicate within each source. needsDetails means evidence was not delivered: narrow to one namespace with maxRows=5 before judging completeness. Write dependencies with properties.source/target as actual service names and properties.source_namespace/target_namespace, not top-level fields or KI IDs. Use evidence_refs for exact observed log rows. Infrastructure KIs use type=infrastructure and subtype=kubernetes_cluster/kubernetes_namespace/kubernetes_node/kubernetes_workload/kubernetes_pod/host/container/cloud_resource/network_endpoint. Properties are extensible; use name plus actual cluster/node/pod/workload/host_name/host_id/hostname/ip/ips/container_id/image/provider/region/zone/service_name/service_namespace as observed. Reuse identities and link only services observed on that resource. Also persist observed technology, infrastructure and schema KIs, including log formats (schema/log_format with properties.format and properties.services naming every emitting service that uses it) and recurring operational patterns as schema/log_pattern. Never infer languages from log formatting alone. Omit sourceId for an index/read across all enabled sources. Upsert requires one exact sourceId; send one write call at a time per source and retry a source-write-in-progress error only after its current write finishes. Prefer featuresJson for upsert: a compact JSON-encoded array using only needed property keys, avoiding fixed-schema placeholder fields. The same KI schema and 25-item limit apply; features remains supported. Valid evidence_refs are authoritative: the server copies real evidence, so omit redundant literal evidence. Upsert responses echo sourceId and non-blocking warnings for evidence references from another source or unknown handles; inspect them and correct ownership rather than ignoring a successful-but-misattributed batch. Never combine metric and trace contracts under one sourceId. Save useful discoveries immediately in small coherent batches as evidence is established; do not hold all KIs until the end of exploration. Each dependency has one actual caller and one actual target, never a pipe-joined endpoint family. This tool does not generate alert rules.',
+      'Read/write existing-schema feature KIs and non-rule-backed stats query KIs. The first unfiltered index page includes namespaceInventory with deduplicated KI counts and relationshipInvestigationNeeded hints. Use this to prioritize service-only namespaces; counts are stored knowledge, not completeness or observability scores. index returns the canonical logical id to use for KI reads, featureIds and causalFeatureIds; storage UUIDs are not agent references. It otherwise returns only identity/title/type/confidence/namespace: page with offset/limit (AT MOST 100 per page; follow hasMore/nextOffset) and optional sourceId/query (query matches any whitespace/pipe/comma-separated keyword). index also returns compact queryRecords (reusable source-scoped query KIs), paged independently with queryOffset/queryLimit. read fetches selected feature/query IDs (max 25) across enabled sources or one sourceId, details later. read defaults to compact semantic details and bounded exact evidence; keep includeProvenance=false for ordinary monitoring/investigation; includeProvenance=true requests the stored extraction history. Follow hasMore/nextOffset for detail pages. upsert batches schema-valid features for one enabled source (featuresJson accepts up to 100 and is split into batches of 25 server-side; valid records persist while malformed records return compact ID/field rejections. An esql.query measurement accidentally included in featuresJson is routed to native query storage, never treated as a feature. features accepts 25). Prefer queries: a structured array of up to 25 query KIs with id/title/description/esql.query and optional evidence/features (logical KI ID strings). esql.query may be a validated source-scoped pipeline; the server adds the exact configured FROM view. Complete queries must use detection_sources.viewName. Do not double-escape ES|QL quotes. queriesJson remains a JSON-string alternative accepting feature ID strings or {id} objects; only stats queries are accepted, so extraction never creates alert rules. Reuse IDs; prefer evidence_refs from source_esql rowRefs/entityGaps/patterns with evidence=[] so the server copies exact evidence; only observed document IDs. The tool checks schema and ID/type collisions, not the quality or interpretation of evidence. Writes are merged and provenance is recorded. Each observing source needs its own service entity anchor for downstream native-rule associations: an entity saved on logs is not a source-local entity on metrics/traces. Reuse logical IDs across sources, deduplicate within each source. needsDetails means evidence was not delivered: narrow to one namespace with maxRows=5 before judging completeness. Write dependencies with properties.source/target as actual service names and properties.source_namespace/target_namespace, not top-level fields or KI IDs. Use evidence_refs for exact observed log rows. Infrastructure KIs use type=infrastructure and subtype=kubernetes_cluster/kubernetes_namespace/kubernetes_node/kubernetes_workload/kubernetes_pod/host/container/cloud_resource/network_endpoint. Properties are extensible; use name plus actual cluster/node/pod/workload/host_name/host_id/hostname/ip/ips/container_id/image/provider/region/zone/service_name/service_namespace as observed. Reuse identities and link only services observed on that resource. Also persist observed technology, infrastructure and schema KIs, including log formats (schema/log_format with properties.format and properties.services naming every emitting service that uses it) and recurring operational patterns as schema/log_pattern. Never infer languages from log formatting alone. Omit sourceId for an index/read across all enabled sources. Upsert requires one exact sourceId; send one write call at a time per source and retry a source-write-in-progress error only after its current write finishes. Prefer featuresJson for upsert: a compact JSON-encoded array using only needed property keys, avoiding fixed-schema placeholder fields. The same KI schema and 25-item limit apply; features remains supported. Valid evidence_refs are authoritative: the server copies real evidence, so omit redundant literal evidence. Upsert responses echo sourceId and non-blocking warnings for evidence references from another source or unknown handles; inspect them and correct ownership rather than ignoring a successful-but-misattributed batch. Never combine metric and trace contracts under one sourceId. Save useful discoveries immediately in small coherent batches as evidence is established; do not hold all KIs until the end of exploration. Each dependency has one actual caller and one actual target, never a pipe-joined endpoint family. This tool does not generate alert rules.',
     schema: {
       type: 'object',
       properties: {
@@ -1410,38 +1410,105 @@ export class ExplorationToolSession {
     if (name === 'knowledge_indicators') {
       const args = knowledgeSchema.parse(parameters);
       if (args.featuresJson?.trim()) {
-        const toFeatures = (items: Array<Record<string, unknown>>) =>
-          knowledgeSchema.shape.features.parse(
-            items.map((feature) => ({ tags: [], evidence: [], evidence_doc_ids: [], ...feature }))
-          );
         let payload: Array<Record<string, unknown>>;
         try {
           payload = z
             .array(z.record(z.string().max(100), z.json()))
             .max(100)
             .parse(JSON.parse(args.featuresJson));
-          toFeatures(payload.slice(0, 25));
-        } catch (error) {
+        } catch {
           throw new Error(
-            `featuresJson must be a JSON array of at most 100 current-schema KIs: ${
-              error instanceof Error ? error.message : String(error)
-            }`
+            'featuresJson must be a JSON array of at most 100 objects. Put feature KIs here and measurements in queries.'
           );
         }
-        if (payload.length > 25) {
-          // The KI write path accepts 25 per batch; split larger arrays rather than failing the call.
-          const batches: ToolResponseStructured[] = [];
-          for (let index = 0; index < payload.length; index += 25)
+        const features: NonNullable<z.infer<typeof knowledgeSchema>['features']> = [];
+        const queries: Array<z.infer<typeof queryKiInputSchema>> = [];
+        const rejected: Array<{ id: string; reason: string }> = [];
+        for (const [index, record] of payload.entries()) {
+          const isQuery =
+            record.esql &&
+            typeof record.esql === 'object' &&
+            !Array.isArray(record.esql) &&
+            'query' in record.esql;
+          const parsed = isQuery
+            ? queryKiInputSchema.safeParse(record)
+            : knowledgeSchema.shape.features.unwrap().element.safeParse({
+                tags: [],
+                evidence: [],
+                evidence_doc_ids: [],
+                ...record,
+              });
+          if (!parsed.success) {
+            rejected.push({
+              id: String(record.id ?? `record-${index + 1}`),
+              reason: parsed.error.issues
+                .slice(0, 4)
+                .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+                .join('; '),
+            });
+          } else if ('esql' in parsed.data) queries.push(parsed.data);
+          else features.push(parsed.data);
+        }
+        if (queries.length && args.queriesJson?.trim())
+          throw new Error(
+            'Put query KIs in one place: prefer queries separately from featuresJson.'
+          );
+        const batches: ToolResponseStructured[] = [];
+        for (let index = 0; index < features.length; index += 25)
+          batches.push(
+            await this.knowledge({
+              ...args,
+              featuresJson: undefined,
+              features: features.slice(index, index + 25),
+              queries: undefined,
+              queriesJson: undefined,
+            })
+          );
+        const measurements = [...(args.queries ?? []), ...queries];
+        for (const query of measurements) {
+          try {
             batches.push(
               await this.knowledge({
                 ...args,
                 featuresJson: undefined,
-                features: toFeatures(payload.slice(index, index + 25)),
+                features: undefined,
+                queries: [query],
+                queriesJson: undefined,
               })
             );
-          return { batches } as unknown as ToolResponseStructured;
+          } catch (error) {
+            rejected.push({
+              id: query.id,
+              reason: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
-        args.features = toFeatures(payload);
+        if (args.queriesJson?.trim())
+          batches.push(
+            await this.knowledge({
+              ...args,
+              featuresJson: undefined,
+              features: undefined,
+              queries: undefined,
+            })
+          );
+        const collect = (key: string) =>
+          batches.flatMap((batch) => (Array.isArray(batch[key]) ? batch[key] : []));
+        return {
+          sourceId: args.sourceId,
+          saved: collect('saved'),
+          savedQueries: collect('savedQueries'),
+          unchanged: collect('unchanged'),
+          rejected: [...collect('rejected'), ...rejected],
+          warnings: collect('warnings'),
+          followUp: batches.map((batch) => batch.followUp).find(Boolean),
+          ...(rejected.length
+            ? {
+                nextAction:
+                  'Valid records are saved. Correct only rejected IDs; do not resend successful records. Measurements use queries, not feature objects.',
+              }
+            : {}),
+        };
       }
       return this.knowledge(args);
     }

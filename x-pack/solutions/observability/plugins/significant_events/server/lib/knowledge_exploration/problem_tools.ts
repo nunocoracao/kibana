@@ -19,6 +19,12 @@ import { explorationTools, ExplorationToolSession } from './tools';
 
 export const PROBLEM_EVENT_PREFIX = 'nightshift-problem-';
 const text = lazySchema(() => z.string().min(1).max(255));
+const boundedText = (maxLength: number) => ({ type: 'string' as const, minLength: 1, maxLength });
+const boundedTexts = (maxItems: number, maxLength: number) => ({
+  type: 'array' as const,
+  maxItems,
+  items: boundedText(maxLength),
+});
 const eventInput = lazySchema(() =>
   z.object({
     action: z.enum(['index', 'read', 'upsert', 'review']),
@@ -63,7 +69,20 @@ export const problemTools: Record<string, ToolDefinition> = {
       },
     },
   },
-  finish_exploration: discoveryTools.finish_exploration,
+  finish_exploration: {
+    ...discoveryTools.finish_exploration,
+    description: `${discoveryTools.finish_exploration.description} Summary max 2000 characters; at most 20 remainingGaps, each max 500 characters. Optional monitoringBlocker records a concrete data/query/coverage reason why useful monitoring cannot be evaluated; do not claim installed coverage.`,
+    schema: {
+      ...discoveryTools.finish_exploration.schema,
+      type: 'object',
+      properties: {
+        ...discoveryTools.finish_exploration.schema?.properties,
+        summary: boundedText(2000),
+        remainingGaps: boundedTexts(20, 500),
+        monitoringBlocker: boundedText(500),
+      },
+    },
+  },
 };
 
 /** One source/evidence session and one objective, with the tools of the three earlier agents. */
@@ -178,6 +197,7 @@ export class ProblemToolSession {
           summary: z.string().min(1).max(2000),
           coverageComplete: z.boolean(),
           remainingGaps: z.array(z.string().min(1).max(500)).max(20),
+          monitoringBlocker: z.string().min(1).max(500).optional(),
         })
         .parse(parameters);
       const unchecked = [...this.initialActive].filter((id) => !this.reviewed.has(id));
@@ -197,6 +217,7 @@ export class ProblemToolSession {
           this.run.estimatedCostUsd < limits.maxEstimatedCostUsd);
       if (
         !this.monitoringAssessed &&
+        !args.monitoringBlocker &&
         this.reads.examined.size > 0 &&
         this.initialActive.size === 0 &&
         !this.run.discovery?.active &&
@@ -215,6 +236,7 @@ export class ProblemToolSession {
         args.coverageComplete && !unchecked.length && this.inventoryComplete;
       this.run.remainingGaps = [
         ...args.remainingGaps,
+        ...(args.monitoringBlocker ? [`Monitoring: ${args.monitoringBlocker}`] : []),
         ...unchecked.map((id) => `Recheck active problem ${id}`),
       ].slice(0, 20);
       this.finished = true;

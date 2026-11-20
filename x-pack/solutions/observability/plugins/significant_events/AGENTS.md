@@ -49,3 +49,7 @@ Update this file when you make a change that would mislead an agent reading it: 
 ## Unified problem-agent branch
 
 On `one_agent_to_rule_them_all`, `server.problemAgent` owns detection: one model loop with exploration, native monitoring and event tools. KIs and native rules are optional; current telemetry can create an event directly. Source changes reconcile catalog ownership but do not run onboarding. Legacy detection workflows are retired and their execution routes return a conflict; investigation workflows remain independent. The Agent Explorer and `/internal/significant_events/problem_agent` control manual runs, cancellation, model, run history, resets and the credentialed Task Manager schedule. Every existing active problem must be rechecked before a run claims completion.
+
+Detection lessons are native schema/custom KIs with `properties.kind=detection_learning`; enabled-source, non-excluded/non-expired lessons are loaded into each run. Bounded execution feedback stays in the existing per-space agent state. Explicit remaining knowledge gaps survive successful current-health coverage. Run-history resets clear execution feedback, while owned-output resets also remove learned KIs.
+
+Run effort adapts to persisted source understanding and known-service monitoring gaps instead of total run count: learning focus has the larger initial-learning limits; established operation focus uses incremental limits. New services/sources can return effort to learning. Artifact presence is a minimum inventory signal, never proof of complete coverage or a rule quota.
