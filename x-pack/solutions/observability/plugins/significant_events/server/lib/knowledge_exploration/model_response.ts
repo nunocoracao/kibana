@@ -18,7 +18,8 @@ import { fromEvent, lastValueFrom, takeUntil, tap } from 'rxjs';
 /** Preserves reported usage when inference rejects a generated tool call before execution. */
 export const collectModelResponse = async (
   events: Observable<ChatCompletionEvent>,
-  signal: AbortSignal
+  signal: AbortSignal,
+  allowUnreportedUsage = false
 ): Promise<ChatCompleteResponse & { validationError?: string }> => {
   signal.throwIfAborted();
   const response: {
@@ -45,7 +46,8 @@ export const collectModelResponse = async (
     signal.throwIfAborted();
     if (!(error instanceof Error) || !isToolValidationError(error)) throw error;
     const details = `${error.message}: ${error.meta.errorsText ?? 'Invalid JSON tool arguments'}`;
-    if (!response.tokens) throw new Error(`${details}. The request returned no token usage.`);
+    if (!response.tokens && !allowUnreportedUsage)
+      throw new Error(`${details}. The request returned no token usage.`);
     return {
       content: '',
       toolCalls: [],

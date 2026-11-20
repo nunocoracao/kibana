@@ -1,0 +1,128 @@
+/*
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0; you may not use this file except in compliance with the Elastic License
+ * 2.0.
+ */
+
+import type { Feature } from '@kbn/significant-events-schema';
+import { signalEntrySchema } from '@kbn/significant-events-schema';
+import { buildEventQuerySignals, resolveEventFeatures } from './event_evidence';
+
+it('stores executable query signals, frozen windows and actual result rows without a fabricated firing', () => {
+  const checkedAt = Date.parse('2026-11-20T16:09:00Z');
+  const check = {
+    sourceId: 'logs',
+    checkedAt,
+    query:
+      'FROM $.logs | WHERE `@timestamp` >= NOW() - 3 minutes | EVAL literal="NOW()" | STATS failures=COUNT(*)',
+    row: { failures: '7' },
+  };
+  const signals = buildEventQuerySignals(
+    [check, { ...check, row: { failures: '8' } }],
+    'Observed failed operations',
+    false
+  );
+  expect(signals).toHaveLength(1);
+  expect(signalEntrySchema.parse(signals[0])).toMatchObject({
+    type: 'query',
+    verdict: 'confirms',
+    evidence: {
+      result: 'found',
+      time_range: { from: '2026-11-20T16:06:00.000Z', to: '2026-11-20T16:09:00.000Z' },
+    },
+  });
+  expect(signals[0].evidence?.esql_query).toContain('TO_DATETIME("2026-11-20T16:09:00.000Z")');
+  expect(signals[0].evidence?.esql_query).toContain('literal="NOW()"');
+  expect(signals[0].description).toContain('"failures":"7"');
+  expect(signals[0].metadata).not.toHaveProperty('detection_id');
+  expect(signals[0].metadata.rule_uuid).toBeUndefined();
+  expect(buildEventQuerySignals([check], 'Verified recovered operations', true)[0].verdict).toBe(
+    'refutes'
+  );
+});
+
+it('requires unambiguous source and namespace when resolving affected entities and respects explicit scope', () => {
+  const make = (id: string, source: string, namespace: string) =>
+    ({
+      id,
+      uuid: id,
+      source_id: source,
+      type: 'entity',
+      subtype: 'service',
+      description: '',
+      confidence: 95,
+      properties: { name: 'gateway', service_namespace: namespace },
+    } as Feature);
+  const features = [
+    make('one', 'logs', 'one'),
+    make('two', 'logs', 'two'),
+    make('other-source', 'metrics', 'one'),
+  ];
+  const check = {
+    sourceId: 'logs',
+    query: '',
+    checkedAt: Date.now(),
+    row: { 'service.name': 'gateway' },
+  };
+  expect(resolveEventFeatures(features, [check], [])).toEqual([]);
+  expect(
+    resolveEventFeatures(
+      features,
+      [{ ...check, row: { ...check.row, 'service.namespace': 'one' } }],
+      []
+    ).map((feature) => feature.id)
+  ).toEqual(['one']);
+  expect(
+    resolveEventFeatures(
+      features,
+      [{ ...check, row: { ...check.row, 'service.namespace': 'one' } }],
+      ['two']
+    ).map((feature) => feature.id)
+  ).toEqual(['two']);
+});
+
+it('retains an explicit standalone measurement and its distinct native rule link independently', () => {
+  const check = {
+    sourceId: 'logs',
+    checkedAt: Date.now(),
+    query: 'FROM $.logs | WHERE `@timestamp` >= NOW() - 2 minutes | STATS failures=COUNT(*)',
+    row: { failures: '20' },
+  };
+  const signals = buildEventQuerySignals([check], 'Observed failures', false, [
+    { sourceId: 'logs', queryId: 'operation-outcomes' },
+    { sourceId: 'logs', queryId: 'native-monitor', ruleId: 'native-monitor' },
+    { sourceId: 'metrics', queryId: 'unrelated', ruleId: 'unrelated' },
+  ]);
+  expect(signals[0].metadata).toMatchObject({
+    query_id: 'operation-outcomes',
+    rule_uuid: 'native-monitor',
+  });
+  const ambiguous = buildEventQuerySignals([check], 'Observed failures', false, [
+    { sourceId: 'logs', queryId: 'one', ruleId: 'one' },
+    { sourceId: 'logs', queryId: 'two', ruleId: 'two' },
+  ]);
+  expect(ambiguous[0].metadata.rule_uuid).toBeUndefined();
+  expect(ambiguous[0].metadata).not.toHaveProperty('detection_id');
+});
+
+it.each([true, false])(
+  'keeps an older comparison window contextual for inactive=%s',
+  (inactive) => {
+    const signal = buildEventQuerySignals(
+      [
+        {
+          sourceId: 'logs',
+          checkedAt: Date.now(),
+          query:
+            'FROM $.logs | WHERE `@timestamp` >= NOW() - 13 minutes AND `@timestamp` < NOW() - 3 minutes | STATS failures=COUNT(*)',
+          row: { failures: '0' },
+        },
+      ],
+      'Comparison baseline',
+      inactive
+    )[0];
+    expect(signal.verdict).toBe('inconclusive');
+    expect(signal.description).toContain('Historical comparison');
+  }
+);

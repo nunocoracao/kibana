@@ -426,8 +426,9 @@ export function createEventsWriteTool({
       const detectionRunsOf = ({ signals }: { signals?: EventsWriteInput['signals'] }) => {
         const ids = [
           ...new Set(
-            (signals ?? []).flatMap(({ metadata }) => {
-              const run = runByDetectionId.get(metadata.detection_id);
+            (signals ?? []).flatMap((signal) => {
+              if (signal.type !== 'detection') return [];
+              const run = runByDetectionId.get(signal.metadata.detection_id);
               return run ? [run] : [];
             })
           ),

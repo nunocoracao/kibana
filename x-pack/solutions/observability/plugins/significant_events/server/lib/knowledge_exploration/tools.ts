@@ -64,6 +64,7 @@ const sourceQuerySchema = lazySchema(() =>
       'samples',
     ]),
     pipeline: z.string().max(10000).optional(),
+    sampleProbability: z.number().min(0.0001).max(1).optional(),
     serviceNames: z.array(stringSchema).max(25).optional(),
     serviceNamespace: stringSchema.optional().transform((value) => value || undefined),
     checkpointKey: z.string().max(100).optional(),
@@ -75,7 +76,7 @@ const sourceQuerySchema = lazySchema(() =>
       .default(25)
       .transform((value) => Math.min(value, 100)),
     offset: z.number().int().min(0).max(10000).default(0),
-    fieldSearch: z.string().max(200).optional(),
+    fieldSearch: z.string().max(1000).optional(),
     sampleKind: z
       .enum(['representative', 'dependencies', 'errors', 'startup'])
       .default('representative'),
@@ -183,6 +184,7 @@ const boundedNumber = (minimum: number, maximum: number) => ({
   multipleOf: 1,
 });
 const boundedString = (maxLength: number) => ({ type: 'string' as const, maxLength });
+const probabilityBounds = { type: 'number' as const, minimum: 0.0001, maximum: 1 };
 
 export const explorationTools: ToolDefinitions = {
   esql_guide: esqlGuideTool,
@@ -228,7 +230,7 @@ export const explorationTools: ToolDefinitions = {
         checkpointKey: { type: 'string' },
         maxRows: boundedNumber(1, 100),
         offset: boundedNumber(0, 10000),
-        fieldSearch: boundedString(200),
+        fieldSearch: boundedString(1000),
         sampleKind: {
           type: 'string',
           enum: ['representative', 'dependencies', 'errors', 'startup'],
@@ -237,6 +239,11 @@ export const explorationTools: ToolDefinitions = {
           ...boundedNumber(0, 5256000),
           description:
             'End the interval this many minutes ago to sample older periods. Omit or use zero for now.',
+        },
+        sampleProbability: {
+          ...probabilityBounds,
+          description:
+            'Optional ES|QL SAMPLE probability for exploratory custom/samples/relationships reads. Apply after source/time/service scope. Sample counts are approximate and cannot confirm incident rates or recovery; validate candidates with unsampled scoped reads.',
         },
         lookbackMinutes: {
           ...boundedNumber(1, 5256000),
@@ -1096,30 +1103,48 @@ export class ExplorationToolSession {
 
   private documentIdsByReference = new Map<string, string[]>();
   private firstLookSources = new Set<string>();
+  private emissionInventories = new Set<string>();
+  private currentEmitters = new Map<
+    string,
+    { sourceId: string; name: string; namespace: string; evidenceRef: string }
+  >();
+
+  public get emittingServices() {
+    return [...this.currentEmitters.values()];
+  }
+  private volumeProbedSources = new Set<string>();
   /** Per source: service name (lower case) to the language its own telemetry reports. */
   private reportedLanguages = new Map<string, Map<string, string>>();
 
   /** Per source: every service seen emitting in the first-look service inventory. */
   private observedServices = new Map<string, Set<string>>();
 
-  /** Every emitting service in the last hour, rarest first, so rare emitters are not missed by short samples. */
-  private async serviceInventory(source: NightshiftSource): Promise<object> {
+  /** Emitting services in the explicitly selected window, rarest first. */
+  private async serviceInventory(
+    source: NightshiftSource,
+    args: z.infer<typeof sourceQuerySchema>
+  ): Promise<object> {
     const columns = new Set<string>();
     for (const [key, schema] of this.sourceSchemas.entries())
       if (key.startsWith(`${source.id}:`)) for (const column of schema) columns.add(column.name);
-    const service = SERVICE_NAME_COLUMNS.find((name) => columns.has(name));
-    if (!service) return { services: [], note: 'No service name column in the loaded schema.' };
-    const namespace = NAMESPACE_COLUMNS.find((name) => columns.has(name));
-    const query = `FROM ${source.view_name} | ${sourceTimeWindow(60, 0)} | WHERE ${field(
-      service
-    )} IS NOT NULL | STATS count=COUNT(*) BY ${[service, namespace]
-      .filter((name): name is string => Boolean(name))
-      .map(field)
-      .join(', ')} | SORT count ASC | LIMIT 200`;
+    const services = SERVICE_NAME_COLUMNS.filter((name) => columns.has(name));
+    if (!services.length)
+      return { services: [], note: 'No service name column in the loaded schema.' };
+    const namespaces = NAMESPACE_COLUMNS.filter((name) => columns.has(name));
+    const expression = (names: string[]) =>
+      names.length === 1 ? field(names[0]) : `COALESCE(${names.map(field).join(', ')})`;
+    const query = `FROM ${source.view_name} | ${sourceTimeWindow(
+      args.lookbackMinutes,
+      args.endOffsetMinutes
+    )} | STATS count=COUNT(*) BY service_name=${expression(services)}${
+      namespaces.length ? `, namespace=${expression(namespaces)}` : ''
+    } | WHERE service_name IS NOT NULL | SORT count ASC, service_name ASC | LIMIT 201`;
     const response = await this.clients.streamDataEsClient.esql.query(
       { query },
       { signal: this.signal, requestTimeout: 30000 }
     );
+    if (response.is_partial)
+      throw new Error('Emitting service inventory is partial; narrow its window.');
     const rows = response.values.map((values) =>
       Object.fromEntries(
         response.columns
@@ -1132,12 +1157,26 @@ export class ExplorationToolSession {
     );
     const refs = this.record(source.id, rows, query);
     const observed = this.observedServices.get(source.id) ?? new Set<string>();
-    for (const row of rows) if (row[service]) observed.add(row[service]);
+    for (const [index, row] of rows.slice(0, 200).entries()) {
+      const identity = rowIdentity(row);
+      if (!identity.name) continue;
+      observed.add(identity.name);
+      if (!args.endOffsetMinutes && args.lookbackMinutes <= 3) {
+        this.currentEmitters.set(JSON.stringify([source.id, identity.name, identity.namespace]), {
+          sourceId: source.id,
+          ...identity,
+          evidenceRef: refs[index],
+        });
+      }
+    }
+    if (!args.endOffsetMinutes && args.lookbackMinutes <= 3)
+      this.emissionInventories.add(source.id);
     this.observedServices.set(source.id, observed);
     return {
-      window: 'last 60 minutes',
+      window: { lookbackMinutes: args.lookbackMinutes, endOffsetMinutes: args.endOffsetMinutes },
       query,
-      services: rows.map((row, index) => ({ ...row, ref: refs[index] })),
+      services: rows.slice(0, 200).map((row, index) => ({ ...row, ref: refs[index] })),
+      truncated: rows.length > 200,
     };
   }
 
@@ -1147,7 +1186,7 @@ export class ExplorationToolSession {
   ): Promise<object> {
     const look: Record<string, object> = {};
     try {
-      look.services = await this.serviceInventory(source);
+      look.services = await this.serviceInventory(source, args);
     } catch (error) {
       look.services = { error: error instanceof Error ? error.message : String(error) };
     }
@@ -1305,6 +1344,9 @@ export class ExplorationToolSession {
             ? undefined
             : suppliedWindow.lookbackHours * 60),
       });
+      const requestedTemplate = args.template;
+      // An explicit pipeline is authoritative; never silently replace a requested latest-row read with category samples.
+      if (args.template === 'samples' && args.pipeline?.trim()) args.template = 'custom';
       const results = [];
       const firstLook: Record<string, object> = {};
       for (const id of args.sourceIds) {
@@ -1320,11 +1362,45 @@ export class ExplorationToolSession {
           continue;
         }
         try {
+          if (!['volume', 'schema'].includes(args.template) && !this.volumeProbedSources.has(id)) {
+            const probe = await this.querySource(this.source(id), {
+              ...args,
+              template: 'volume',
+              lookbackMinutes: 1,
+              endOffsetMinutes: 0,
+            });
+            this.volumeProbedSources.add(id);
+            results.push({
+              ...probe,
+              requiresPlanning: true,
+              requestedTemplate: args.template,
+              nextAction:
+                'The requested data query was not executed. Inspect this bounded volume/latency probe, then choose service/namespace/time scope and an exploratory sampleProbability where useful. Resubmit an appropriately scoped query; use unsampled small windows to confirm incident rates/recovery.',
+            });
+            continue;
+          }
           const result = await this.querySource(this.source(id), args);
+          if (args.template === 'volume') this.volumeProbedSources.add(id);
           results.push(result);
           if (args.template === 'inventory' && !this.firstLookSources.has(id)) {
             this.firstLookSources.add(id);
             firstLook[id] = await this.firstLook(this.source(id), args);
+          }
+          if (!this.emissionInventories.has(id) && !['volume', 'schema'].includes(args.template)) {
+            try {
+              firstLook[id] = {
+                ...firstLook[id],
+                services: await this.serviceInventory(this.source(id), {
+                  ...args,
+                  lookbackMinutes: Math.min(args.lookbackMinutes, 3),
+                  endOffsetMinutes: 0,
+                }),
+              };
+            } catch (error) {
+              firstLook[id] = {
+                services: { error: error instanceof Error ? error.message : String(error) },
+              };
+            }
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -1397,11 +1473,19 @@ export class ExplorationToolSession {
       }
       return {
         results,
+        ...(requestedTemplate !== args.template
+          ? {
+              templateRequested: requestedTemplate,
+              templateUsed: args.template,
+              adjustment:
+                'Executed the explicit pipeline as custom instead of silently ignoring it for representative category sampling.',
+            }
+          : {}),
         ...(Object.keys(firstLook).length
           ? {
               firstLook,
               firstLookNote:
-                'Automatic once per source on its first inventory: services lists every service emitting in the last hour, rarest first, with row refs (save a service entity for each, including rare emitters); technology and peer groupings cover the same window as the inventory. Use them to save technology KIs (language, runtime, frameworks from scope.name and service.framework.*), service languages and dependencies; page or rerun template=technology|peers for other strata.',
+                'Automatic bounded emitting-service inventory on the first data read of each source; the inventory template additionally inspects technologies/peers. services lists observed emitting services in the selected bounded window, rarest first, with row refs (save a service entity for each, including rare emitters); technology and peer groupings cover the same window as the inventory. Use them to save technology KIs (language, runtime, frameworks from scope.name and service.framework.*), service languages and dependencies; page or rerun template=technology|peers for other strata.',
             }
           : {}),
         failed: results.some((result) => 'error' in result),
@@ -2005,14 +2089,27 @@ export class ExplorationToolSession {
         });
       }
     }
-    const offset =
-      args.template === 'relationships' || args.template === 'samples' ? args.offset : 0;
+    const offset = ['custom', 'relationships', 'samples'].includes(args.template) ? args.offset : 0;
     if (offset > 9900)
-      throw new Error('Relationship offset must be at most 9900; scope by service instead');
+      throw new Error('Query offset must be at most 9900; scope by service instead');
     const limit =
       args.template === 'custom' || args.template === 'relationships' || args.template === 'samples'
         ? offset + args.maxRows + 1
         : 501;
+    if (args.sampleProbability !== undefined && args.sampleProbability < 1) {
+      if (!['custom', 'samples', 'relationships'].includes(args.template))
+        throw new Error(
+          'sampleProbability is for exploratory custom/samples/relationships queries. Use a bounded volume probe first.'
+        );
+      const scope = buildServiceScopeFilter(columns, args.serviceNames, args.serviceNamespace);
+      pipeline =
+        scope && pipeline.startsWith(scope)
+          ? `${scope}SAMPLE ${args.sampleProbability} | ${pipeline.slice(scope.length)}`
+          : `SAMPLE ${args.sampleProbability} | ${pipeline}`;
+      warnings.push(
+        `Exploratory probability sample (${args.sampleProbability}); counts and missing rows are not exact rates, completeness or recovery evidence.`
+      );
+    }
     let query = `${base}${time} | ${pipeline} | LIMIT ${limit}`;
     const executeQuery = (value: string) =>
       this.clients.streamDataEsClient.esql.query(
@@ -2045,6 +2142,10 @@ export class ExplorationToolSession {
       );
       return executeQuery(query);
     });
+    if (response.is_partial)
+      throw new Error(
+        'Telemetry query returned partial results. Narrow the window/scope before using counts as evidence.'
+      );
     if (
       args.template === 'custom' &&
       sourceIdentityColumns(columns).length &&
@@ -2081,6 +2182,24 @@ export class ExplorationToolSession {
         )
       );
     const rowRefs = this.record(source.id, rows, query);
+    const requestedServices = args.serviceNames ?? [];
+    const returnedServices = new Set(
+      rows.slice(offset, offset + args.maxRows).map((row) => rowIdentity(row).name)
+    );
+    const omittedServices = requestedServices.filter((name) => !returnedServices.has(name));
+    if (requestedServices.length > 1 && omittedServices.length)
+      warnings.push(
+        `This page has no rows identifying requested services: ${omittedServices.join(
+          ', '
+        )}. Combined limited reads can be dominated by a hot emitter. Inspect those services separately or group by service; this page does not establish their current health or telemetry absence.`
+      );
+    if (
+      source.type === 'metrics' &&
+      response.columns.some((column) => column.type.startsWith('counter_'))
+    )
+      warnings.push(
+        'These are cumulative counter values, not current rates. Keep populated series dimensions, instance/start/reset identity and sample timestamps when inspecting them; a numeric cast alone does not establish temporality.'
+      );
     if (
       args.template === 'custom' ||
       args.template === 'relationships' ||
@@ -2128,6 +2247,14 @@ export class ExplorationToolSession {
                 count: row.count,
                 firstSeen: row.first_seen,
                 lastSeen: row.last_seen,
+                ...(Number.isFinite(Date.parse(row.last_seen))
+                  ? {
+                      lastSeenAgeSeconds: Math.max(
+                        0,
+                        (Date.now() - Date.parse(row.last_seen)) / 1000
+                      ),
+                    }
+                  : {}),
                 sampleSelection:
                   'Representative text, not necessarily the latest row; use firstSeen/lastSeen and time buckets for current state.',
                 sample: row.sample.slice(0, 2000),
@@ -2151,6 +2278,14 @@ export class ExplorationToolSession {
                   : {}),
               })),
         rowRefs: rowRefs.slice(offset, offset + args.maxRows),
+        ...(args.sampleProbability !== undefined
+          ? {
+              sampling: {
+                probability: args.sampleProbability,
+                exactCounts: args.sampleProbability === 1,
+              },
+            }
+          : {}),
         warnings,
         candidates: [...uniqueCandidates.values()],
         nextAction:

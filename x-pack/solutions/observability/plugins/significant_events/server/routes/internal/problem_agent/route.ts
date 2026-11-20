@@ -48,11 +48,17 @@ const start = createServerRoute({
   endpoint: 'POST /internal/significant_events/problem_agent/_run',
   options: { access: 'internal' },
   security,
-  handler: async ({ request, server, maintenanceService, getScopedClients }) => {
+  params: lazySchema(() =>
+    z.object({ body: z.object({ evaluationMode: z.boolean().default(false) }).nullish() })
+  ),
+  handler: async ({ request, params, server, maintenanceService, getScopedClients }) => {
     const { licensing } = await getScopedClients({ request });
     await assertSignificantEventsAccess({ server, licensing });
     await assertNotPaused({ maintenanceService, request });
-    return server.problemAgent.start(request, { reason: 'manual' });
+    return server.problemAgent.start(request, {
+      reason: 'manual',
+      evaluationMode: params?.body?.evaluationMode ?? false,
+    });
   },
 });
 const scheduled = createServerRoute({

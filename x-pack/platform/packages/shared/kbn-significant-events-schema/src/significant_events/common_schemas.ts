@@ -314,15 +314,43 @@ const detectionSignalInputSchema = lazySchema(() =>
   buildDetectionSignalSchema(detectionSignalInputMetadataSchema)
 );
 
+/** Executed source-query evidence, including observations made before a monitoring rule exists. */
+const querySignalSchema = lazySchema(() =>
+  signalBaseSchema
+    .extend({
+      type: z.literal('query'),
+      metadata: z.object({
+        rule_name: z.string().max(MAX_TITLE_LENGTH),
+        rule_uuid: z.string().max(MAX_ID_LENGTH).optional(),
+        query_id: z.string().max(MAX_ID_LENGTH).optional(),
+      }),
+      evidence: signalEvidenceSchema,
+    })
+    .superRefine((signal, context) => {
+      if (signal.verdict === 'confirms' && signal.evidence.result !== 'found')
+        context.addIssue({
+          code: 'custom',
+          path: ['verdict'],
+          message: 'A confirming query signal requires found evidence.',
+        });
+      if (signal.verdict === 'refutes' && !['found', 'empty'].includes(signal.evidence.result))
+        context.addIssue({
+          code: 'custom',
+          path: ['verdict'],
+          message: 'Recovery query evidence must have executed successfully.',
+        });
+    })
+);
+
 /** Extensible discriminated union of signal sources accepted from agents. */
 export const signalEntrySchema = lazySchema(() =>
-  z.discriminatedUnion('type', [detectionSignalSchema])
+  z.discriminatedUnion('type', [detectionSignalSchema, querySignalSchema])
 );
 export type SignalEntry = z.infer<typeof signalEntrySchema>;
 
 /** The same union as agents send it: detection metadata is only identified, not spelled out. */
 export const signalInputEntrySchema = lazySchema(() =>
-  z.discriminatedUnion('type', [detectionSignalInputSchema])
+  z.discriminatedUnion('type', [detectionSignalInputSchema, querySignalSchema])
 );
 export type SignalInputEntry = z.infer<typeof signalInputEntrySchema>;
 

@@ -21,6 +21,7 @@ import { DetectionFlyout } from '../detection/detection_flyout';
 import { DetectionsList } from './detections_list';
 import { EventInvestigationCard } from './event_investigation_card';
 import { EventTimeline } from './event_timeline';
+import { EventQueryEvidence } from './event_query_evidence';
 import { TruncatableSummary } from '../../ui/truncatable_summary';
 import { SIGNIFICANT_EVENT_SEVERITY } from '../../ui/severity_badge';
 import { useFlyoutShareUrlCustomAction } from '../../ui/flyout_share_url_button';
@@ -462,6 +463,16 @@ export function EventFlyout({
             <FlyoutTemplate.Body.Section title={SUMMARY_TITLE}>
               <TruncatableSummary summary={event.summary} />
             </FlyoutTemplate.Body.Section>
+            {event.signals?.some((signal) => signal.type === 'query') ||
+            event.blast_radius?.length ? (
+              <FlyoutTemplate.Body.Section
+                title={i18n.translate('xpack.nightshift.eventEvidence.title', {
+                  defaultMessage: 'Signals and affected entities',
+                })}
+              >
+                <EventQueryEvidence event={event} />
+              </FlyoutTemplate.Body.Section>
+            ) : null}
             {hasInvestigation ? (
               <FlyoutTemplate.Body.Section title={INVESTIGATION_TITLE}>
                 <EventInvestigationCard

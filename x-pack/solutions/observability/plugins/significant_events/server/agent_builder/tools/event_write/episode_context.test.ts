@@ -71,7 +71,7 @@ describe('makeIdentity', () => {
 });
 
 describe('mergeSignalsLatestPerRule', () => {
-  const makeSignal = (ruleUuid: string): SignalEntry => ({
+  const makeSignal = (ruleUuid: string): Extract<SignalEntry, { type: 'detection' }> => ({
     type: 'detection',
     source_id: 'logs.test',
     description: 'Test signal',

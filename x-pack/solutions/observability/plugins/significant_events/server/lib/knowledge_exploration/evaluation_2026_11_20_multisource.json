@@ -1,0 +1,2243 @@
+{
+  "date": "2026-11-20",
+  "environment": "local Kibana/Elasticsearch 9.7.0-SNAPSHOT; CARL Compose; GPT-6 Luna Pro",
+  "branch": "one_agent_to_rule_them_all",
+  "scope": {
+    "configured_sources_unchanged": true,
+    "before_canonical_sha256": "adf89fe58057042e7c5fda385c24001b6e3f41760924d758f2d3ebfb6faad1da",
+    "after_canonical_sha256": "adf89fe58057042e7c5fda385c24001b6e3f41760924d758f2d3ebfb6faad1da",
+    "source_types": [
+      "logs",
+      "metrics",
+      "traces"
+    ],
+    "original_user_crawls_untouched": [
+      "9b37a595-db43-40bb-aa15-0930da71e8bf",
+      "745d98ae-583f-4d9d-af1a-98148be20996",
+      "d08f9fe9-c95c-415a-9b8e-9482782ee12c"
+    ]
+  },
+  "estimated_reported_chat_cost_usd": 0.862687415,
+  "cost_complete_for_all_runs": false,
+  "runs": [
+    {
+      "label": "baseline",
+      "id": "0b0c4237-6258-47b8-b3b6-5b7b48d87ad0",
+      "status": "completed",
+      "startedAt": "2026-11-20T16:41:48.658Z",
+      "finishedAt": "2026-11-20T16:42:46.317Z",
+      "written": 0,
+      "evaluationMode": true,
+      "limits": {
+        "mode": "initial_learning",
+        "maxDurationMinutes": null,
+        "maxTurns": null,
+        "maxCumulativeTokens": null,
+        "maxEstimatedCostUsd": null
+      },
+      "estimatedCostUsd": 0.0240668,
+      "costEstimateComplete": true,
+      "summary": "Rechecked all event inventory (one prior relay-search event, inactive; none active) and current relay search outcomes, which remain low after recovery. Broad logs show 35 emitting services and a single approximate relay-gateway 402 booking failure; this is a business/payment response, not evidence of an outage. Warren and Sluice samples show ongoing positive operations, queue completions/pending=0, and zero runtime-stat errors; 409/422 rejections appear validation/duplicate outcomes. Metrics expose populated HTTP status counters and traces are dense, but router Mirage 503 counters require correct counter-delta semantics before interpreting their rate; the sampled three-minute router query showed recurring values beside much larger 200 counts, while no matching 5xx trace rows were returned. No new event opened. Existing log source coverage and KI/rule inventories are incomplete for the broader active estate; current health cannot be declared complete.",
+      "remainingGaps": [
+        "Mirage router metrics show recurring HTTP 503 counter values for /open, /save and /share (29, 12 and 5 at 16:42:19) alongside very large 200 counters (135622, 37693 and 24381); these appear persistent at comparable 10-second intervals, but counters are cumulative and no valid request-rate/error-ratio or per-operation span denominator was established. Determine counter temporality/reset semantics and compare deltas before incident classification.",
+        "The existing event inventory has no active problems; prior relay search partial-results event is already inactive. Fresh search-complete outcomes: 0/67 partial at 16:39, 2/64 at 16:40, 0/39 at 16:41. Supplier-air timeout recurrence remains unconfirmed.",
+        "Current logs include 35 services across relay, warren, mirage, spoke and sluice, while stored KIs cover principally relay/warren/mirage. Inventory paging and service-specific outcome/recovery assessment for spoke and sluice are incomplete.",
+        "No new validated reusable query or monitoring rule was persisted this run; metric counters are not safe to aggregate as rates, and traces showed no matching router 5xx spans in the queried slice. Existing managed coverage is limited to relay search partial count and Mirage request-failure markers."
+      ],
+      "tool_or_model_issues": [],
+      "event_writes": [],
+      "probability_samples": []
+    },
+    {
+      "label": "baseline-learning",
+      "id": "0a52a4c4-609c-48b0-b848-f04916482c91",
+      "status": "completed",
+      "startedAt": "2026-11-20T16:48:28.054Z",
+      "finishedAt": "2026-11-20T16:49:26.058Z",
+      "written": 10,
+      "evaluationMode": true,
+      "limits": {
+        "mode": "initial_learning",
+        "maxDurationMinutes": null,
+        "maxTurns": null,
+        "maxCumulativeTokens": null,
+        "maxEstimatedCostUsd": null
+      },
+      "estimatedCostUsd": 0.02508435,
+      "costEstimateComplete": true,
+      "summary": "No active events were present. The prior Relay search partial-results problem remains inactive; no new event was opened. Current Mirage metric rows show router 503 counter values unchanged across recent 10-second observations (29 /open, 12 /save, 5 /share) while 200 counters increased substantially; counter semantics are unresolved. Current logs show thousands of positive Mirage gateway/router/replica operations and zero technical-failure markers in the broad approximate aggregate, so the supplied evidence does not establish a current outage. Sluice intake and renderer samples show repeated successful 200 submissions/renders. Saved nine observed source-local service entities in spoke and sluice logs, plus router in mirage metrics. Existing Relay search and Mirage request-failure rules remain enabled; useful complete estate coverage and a validated reusable operation measurement were not established. Fresh current-data checks were bounded and estate-wide completeness remains partial.",
+      "remainingGaps": [
+        "Mirage router 503 counter values (/open 29, /save 12, /share 5) stayed unchanged over successive ~10-second observations while 200 counters increased. Counter temporality/reset semantics and longer-window deltas remain unverified; current logs show many positive outcomes and zero technical-failure markers, so no current incident is established.",
+        "The broad fresh log outcome aggregate paginated at 25/35 services. Complete per-service outcome and recovery assessment for spoke, sluice and the remaining estate; current sluice samples are positive but not comprehensive.",
+        "No new validated reusable query or monitoring rule was saved this run. Existing coverage is partial; validate exact outcome denominators/latency and suitable operation-specific monitors, particularly for uncovered active services.",
+        "Metric and trace sources were probed only in targeted Mirage/current slices; broader emitter/outcome coverage remains unchecked. Trace 5xx absence in a narrow slice is not proof of recovery.",
+        "Monitoring: No validated operation-outcome denominator or meaningful counter-delta semantics were established for Mirage 503 counters; existing managed coverage remains limited to Relay search partials and broad Mirage request-failure markers. Further monitor validation needs an exact outcome measurement per important operation/source."
+      ],
+      "tool_or_model_issues": [],
+      "event_writes": [],
+      "probability_samples": []
+    },
+    {
+      "label": "sluice-pause",
+      "id": "8397c03e-c93a-49a9-998b-581a67f95f08",
+      "status": "completed",
+      "startedAt": "2026-11-20T16:50:32.392Z",
+      "finishedAt": "2026-11-20T16:51:32.858Z",
+      "written": 11,
+      "evaluationMode": true,
+      "limits": {
+        "mode": "initial_learning",
+        "maxDurationMinutes": null,
+        "maxTurns": null,
+        "maxCumulativeTokens": null,
+        "maxEstimatedCostUsd": null
+      },
+      "estimatedCostUsd": 0.025133455000000002,
+      "costEstimateComplete": true,
+      "summary": "No active events were present and the previously closed Relay search partial-results event remains inactive; no new incident is supported. Current Relay search-complete outcomes were 1/62 partial, then 0/69 and 0/39; Sluice delivery-queue emitted repeated HTTP 200 enqueue outcomes. Mirage logs showed zero technical-failure markers in returned complete minute buckets while gateways/replicas had sustained positive operation counts. Relay gateway emitted four booking-failed HTTP 409 responses, consistent with business rejection rather than technical failure. Current trace aggregate showed zero 5xx across 11 service groups. Saved 11 observed trace-source service entities with source-local evidence. Mirage metric 503 counter values remain semantically unresolved; no rule/event fabricated. Existing KI/query/rule inventories were reviewed, but broad outcomes paginated and useful new operation-specific coverage was not validated.",
+      "remainingGaps": [
+        "Fresh broad log outcome aggregate returned only 100 rows and paginated across the 34-service estate; complete per-service current outcomes and recovery assessment remain unfinished, especially services beyond the returned first page.",
+        "Mirage router metric http.server.requests is counter_long: determine reset/delta semantics and obtain aligned route-level 2xx/503 operation denominators before interpreting repeated 503 values (e.g. /open 29, /save 12, /share 5) or monitoring them.",
+        "Trace aggregate returned 11 service groups, all with zero 5xx; this is useful current evidence but does not establish every emitting trace service/operation was covered.",
+        "No new reusable operation measurement or native monitor was validated/saved for currently uncovered active services. Existing two log monitors remain limited to Relay search partials and Mirage request-failed markers.",
+        "Relay gateway emitted four booking-failed messages with HTTP 409 in the 3-minute window; business-decline interpretation is likely, but exact booking attempt/decline denominators were not measured.",
+        "Monitoring: No monitor was installed this run: current Mirage 503 metric values are counter_long observations without validated delta/temporality semantics or exact request denominators. The broad log marker aggregate is approximate and misclassifies expected Relay booking HTTP 409 as failure; it is not a suitable validated monitor."
+      ],
+      "tool_or_model_issues": [],
+      "event_writes": [],
+      "probability_samples": []
+    },
+    {
+      "label": "sluice-sustained-before-fix",
+      "id": "54a22611-f9b0-4427-9b83-f5c2196caba7",
+      "status": "completed",
+      "startedAt": "2026-11-20T16:55:20.911Z",
+      "finishedAt": "2026-11-20T16:57:43.997Z",
+      "written": 5,
+      "evaluationMode": true,
+      "limits": {
+        "mode": "initial_learning",
+        "maxDurationMinutes": null,
+        "maxTurns": null,
+        "maxCumulativeTokens": null,
+        "maxEstimatedCostUsd": null
+      },
+      "estimatedCostUsd": 0.06104841,
+      "costEstimateComplete": true,
+      "summary": "Reviewed enabled-source and event inventories; no prior active problem awaited review. Fresh logs confirmed a critical Sluice outage: exact structured request-failed outcomes were 100% 5xx with zero successes for intake and delivery-queue across 16:53\u201316:55, with thousands of invoice/report/export failures per minute. Raw messages share request IDs; intake names delivery-queue as the failing dependency. Backlog-monitor reports pending=5000 and failed=1353. Opened one active incident and linked affected entities, directed dependency, exact reusable outcome query and validated per-service 5xx monitor. Saved the newly observed spoke/search service anchor. Mirage request-failure markers remain zero in recent native signals; Relay search count is low relative to baseline and does not establish recurrence. Trace aggregate found zero 5xx across 11 groups. Overall coverage remains partial; see gaps.",
+      "remainingGaps": [
+        "Active Sluice intake \u2192 delivery-queue HTTP 503 outage requires follow-up: verify successful invoice/report/export outcomes, 5xx clearance, and queue pending/completion progress before recovery closure.",
+        "Exact current operation-outcome semantics and positive outcomes across the remaining emitting log services are not fully assessed; broad aggregate exposed 35 emitters but did not validate each service's operation contract.",
+        "Metric service/instrument inventory beyond Mirage router remains unassessed. Mirage http.server.requests is counter_long; counter reset/delta semantics and aligned route-level request denominators remain unresolved.",
+        "Trace aggregate found zero 5xx across 11 groups; complete trace service/operation coverage is not established.",
+        "Relay gateway booking HTTP 409/rejection rates still lack exact booking-attempt denominators; business declines should not be labeled technical failure absent sustained impact."
+      ],
+      "tool_or_model_issues": [
+        {
+          "name": "Reasoning 7",
+          "status": "partial",
+          "at": "2026-11-20T16:56:18.292Z",
+          "reason": "Tool call arguments for events (call_GtJGOD7JjtMDqynoUmcOKq9q) were invalid: confidence: Too big: expected number to be <=1. Rejected arguments: {\"action\":\"upsert\",\"assessmentNote\":\"Current direct evidence in this run confirms an active Sluice service outage. Exact structured `event=request failed` outcomes show failures equal outcomes and zero successes in each complete observed minute for intake and delivery-queue; at 16:53 intake export/invoice/report failures were 365/1036/2111 and queue had identical counts; at 16:54 intake 453/1350/2634 and queue identical; at 16:55 intake 194/586/1293 a"
+        },
+        {
+          "name": "events",
+          "status": "failed",
+          "at": "2026-11-20T16:56:54.380Z",
+          "reason": "{\"error\":\"[\\n  {\\n    \\\"origin\\\": \\\"string\\\",\\n    \\\"code\\\": \\\"too_big\\\",\\n    \\\"maximum\\\": 900,\\n    \\\"inclusive\\\": true,\\n    \\\"path\\\": [\\n      \\\"assessmentNote\\\"\\n    ],\\n    \\\"message\\\": \\\"Too big: expected string to have <=900 characters\\\"\\n  }\\n]\"}"
+        },
+        {
+          "name": "events",
+          "status": "failed",
+          "at": "2026-11-20T16:57:02.687Z",
+          "reason": "{\"error\":\"Causal feature IDs must be a subset of featureIds.\"}"
+        }
+      ],
+      "event_writes": [
+        {
+          "at": "2026-11-20T16:57:16.187Z",
+          "event_id": "nightshift-problem-sluice-intake-delivery-queue-http-503-outage",
+          "status": "active",
+          "signals": 2,
+          "references": []
+        }
+      ],
+      "probability_samples": []
+    },
+    {
+      "label": "sluice-active-after-quality-fix",
+      "id": "507c6a16-9b47-486c-beb4-9e6ca8d5f19f",
+      "status": "completed",
+      "startedAt": "2026-11-20T17:01:34.570Z",
+      "finishedAt": "2026-11-20T17:02:39.772Z",
+      "written": 4,
+      "evaluationMode": true,
+      "limits": {
+        "mode": "initial_learning",
+        "maxDurationMinutes": null,
+        "maxTurns": null,
+        "maxCumulativeTokens": null,
+        "maxEstimatedCostUsd": null
+      },
+      "estimatedCostUsd": 0.03179124,
+      "costEstimateComplete": true,
+      "summary": "Reviewed enabled logs, metrics and traces; refreshed KI/query/rule/event inventories. The active Sluice incident remains supported and was updated in place with exact fresh 17:01 request-failure outcomes: hundreds-to-thousands of 503s and zero successes across invoice/report/export for intake and delivery-queue; 16:59\u201317:00 show the same pattern. Intake records explicitly name delivery-queue. Root cause and queue progress remain unknown; no recovery claimed. Reused the existing validated Sluice monitor and outcome query. No new incident supported by inspected non-Sluice evidence. Saved three observed Warren metrics-source service anchors (gateway, orders, stock). Broader operation monitoring is blocked by uncertain message-marker semantics and unresolved cumulative metric temporality.",
+      "remainingGaps": [
+        "Sluice outage remains active: fresh exact 17:01 outcomes show hundreds-to-thousands of HTTP 503 failures and zero successes across intake/delivery-queue invoice, report and export. Verify positive outcomes and 5xx clearance before recovery.",
+        "Fresh backlog-monitor pending/completion progress was not confirmed; establish whether pending/failed work is growing, stable or draining.",
+        "Parse exact operation outcome contracts for remaining active emitters; broad log marker aggregates cannot establish their health.",
+        "Mirage router/Warren metric http.server.requests is counter_long; inspect counter temporality/reset behavior and route/status denominators before rate monitoring.",
+        "Trace query was paginated/truncated; zero inspected 5xx does not establish full service/operation coverage.",
+        "Relay booking 409/rejection lacks an exact aligned booking-attempt denominator; business decline is not established as technical failure.",
+        "Monitoring: Existing Sluice incident monitor is enabled and linked. Broad reusable outcome monitoring for the rest of the estate is not validated: log message markers do not provide reliable operation denominators, while observed metric http.server.requests is counter_long with unresolved temporality and cannot be safely interpreted as a rate."
+      ],
+      "tool_or_model_issues": [],
+      "event_writes": [
+        {
+          "at": "2026-11-20T17:02:11.338Z",
+          "event_id": "nightshift-problem-sluice-intake-delivery-queue-http-503-outage",
+          "status": "active",
+          "signals": 2,
+          "references": []
+        }
+      ],
+      "probability_samples": []
+    },
+    {
+      "label": "spoke-transfer-sluice-recovery",
+      "id": "1974a1cd-e99b-4921-87e0-4441826d7127",
+      "status": "completed",
+      "startedAt": "2026-11-20T17:05:02.606Z",
+      "finishedAt": "2026-11-20T17:06:43.426Z",
+      "written": 5,
+      "evaluationMode": true,
+      "limits": {
+        "mode": "initial_learning",
+        "maxDurationMinutes": null,
+        "maxTurns": null,
+        "maxCumulativeTokens": null,
+        "maxEstimatedCostUsd": null
+      },
+      "estimatedCostUsd": 0.04492986499999999,
+      "costEstimateComplete": true,
+      "summary": "Reviewed all enabled source and event inventories. The active Sluice event remains supported and was explicitly reviewed: exact request-failed aggregates remain all-5xx/zero-success for intake and delivery-queue across invoice/report/export through 17:04, while fresh intake accepted-200 and queue-completed rows show some work succeeds; no recovery claimed. Opened a separate medium active event for a new spoke trace burst: over the latest 3 minutes 5xx counts were catalogue 852/6616, search 712/3988, profile 98/1457, checkout 32/592 and receipts 10/571, after a bounded earlier 10-minute interval with zero 5xx. Positive 2xx continue; root cause and logical-request attribution remain uncertain. Saved/reused the grouped spoke outcome query and installed native grouped 5xx monitor; linked query, rule and affected service KIs. Broader estate coverage remains partial.",
+      "remainingGaps": [
+        "Sluice intake/delivery-queue exact 5xx request-failed outcomes persist at 100% in recent complete minutes despite positive intake acceptances and queue completions; verify whether these are separate concurrent work and require a complete request denominator before recovery.",
+        "Sluice backlog progression over time remains unknown; current queue sample shows individual jobs completing and pending 0\u20131, but does not establish aggregate backlog drain or failed-work clearance.",
+        "Spoke five-service 5xx burst requires a fresh short-window outcome check for continuation/recovery; many trace spans lack operation attribution and spans may not equal unique logical requests.",
+        "Investigate root cause and directed dependency path for the spoke 5xx burst; no causative service/dependency was established.",
+        "Relay booking 409/rejection still lacks exact aligned booking-attempt denominator; classify only after comparing rejected and booked outcomes.",
+        "Mirage http.server.requests remains counter_long; temporality, reset behavior and safe route/status rate computation are unresolved.",
+        "Other currently emitting services were not comprehensively assessed for operation-specific outcomes; log marker aggregates are approximate and trace aggregation focused on the spoke burst.",
+        "Monitoring: No blocker for the confirmed spoke trace mechanism: grouped 5xx span monitor installed and linked. Sluice already has its validated monitor. Broader estate-wide operation monitoring remains unvalidated because remaining log message markers are not reliable denominators and Mirage HTTP server metric is a counter_long with unresolved temporality/reset behavior."
+      ],
+      "tool_or_model_issues": [
+        {
+          "name": "source_esql",
+          "status": "failed",
+          "at": "2026-11-20T17:06:12.920Z",
+          "reason": "{\"results\":[{\"sourceId\":\"c6df0da5-1434-4d72-96fe-4e6d35dfedcf\",\"error\":\"verification_exception\\n\\tRoot causes:\\n\\t\\tverification_exception: Found 1 problem\\nline 1:403: Unknown column [@timestamp]\",\"lookbackMinutes\":2,\"endOffsetMinutes\":0,\"coverageComplete\":false}],\"failed\":true}"
+        }
+      ],
+      "event_writes": [
+        {
+          "at": "2026-11-20T17:05:49.748Z",
+          "event_id": "nightshift-problem-spoke-multi-service-http-5xx-burst",
+          "status": "active",
+          "signals": 2,
+          "references": []
+        },
+        {
+          "at": "2026-11-20T17:05:51.035Z",
+          "event_id": "nightshift-problem-sluice-intake-delivery-queue-http-503-outage",
+          "status": "active",
+          "signals": 2,
+          "references": []
+        },
+        {
+          "at": "2026-11-20T17:06:32.436Z",
+          "event_id": "nightshift-problem-spoke-multi-service-http-5xx-burst",
+          "status": "active",
+          "signals": 2,
+          "references": []
+        }
+      ],
+      "probability_samples": []
+    },
+    {
+      "label": "escrow-holdout-active",
+      "id": "7981be4f-53e1-4992-a758-26f545df1e5a",
+      "status": "completed",
+      "startedAt": "2026-11-20T17:07:39.464Z",
+      "finishedAt": "2026-11-20T17:08:50.981Z",
+      "written": 3,
+      "evaluationMode": true,
+      "limits": {
+        "mode": "initial_learning",
+        "maxDurationMinutes": null,
+        "maxTurns": null,
+        "maxCumulativeTokens": null,
+        "maxEstimatedCostUsd": null
+      },
+      "estimatedCostUsd": 0.029972735,
+      "costEstimateComplete": true,
+      "summary": "Reviewed all three configured signal sources and all indexed events. Updated the existing spoke event as active: fresh complete 17:05\u201317:07 buckets show 5xx-majority outcomes across search, catalogue, profile, checkout and receipts, with some 2xx continuing. Linked current query evidence, affected service KIs and the existing grouped 5xx monitor; cause and logical-request impact remain unknown. Closed the Sluice 503 event: exact recent failure query returned no rows, and fresh positive intake accepts, queue admissions and completions (pending 0\u20131) support recovery; longer-term backlog/failed-work clearance is not established. Persisted observed spoke profile\u2192catalogue dependency, without marking it causal. Existing Sluice and spoke monitors reused; no new rule needed for these assessed mechanisms. Current estate coverage is partial.",
+      "remainingGaps": [
+        "Spoke multi-service 5xx burst remains active in fresh 17:05\u201317:07 trace buckets; investigate cause and assess unique logical-request/user impact. Operation attribution is incomplete.",
+        "Sluice prior 503 incident now closed on fresh positive accepted/queued/completed work and no exact current failure rows; measure backlog trajectory and verify clearance of any previously failed work.",
+        "Relay booking 409/rejection still lacks aligned attempt denominator; determine whether declines are expected business outcomes or materially elevated.",
+        "Mirage http.server.requests counter_long temporality and reset-safe rate computation remain unresolved; do not use raw counter sums as rates.",
+        "Broader current operation outcomes and useful monitoring coverage remain unassessed for emitting Relay/Warren/Mirage services outside the focused checks; broad message markers are not valid denominators.",
+        "Spoke trace outcomes are spans, not unique requests; causative topology for the burst is unknown. Persisted profile\u2192catalogue call is direct dependency evidence, not causal attribution."
+      ],
+      "tool_or_model_issues": [],
+      "event_writes": [
+        {
+          "at": "2026-11-20T17:08:18.329Z",
+          "event_id": "nightshift-problem-spoke-multi-service-http-5xx-burst",
+          "status": "active",
+          "signals": 1,
+          "references": []
+        },
+        {
+          "at": "2026-11-20T17:08:18.998Z",
+          "event_id": "nightshift-problem-sluice-intake-delivery-queue-http-503-outage",
+          "status": "inactive",
+          "signals": 1,
+          "references": []
+        }
+      ],
+      "probability_samples": []
+    },
+    {
+      "label": "estate-coverage-retest",
+      "id": "e7a012ea-5826-4257-acd7-6ae51c37891b",
+      "status": "completed",
+      "startedAt": "2026-11-20T17:16:36.080Z",
+      "finishedAt": "2026-11-20T17:18:23.197Z",
+      "written": 8,
+      "evaluationMode": true,
+      "limits": {
+        "mode": "initial_learning",
+        "maxDurationMinutes": null,
+        "maxTurns": null,
+        "maxCumulativeTokens": null,
+        "maxEstimatedCostUsd": null
+      },
+      "estimatedCostUsd": 0.051226434999999994,
+      "costEstimateComplete": true,
+      "summary": "Reviewed all three configured sources and lifecycle records. Closed the Spoke multi-service 5xx event: 17:14\u201317:16 complete trace buckets had zero 5xx and positive 2xx for all five services. Saved the recovery lesson and newly observed Escrow log entities plus Warren inventory metrics entity. Broader fresh trace checks found successful outcomes and zero 5xx in Warren and Mirage. Sluice showed positive admissions/completions and pending max 60 with zero structured failures; longer backlog trend remains unknown. Relay booking had booked successes but no defensible decline denominator. Existing monitors were inspected; no new rule was added without validated measurement semantics. Estate and monitoring coverage remain partial.",
+      "remainingGaps": [
+        "Current log emitters archive, intake, delivery-queue and renderer (sluice) lack source-local log entity anchors; add from first-look refs r98\u2013r96/r99 in a follow-up.",
+        "Relay booking decline rate still needs exact business outcome parsing with an aligned attempt denominator and bounded earlier comparison.",
+        "Sluice current short-window admissions/completions are positive (11,726 queued; 11,435 completed; pending max 60; zero structured 5xx failures) but backlog trajectory and clearance of older failed work remain unknown.",
+        "Mirage metric counter temporality/reset-safe rate unresolved; Warren non-null gauges/counters need actual values and trends before useful thresholds or monitors can be validated.",
+        "Remaining Relay/Escrow paths and useful native rule coverage are not fully assessed; current checks did not confirm an incident.",
+        "Current outcomes remain unassessed for 10 observed source/service identities: mirage/replica-1, mirage/replica-2, mirage/replica-3, mirage/replica-4, mirage/replica-5, sluice/archive, sluice/intake, sluice/delivery-queue.",
+        "Monitoring: Metrics include cumulative counter_long requests with unresolved temporality/reset semantics; reliable rates cannot be validated from the current series. No added rule was justified without validated outcome semantics or thresholds; existing relevant managed rules remain enabled."
+      ],
+      "tool_or_model_issues": [
+        {
+          "name": "source_esql",
+          "status": "failed",
+          "at": "2026-11-20T17:17:02.498Z",
+          "reason": "{\"results\":[{\"sourceId\":\"0397bfc7-b3a0-4a04-a115-0593e0abcf80\",\"error\":\"verification_exception\\n\\tRoot causes:\\n\\t\\tverification_exception: Found 4 problems\\nline 1:278: Unknown column [metric.name]\\nline 1:293: Unknown column [metric.type]\\nline 1:308: Unknown column [metric.unit]\\nline 1:323: Unknown column [metric.value]\",\"lookbackMinutes\":3,\"endOffsetMinutes\":0,\"coverageComplete\":false}],\"failed\":true}"
+        }
+      ],
+      "event_writes": [
+        {
+          "at": "2026-11-20T17:17:01.713Z",
+          "event_id": "nightshift-problem-spoke-multi-service-http-5xx-burst",
+          "status": "inactive",
+          "signals": 1,
+          "references": []
+        }
+      ],
+      "probability_samples": []
+    },
+    {
+      "label": "payload-coverage-retest",
+      "id": "9b819f4c-6754-46af-b6cd-ddf4b4d00583",
+      "status": "completed",
+      "startedAt": "2026-11-20T17:21:50.133Z",
+      "finishedAt": "2026-11-20T17:26:22.640Z",
+      "written": 21,
+      "evaluationMode": true,
+      "limits": {
+        "mode": "initial_learning",
+        "maxDurationMinutes": null,
+        "maxTurns": null,
+        "maxCumulativeTokens": null,
+        "maxEstimatedCostUsd": null
+      },
+      "estimatedCostUsd": 0.114076285,
+      "costEstimateComplete": true,
+      "summary": "No active lifecycle event was present; all historical problems remain inactive. Current traces showed zero 5xx and ongoing 2xx across observed Spoke, Mirage and Warren. Sluice logs showed no structured 5xx, 12,305 accepted submissions, 12,044 completions and pending max 8, alongside expected duplicate/validation rejections. Escrow exact current reconciliation rows were zero mismatch, with successful transfer outcomes and expected rejects. Relay booking outcomes include business/payment declines but lack an aligned denominator. Mirage has a measurable latency concern: slow markers above 400 ms at 17:24 were gateway open 11/1,252, save 9/342 and share 2/222 versus 4/9,624, 5/2,552 and 0/1,671 in a bounded older window; positive 2xx continue and only one correlated save 503 was observed. Saved the Mirage query/lesson, Sluice queue and Escrow reconciliation measurements, schemas, and source-local entity anchors. Existing rules remain enabled; no new monitor was justified without validation. Coverage remains partial.",
+      "remainingGaps": [
+        "Mirage gateway slow-marker elevation: verify continued rates in subsequent complete buckets and whether logical operations remain slow; the single correlated 503 is not a sustained outage measure.",
+        "Relay booking: align exact attempt denominators and classify success, business/payment decline and technical failure separately; compare current and older windows.",
+        "Sluice: measure admission/completion/backlog trajectory and failed-work across aligned windows; queue-depth failed values may be cumulative.",
+        "Metrics: Warren actual values remain sparse/null in sampled rows; counter_long/counter_double reset and temporality semantics remain unresolved, preventing reliable rate monitors.",
+        "Broader Relay, Warren, Escrow and other emitting-service outcomes and monitoring coverage remain incomplete; supplier-Air current newest minute had 5 quote successes and no timeout, but older traceback clues merit reassessment if recurring.",
+        "Current outcomes remain unassessed for 3 observed source/service identities: sluice/delivery-queue, sluice/renderer, relay/redis."
+      ],
+      "tool_or_model_issues": [
+        {
+          "name": "knowledge_indicators",
+          "status": "failed",
+          "at": "2026-11-20T17:24:36.624Z",
+          "reason": "{\"sourceId\":\"a19c4e7e-59b9-4a78-b46b-f6c1995d7467\",\"saved\":[],\"savedQueries\":[],\"unchanged\":[{\"id\":\"service-redis-relay\",\"type\":\"entity\"},{\"id\":\"service-payments-relay\",\"type\":\"entity\"},{\"id\":\"service-notifier-relay\",\"type\":\"entity\"},{\"id\":\"service-supplier-rail-relay\",\"type\":\"entity\"},{\"id\":\"service-replica-1-mirage\",\"type\":\"entity\"},{\"id\":\"service-replica-2-mirage\",\"type\":\"entity\"},{\"id\":\"service-replica-4-mirage\",\"type\":\"entity\"},{\"id\":\"service-replica-5-mirage\",\"type\":\"entity\"},{\"id\":\"service-checkout-spoke\",\"type\":\"entity\"},{\"id\":\"service-receipts-spoke\",\"type\":\"entity\"},{\"id\":\"service-pr"
+        }
+      ],
+      "event_writes": [],
+      "probability_samples": []
+    },
+    {
+      "label": "learned-recurrence-active",
+      "id": "6f3e85a7-cef4-458f-9b56-a7344aba20f0",
+      "status": "completed",
+      "startedAt": "2026-11-20T17:28:18.769Z",
+      "finishedAt": "2026-11-20T17:31:49.346Z",
+      "written": 9,
+      "evaluationMode": true,
+      "limits": {
+        "mode": "initial_learning",
+        "maxDurationMinutes": null,
+        "maxTurns": null,
+        "maxCumulativeTokens": null,
+        "maxEstimatedCostUsd": null
+      },
+      "estimatedCostUsd": 0.09331692,
+      "costEstimateComplete": true,
+      "summary": "Confirmed and saved active Spoke catalogue/search HTTP 503 problem with substantial partial failures across two complete minutes, corroborating log outcomes, and search\u2192catalogue peer evidence. Linked affected entities and dependency, saved reusable grouped query and detection-learning note, and installed a validated grouped native 5xx monitor. Supplemental scoped samples found continuing Relay charges/notifications, supplier quotes (including occasional cached rail timeout), successful Escrow transfers/postings with expected validation rejects, and successful Mirage replica responses with expected 404/409/422 rejects. Warren traces show zero 5xx with ongoing 2xx in the newest complete minute, but further pages and log outcome assessment remain. Sluice queue-progress query and interpretation lesson saved; no Sluice incident opened. Source/event/KI/rule inventories were reviewed; no prior active events needed review. Overall coverage is partial.",
+      "remainingGaps": [
+        "Reassess active Spoke catalogue/search 503 event using fresh complete-minute 5xx and positive 2xx evidence; recovery requires sustained positive outcomes and cleared failures.",
+        "Relay booking has positive bookings and technical 402 markers mixed with business declines; exact complete attempt denominator and classification remain unresolved.",
+        "Sluice current admissions/completions and low pending were observed, but the `failed` field\u2019s cumulative/window semantics and longer backlog trajectory remain unresolved.",
+        "Mirage slow-marker persistence and reach remain unresolved; newest prior sampled window had continuing successes and expected validation/duplicate rejections.",
+        "Current outcomes for remaining Relay, Escrow and other log emitters were sampled but not comprehensively aggregated. Warren newest trace bucket had zero 5xx and positive 2xx, but the current aggregate is paged and broader Warren log semantics remain unexplored.",
+        "Metric signal values/temporality for Warren and Sluice remain insufficiently profiled for reliable monitor selection.",
+        "Current outcomes remain unassessed for 21 observed source/service identities: escrow/credit-audit, escrow/debit-audit, sluice/backlog-monitor, relay/search, mirage/gateway, warren/policy, warren/gateway, warren/orders."
+      ],
+      "tool_or_model_issues": [
+        {
+          "name": "Reasoning 2",
+          "status": "partial",
+          "at": "2026-11-20T17:28:24.293Z",
+          "reason": "Tool call arguments for source_esql (call_PKTdaKlnnSCYJUCrJTMsXcst) were invalid: fieldSearch: Too big: expected string to have <=200 characters. Rejected arguments: {\"sourceIds\":[\"0397bfc7-b3a0-4a04-a115-0593e0abcf80\"],\"template\":\"schema\",\"lookbackMinutes\":3,\"fieldSearch\":\"service.name|service.namespace|metrics.http.server.active_requests|metrics.messaging.queue.depth|metrics.messaging.process.messages|metrics.process.cpu.time|metrics.process.memory.usage|metrics.carl.db.rows\",\"maxRows\":50}"
+        },
+        {
+          "name": "source_esql",
+          "status": "failed",
+          "at": "2026-11-20T17:31:24.267Z",
+          "reason": "{\"results\":[{\"sourceId\":\"a19c4e7e-59b9-4a78-b46b-f6e35dfedcf\",\"error\":\"Unknown or disabled sourceId. Enabled source IDs: a19c4e7e-59b9-4a78-b46b-f6c1995d7467, 0397bfc7-b3a0-4a04-a115-0593e0abcf80, c6df0da5-1434-4d72-96fe-4e6d35dfedcf. Copy the ID exactly from detection_sources.\",\"coverageComplete\":false}],\"failed\":true}"
+        }
+      ],
+      "event_writes": [
+        {
+          "at": "2026-11-20T17:30:54.298Z",
+          "event_id": "nightshift-problem-spoke-catalogue-search-http-503",
+          "status": "active",
+          "signals": 3,
+          "references": []
+        }
+      ],
+      "probability_samples": []
+    },
+    {
+      "label": "complete-current-coverage-retest",
+      "id": "26d9c39c-a1a4-446f-b57e-8edfa384a2fd",
+      "status": "completed",
+      "startedAt": "2026-11-20T17:39:20.660Z",
+      "finishedAt": "2026-11-20T17:45:11.974Z",
+      "written": 13,
+      "evaluationMode": true,
+      "limits": {
+        "mode": "initial_learning",
+        "maxDurationMinutes": null,
+        "maxTurns": null,
+        "maxCumulativeTokens": null,
+        "maxEstimatedCostUsd": null
+      },
+      "estimatedCostUsd": 0.08288451,
+      "costEstimateComplete": false,
+      "summary": "Reviewed all enabled sources, active event inventory and paged current log/trace outcome results. Spoke catalogue/search 503 remains an active multi-service issue across catalogue, search, profile, checkout and receipts; fresh 5xx coexist with some positive 2xx, so recovery is not established. Existing grouped monitor covers the affected services. Escrow credit-audit ledger mismatch remains active with a saved exact query, learning note and validated native monitor. Sluice continues admission/completion with zero request-failure markers; backlog trend unknown. Mirage shows successful requests and expected rejects alongside slow markers requiring measurement. Warren traces show positive 2xx and zero 5xx in current sampled complete buckets; saved reusable grouped outcome query. Saved source-local Relay and Spoke payload-format knowledge. Full operation-denominator and metric-temporality coverage remains incomplete.",
+      "remainingGaps": [
+        "Spoke five-service 5xx event remains active; current complete traces/logs show substantial failures with some successes. Recovery requires multiple fresh healthy complete buckets and cleared 5xx.",
+        "Escrow credit-audit reconciliation mismatches remain active; recovery requires current positive reconciliation rows with zero mismatches. Root cause and ledger scope unknown.",
+        "Relay booking, payment, supplier, search and notifier samples show successful outcomes but do not establish full denominators, failure rates or notification completion consistency.",
+        "Relay PostgreSQL/Redis logs are sparse maintenance messages, not client-operation health checks.",
+        "Sluice shows admissions/completions and low pending, but longer backlog trajectory and queue failed-field temporal semantics remain unresolved.",
+        "Mirage router successful requests and expected 404/422 rejects coexist with slow markers; quantify operation-specific slow rates and persistence.",
+        "Metric counters for messages and CPU have unresolved cumulative temporality; current gauges are sparse and not complete service coverage.",
+        "No useful dependency is established solely by sampled co-occurrence; the current Spoke search/profile-to-catalogue failure evidence remains the directed dependency clue.",
+        "Monitoring: Current Spoke and Escrow failures have validated native monitors. No access blocker; full coverage remains incomplete because several operation-specific denominator/progress semantics are unresolved and metrics counters lack validated temporality."
+      ],
+      "tool_or_model_issues": [
+        {
+          "name": "Reasoning 6",
+          "status": "partial",
+          "at": "2026-11-20T17:40:10.091Z",
+          "reason": "Tool call arguments for events (call_HjZFHbCDuuiVHhKgD65S08rw) were invalid: assessmentNote: Too big: expected string to have <=900 characters. Rejected arguments: {\"action\":\"upsert\",\"assessmentNote\":\"Current fresh traces show the original Spoke catalogue/search 5xx incident is ongoing and has expanded into additional Spoke operations. Exact complete 17:37 bucket: catalogue 633/775 spans 5xx and 135 2xx; search 1066/1310 5xx and 230 2xx; profile 114/134 5xx; checkout 70/88 5xx; receipts 8/9 5xx. At 17:38 catalogue 405/504 and search 670/836 5xx; profile 88/112, checkout 44/52, receipts 4/4. At"
+        },
+        {
+          "name": "events",
+          "status": "failed",
+          "at": "2026-11-20T17:40:36.495Z",
+          "reason": "{\"error\":\"upsert requires title, summary, assessmentNote, and status.\"}"
+        },
+        {
+          "name": "events",
+          "status": "failed",
+          "at": "2026-11-20T17:41:29.589Z",
+          "reason": "{\"error\":\"Check current outcomes for EVERY source with lookbackMinutes<=3, endOffsetMinutes=0, and cite those evidenceRefs. Old errors and missing traffic do not prove current failure or recovery.\"}"
+        },
+        {
+          "name": "source_esql",
+          "status": "failed",
+          "at": "2026-11-20T17:41:32.852Z",
+          "reason": "{\"results\":[{\"sourceId\":\"a19c4e7e-59b9-4a78-b46b-f6c1995d7467\",\"error\":\"parsing_exception\\n\\tRoot causes:\\n\\t\\tparsing_exception: line 1:313: Invalid regex pattern for RLIKE [.*(transfer completed|posted|status=200|status\\\":200|completed).*]: [expected '\\\"' at position 64]\",\"lookbackMinutes\":3,\"endOffsetMinutes\":0,\"coverageComplete\":false}],\"failed\":true}"
+        },
+        {
+          "name": "events",
+          "status": "failed",
+          "at": "2026-11-20T17:41:38.710Z",
+          "reason": "{\"error\":\"Check current outcomes for EVERY source with lookbackMinutes<=3, endOffsetMinutes=0, and cite those evidenceRefs. Old errors and missing traffic do not prove current failure or recovery.\"}"
+        },
+        {
+          "name": "source_esql",
+          "status": "failed",
+          "at": "2026-11-20T17:42:28.920Z",
+          "reason": "{\"results\":[{\"sourceId\":\"0397bfc7-b3a0-4a04-a115-0593e0abcf80\",\"error\":\"verification_exception\\n\\tRoot causes:\\n\\t\\tverification_exception: Found 1 problem\\nline 1:524: argument of [MAX(`metrics.messaging.process.messages`)] must be [boolean, date, ip, string, version, aggregate_metric_double, exponential_histogram, tdigest or numeric except counter types], found value [metrics.messaging.process.messages] type [counter_long]\",\"lookbackMinutes\":3,\"endOffsetMinutes\":0,\"coverageComplete\":false}],\"failed\":true}"
+        },
+        {
+          "name": "Reasoning 21",
+          "status": "partial",
+          "at": "2026-11-20T17:42:49.292Z",
+          "reason": "Tool call arguments for source_esql (call_0rTZrr2DEeYXNKH57KzNGD4z) were invalid: sampleProbability: Invalid number: must be a multiple of 1. Rejected arguments: {\"lookbackMinutes\":3,\"maxRows\":3,\"sampleKind\":\"representative\",\"serviceNames\":[\"postgres\",\"redis\",\"inventory\",\"availability\",\"pricing\"],\"serviceNamespace\":\"relay\",\"sourceIds\":[\"a19c4e7e-59b9-4a78-b46b-f6c1995d7467\"],\"template\":\"samples\",\"sampleProbability\":0.2}"
+        }
+      ],
+      "event_writes": [
+        {
+          "at": "2026-11-20T17:40:36.559Z",
+          "event_id": "nightshift-problem-escrow-credit-audit-ledger-reconciliation-mismatches",
+          "status": "active",
+          "signals": 2,
+          "references": [
+            {
+              "rule_name": "Verified source evidence"
+            },
+            {
+              "rule_name": "Verified source evidence"
+            }
+          ]
+        },
+        {
+          "at": "2026-11-20T17:40:55.278Z",
+          "event_id": "nightshift-problem-spoke-catalogue-search-http-503",
+          "status": "active",
+          "signals": 4,
+          "references": [
+            {
+              "rule_name": "Verified source evidence"
+            },
+            {
+              "rule_name": "Verified source evidence"
+            },
+            {
+              "rule_name": "Verified source evidence"
+            },
+            {
+              "rule_name": "Verified source evidence"
+            }
+          ]
+        },
+        {
+          "at": "2026-11-20T17:41:29.630Z",
+          "event_id": "nightshift-problem-escrow-credit-audit-ledger-reconciliation-mismatches",
+          "status": "active",
+          "signals": 2,
+          "references": [
+            {
+              "rule_name": "Verified source evidence",
+              "query_id": "query-escrow-ledger-mismatch-outcomes",
+              "rule_uuid": "nightshift-problem-monitor-90d36197b6c2e852bde5203a"
+            },
+            {
+              "rule_name": "Verified source evidence",
+              "query_id": "query-escrow-ledger-mismatch-outcomes",
+              "rule_uuid": "nightshift-problem-monitor-90d36197b6c2e852bde5203a"
+            }
+          ]
+        },
+        {
+          "at": "2026-11-20T17:41:57.548Z",
+          "event_id": "nightshift-problem-spoke-catalogue-search-http-503",
+          "status": "active",
+          "signals": 2,
+          "references": [
+            {
+              "rule_name": "Verified source evidence"
+            },
+            {
+              "rule_name": "Verified source evidence"
+            }
+          ]
+        }
+      ],
+      "probability_samples": []
+    },
+    {
+      "label": "final-queue-early-recovery",
+      "id": "c87810c8-ab16-4c31-bec0-260fc3b5817f",
+      "status": "completed",
+      "startedAt": "2026-11-20T17:49:42.796Z",
+      "finishedAt": "2026-11-20T17:51:33.156Z",
+      "written": 6,
+      "evaluationMode": true,
+      "limits": {
+        "mode": "initial_learning",
+        "maxDurationMinutes": null,
+        "maxTurns": null,
+        "maxCumulativeTokens": null,
+        "maxEstimatedCostUsd": null
+      },
+      "estimatedCostUsd": 0.055554305000000005,
+      "costEstimateComplete": true,
+      "summary": "Reviewed all three configured sources and existing event/knowledge/monitoring inventories. Escrow credit-audit remains a confirmed active correctness failure with current positive reconciliation mismatches and its existing monitor/query attached. Spoke multi-service 5xx event was closed after three complete fresh trace buckets with zero 5xx and positive 2xx across all five services, corroborated by current logs; its high historical severity is retained and existing monitor remains enabled. Saved a refreshed Spoke recovery lesson (trace-source evidence only; log refs belong to another source and were not copied) and three new log-format KIs for Relay pricing/availability/inventory, Spoke checkout, and Mirage router. Sluice pending gauge rose to 1,666, yet jobs continued completing, errors were zero, and sampled queue snapshots also showed pending 0\u20135; trend/temporal semantics remain unresolved, so no incident was fabricated. Monitoring inventory is compact but does not cover all important outcomes; current coverage remains partial.",
+      "remainingGaps": [
+        "Escrow credit-audit remains active: fresh reconciliation buckets had positive mismatches in 8/8 rows (21,408), 20/20 (53,520), and 20/20 (166,248). Recovery requires fresh positive zero-mismatch rows.",
+        "Sluice queue follow-up: current pending was 940 then 1,485 then 1,666 in metric gauges; logs show queue snapshots with accepted/completed counts diverging, but jobs continued completing, runtime errors were zero, and sampled pending later ranged down to 0\u20135. Establish aligned unsampled backlog trend/temporal semantics before incident classification.",
+        "Relay notifier terminal delivery/completion outcomes are not understood; do not infer delivery health from generic success markers. Inspect exact notifier payloads and ingress-to-terminal counts.",
+        "Mirage router currently emits slow events above threshold alongside successful balanced requests; quantify exact slow/total rates by op and complete minute, compare bounded older rates, and distinguish expected 404 rejects from 503 failures.",
+        "Warren inventory and warehouse current operation contracts remain unassessed; traces do not emit those services in the observed window. Inspect current logs before claiming operation health.",
+        "Metric coverage is sparse: only Sluice delivery-queue emitted during the current 3-minute window. Counter_long message instruments remain cumulative/temporality-ambiguous; do not derive rates without comparable series/reset validation.",
+        "Monitoring: No access blocker. Fresh Sluice backlog telemetry requires time-series semantics and a confirmed trend; current validation did not establish whether rising pending is sustained or self-clearing. Operation coverage is also incomplete for Relay notifications, Mirage slow ratios, and Warren inventory/warehouse."
+      ],
+      "tool_or_model_issues": [
+        {
+          "name": "events",
+          "status": "failed",
+          "at": "2026-11-20T17:50:08.570Z",
+          "reason": "{\"error\":\"Recheck every source already confirming this problem; do not drop unchecked sources.\"}"
+        }
+      ],
+      "event_writes": [
+        {
+          "at": "2026-11-20T17:50:08.611Z",
+          "event_id": "nightshift-problem-escrow-credit-audit-ledger-reconciliation-mismatches",
+          "status": "active",
+          "signals": 1,
+          "references": [
+            {
+              "rule_name": "Verified source evidence",
+              "query_id": "query-escrow-ledger-mismatch-outcomes",
+              "rule_uuid": "nightshift-problem-monitor-90d36197b6c2e852bde5203a"
+            }
+          ]
+        },
+        {
+          "at": "2026-11-20T17:50:34.567Z",
+          "event_id": "nightshift-problem-spoke-catalogue-search-http-503",
+          "status": "inactive",
+          "signals": 3,
+          "references": [
+            {
+              "rule_name": "Verified source evidence",
+              "query_id": "query-spoke-http-outcomes",
+              "rule_uuid": "nightshift-problem-monitor-67b77857cf408c41aeee7d5f"
+            },
+            {
+              "rule_name": "Verified source evidence",
+              "query_id": "query-spoke-http-outcomes",
+              "rule_uuid": "nightshift-problem-monitor-67b77857cf408c41aeee7d5f"
+            },
+            {
+              "rule_name": "Verified source evidence"
+            }
+          ]
+        }
+      ],
+      "probability_samples": []
+    },
+    {
+      "label": "final-temporal-retest",
+      "id": "04f76ef9-9242-4d8a-82b7-999a4cf3ffd4",
+      "status": "cancelled",
+      "startedAt": "2026-11-20T17:58:43.759Z",
+      "finishedAt": "2026-11-20T18:02:06.235Z",
+      "written": 3,
+      "evaluationMode": true,
+      "limits": {
+        "mode": "initial_learning",
+        "maxDurationMinutes": null,
+        "maxTurns": null,
+        "maxCumulativeTokens": null,
+        "maxEstimatedCostUsd": null
+      },
+      "estimatedCostUsd": 0.0682156,
+      "costEstimateComplete": false,
+      "summary": "Cancelled by user; 3 KI writes saved. Run again to resume from saved progress.",
+      "remainingGaps": null,
+      "tool_or_model_issues": [
+        {
+          "name": "source_esql",
+          "status": "failed",
+          "at": "2026-11-20T18:02:00.335Z",
+          "reason": "{\"results\":[{\"sourceId\":\"a19c4e7e-59b9-4a78-b46b-f6c1995d7467\",\"error\":\"verification_exception\\n\\tRoot causes:\\n\\t\\tverification_exception: Found 4 problems\\nline 1:383: Unknown function [REGEX_EXTRACT], did you mean any of [date_extract, field_extract, json_extract]?\\nline 1:442: Unknown function [REGEX_EXTRACT], did you mean any of [date_extract, field_extract, json_extract]?\\nline 1:503: Unknown function [REGEX_EXTRACT], did you mean any of [date_extract, field_extract, json_extract]?\\nline 1:562: Unknown function [REGEX_EXTRACT], did you mean any of [date_extract, field_extract, json_extra"
+        },
+        {
+          "name": "Reasoning 21",
+          "status": "failed",
+          "at": "2026-11-20T18:02:00.374Z",
+          "reason": "Cancelled by user"
+        }
+      ],
+      "event_writes": [
+        {
+          "at": "2026-11-20T17:59:06.792Z",
+          "event_id": "nightshift-problem-escrow-credit-audit-ledger-reconciliation-mismatches",
+          "status": "inactive",
+          "signals": 1,
+          "references": [
+            {
+              "rule_name": "Verified source evidence",
+              "query_id": "query-escrow-ledger-mismatch-outcomes",
+              "rule_uuid": "nightshift-problem-monitor-90d36197b6c2e852bde5203a"
+            }
+          ]
+        },
+        {
+          "at": "2026-11-20T18:01:32.653Z",
+          "event_id": "nightshift-problem-sluice-delivery-queue-growing-backlog",
+          "status": "active",
+          "signals": 1,
+          "references": [
+            {
+              "rule_name": "Verified source evidence",
+              "query_id": "query-sluice-queue-progress-outcomes"
+            }
+          ]
+        }
+      ],
+      "probability_samples": [
+        {
+          "at": "2026-11-20T17:59:44.823Z",
+          "probability": 0.15,
+          "status": "completed"
+        },
+        {
+          "at": "2026-11-20T17:59:45.017Z",
+          "probability": 0.15,
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "label": "final-recovered",
+      "id": "24d1d7b6-8957-4de6-bf4d-fd5aa97c2223",
+      "status": "cancelled",
+      "startedAt": "2026-11-20T18:09:11.738Z",
+      "finishedAt": "2026-11-20T18:14:31.961Z",
+      "written": 5,
+      "evaluationMode": true,
+      "limits": {
+        "mode": "initial_learning",
+        "maxDurationMinutes": null,
+        "maxTurns": null,
+        "maxCumulativeTokens": null,
+        "maxEstimatedCostUsd": null
+      },
+      "estimatedCostUsd": 0.070657395,
+      "costEstimateComplete": false,
+      "summary": "Cancelled by user; 5 KI writes saved. Run again to resume from saved progress.",
+      "remainingGaps": null,
+      "tool_or_model_issues": [
+        {
+          "name": "Reasoning 35",
+          "status": "failed",
+          "at": "2026-11-20T18:14:24.650Z",
+          "reason": "Cancelled by user"
+        }
+      ],
+      "event_writes": [
+        {
+          "at": "2026-11-20T18:09:44.431Z",
+          "event_id": "nightshift-problem-sluice-delivery-queue-growing-backlog",
+          "status": "inactive",
+          "signals": 3,
+          "references": [
+            {
+              "rule_name": "Verified source evidence"
+            },
+            {
+              "rule_name": "Verified source evidence"
+            },
+            {
+              "rule_name": "Verified source evidence"
+            }
+          ]
+        },
+        {
+          "at": "2026-11-20T18:13:55.382Z",
+          "event_id": "nightshift-problem-mirage-gateway-operations-slow-requests",
+          "status": "active",
+          "signals": 3,
+          "references": [
+            {
+              "rule_name": "Verified source evidence"
+            },
+            {
+              "rule_name": "Verified source evidence"
+            },
+            {
+              "rule_name": "Verified source evidence"
+            }
+          ]
+        }
+      ],
+      "probability_samples": [
+        {
+          "at": "2026-11-20T18:10:51.981Z",
+          "probability": 0.02,
+          "status": "completed"
+        },
+        {
+          "at": "2026-11-20T18:10:52.083Z",
+          "probability": 0.01,
+          "status": "completed"
+        },
+        {
+          "at": "2026-11-20T18:11:09.737Z",
+          "probability": 0.03,
+          "status": "completed"
+        },
+        {
+          "at": "2026-11-20T18:11:09.774Z",
+          "probability": 0.02,
+          "status": "completed"
+        },
+        {
+          "at": "2026-11-20T18:11:09.813Z",
+          "probability": 0.01,
+          "status": "completed"
+        },
+        {
+          "at": "2026-11-20T18:11:09.851Z",
+          "probability": 0.02,
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "label": "final-completion-check",
+      "id": "17a8a699-64a7-475d-a631-1f5b1b189607",
+      "status": "completed",
+      "startedAt": "2026-11-20T18:18:10.347Z",
+      "finishedAt": "2026-11-20T18:22:27.923Z",
+      "written": 4,
+      "evaluationMode": true,
+      "limits": {
+        "mode": "initial_learning",
+        "maxDurationMinutes": null,
+        "maxTurns": null,
+        "maxCumulativeTokens": null,
+        "maxEstimatedCostUsd": null
+      },
+      "estimatedCostUsd": 0.08472911000000001,
+      "costEstimateComplete": false,
+      "summary": "Closed the existing Mirage gateway/router event after fresh positive recovery evidence. Gateway logs had zero failures and continuing 2xx in complete 18:19\u201318:21 buckets; traces showed zero 5xx and positive 2xx for both services across the same recent complete minutes. High historical severity retained; cause and unique customer reach remain unknown. Mirage replica logs show active document-serving outcomes across all five replicas (about 1,737\u20131,761 structured 2xx where status is mapped; replica-1 also has serving messages without mapped status). Replicas 2\u20135 have 0\u20132 technical failure markers each; expected missing-record rejections also occur. Metrics show 15\u201316 populated active-request samples per replica, maxima 0\u20134, plus memory readings; snapshots are not rates. Relay search\u2019s 4/58 partial bucket was followed by zero partials in two complete buckets and older buckets were generally low; no new event opened. No other active issue established; coverage remains partial.",
+      "remainingGaps": [
+        "Mirage 503 event is closed on fresh positive log and trace outcomes; no dedicated 503 monitor exists (the linked managed rule covers slow-request markers).",
+        "Relay search partial rate returned to zero in complete 18:20\u201318:21 buckets after 4/58 in 18:19; older bounded comparison was generally 0\u20133 per bucket. Revisit on recurring elevation or supplier-correlated failures.",
+        "Metrics were assessed for current Mirage replica active requests and memory, and Sluice/Warren gauges, but instrument semantics/series and temporal behavior are not comprehensively established across the metrics estate.",
+        "Sluice raw backlog-monitor inspection query had no rows in a fresh scoped attempt despite recent representative pending=0 and active completions; parser/cadence and historical repair remain unknown.",
+        "Current broad-source checks are not an exhaustive service-by-service assessment across all signals.",
+        "Scoped current reads returned no matching rows for 1 previously observed source/service identities: sluice/backlog-monitor. This is an explicit data gap, not proof of health or telemetry absence."
+      ],
+      "tool_or_model_issues": [
+        {
+          "name": "Reasoning 4",
+          "status": "partial",
+          "at": "2026-11-20T18:18:34.103Z",
+          "reason": "Tool call arguments for events (call_m9j7VBvUxgrMs0Axz4u9ohDh) were invalid: assessmentNote: Too big: expected string to have <=900 characters. Rejected arguments: {\"action\":\"upsert\",\"eventId\":\"nightshift-problem-mirage-gateway-operations-slow-requests\",\"issueKey\":\"mirage-gateway-operations-slow-requests\",\"status\":\"active\",\"severity\":\"high\",\"confidence\":0.99,\"title\":\"Mirage gateway and router operations intermittently failing with 503s\",\"summary\":\"Current Mirage traces show repeated 503 spans on gateway and router across /open, /save and /share, with 71/24,136 gateway spans and 70/12,030 route"
+        },
+        {
+          "name": "events",
+          "status": "failed",
+          "at": "2026-11-20T18:19:04.378Z",
+          "reason": "{\"error\":\"Use actual logical KI IDs in these sources.\"}"
+        }
+      ],
+      "event_writes": [
+        {
+          "at": "2026-11-20T18:19:22.549Z",
+          "event_id": "nightshift-problem-mirage-gateway-operations-slow-requests",
+          "status": "active",
+          "signals": 4,
+          "references": [
+            {
+              "rule_name": "Verified source evidence",
+              "rule_uuid": "nightshift-problem-monitor-8d1d604b58b477997a478748"
+            },
+            {
+              "rule_name": "Verified source evidence",
+              "rule_uuid": "nightshift-problem-monitor-8d1d604b58b477997a478748"
+            },
+            {
+              "rule_name": "Verified source evidence",
+              "query_id": "query-current-trace-http-outcomes"
+            },
+            {
+              "rule_name": "Verified source evidence",
+              "query_id": "query-current-trace-http-outcomes"
+            }
+          ]
+        },
+        {
+          "at": "2026-11-20T18:21:44.010Z",
+          "event_id": "nightshift-problem-mirage-gateway-operations-slow-requests",
+          "status": "inactive",
+          "signals": 2,
+          "references": [
+            {
+              "rule_name": "Verified source evidence",
+              "rule_uuid": "nightshift-problem-monitor-8d1d604b58b477997a478748"
+            },
+            {
+              "rule_name": "Verified source evidence",
+              "query_id": "query-current-trace-http-outcomes"
+            }
+          ]
+        }
+      ],
+      "probability_samples": []
+    }
+  ],
+  "final_native_events": [
+    {
+      "event_id": "nightshift-problem-mirage-gateway-operations-slow-requests",
+      "created_at": "2026-11-20T18:13:55.423Z",
+      "@timestamp": "2026-11-20T18:21:44.101Z",
+      "status": "inactive",
+      "severity": "high",
+      "confidence": 0.99,
+      "title": "Mirage gateway operations showing recurring slow requests",
+      "summary": "Closed after fresh complete gateway log buckets at 18:18\u201318:21 showed zero failure markers and continuing positive 2xx outcomes; trace buckets across the same recent interval showed zero 5xx and positive 2xx for both gateway and router. Preserve high severity for the prior intermittent failure. Historical span counts were not unique requests; cause and customer reach remain unknown.",
+      "episode_id": "cebebb8d-bcb9-4a97-9ab7-65d58b0f4cb6",
+      "signal_count": 8,
+      "signals": [
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T18:13:38.990Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T18:10:38.990Z",
+              "to": "2026-11-20T18:13:38.990Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T18:13:38.990Z\") - 3 minutes | WHERE COALESCE(`resource.attributes.service.name`, `service.name`) IN (\"gateway\") AND COALESCE(`resource.attributes.service.namespace`, `service.namespace`) == \"mirage\" |  WHERE `resource.attributes.service.namespace` == \"mirage\" AND `resource.attributes.service.name` == \"gateway\" | EVAL event=TO_STRING(JSON_EXTRACT(message,\"event\")), op=TO_STRING(JSON_EXTRACT(message,\"op\")), status=TO_LONG(JSON_EXTRACT(message,\"status\")), duration=TO_DOUBLE(JSON_EXTRACT(message,\"duration_ms\")), threshold=TO_DOUBLE(JSON_EXTRACT(message,\"threshold_ms\")) | STATS rows=COUNT(*), success=SUM(CASE(status >= 200 AND status < 300,1,0)), failed=SUM(CASE(event == \"request failed\" OR status >= 500,1,0)), slow=SUM(CASE(event == \"slow request\" AND duration > threshold,1,0)) BY bucket=BUCKET(@timestamp,1 minute), op | SORT bucket DESC | LIMIT 31"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T18:13:39.131Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T18:00:39.131Z",
+              "to": "2026-11-20T18:10:39.131Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T18:13:39.131Z\") - 13 minutes AND `@timestamp` < TO_DATETIME(\"2026-11-20T18:13:39.131Z\") - 3 minutes | WHERE COALESCE(`resource.attributes.service.name`, `service.name`) IN (\"gateway\") AND COALESCE(`resource.attributes.service.namespace`, `service.namespace`) == \"mirage\" |  WHERE `resource.attributes.service.namespace` == \"mirage\" AND `resource.attributes.service.name` == \"gateway\" | EVAL event=TO_STRING(JSON_EXTRACT(message,\"event\")), op=TO_STRING(JSON_EXTRACT(message,\"op\")), status=TO_LONG(JSON_EXTRACT(message,\"status\")), duration=TO_DOUBLE(JSON_EXTRACT(message,\"duration_ms\")), threshold=TO_DOUBLE(JSON_EXTRACT(message,\"threshold_ms\")) | STATS rows=COUNT(*), success=SUM(CASE(status >= 200 AND status < 300,1,0)), failed=SUM(CASE(event == \"request failed\" OR status >= 500,1,0)), slow=SUM(CASE(event == \"slow request\" AND duration > threshold,1,0)) BY bucket=BUCKET(@timestamp,1 minute), op | SORT bucket DESC | LIMIT 31"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T18:13:39.132Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T18:00:39.132Z",
+              "to": "2026-11-20T18:10:39.132Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T18:13:39.132Z\") - 13 minutes AND `@timestamp` < TO_DATETIME(\"2026-11-20T18:13:39.132Z\") - 3 minutes | WHERE COALESCE(`resource.attributes.service.name`, `service.name`) IN (\"gateway\") AND COALESCE(`resource.attributes.service.namespace`, `service.namespace`) == \"mirage\" |  WHERE `resource.attributes.service.namespace` == \"mirage\" AND `resource.attributes.service.name` == \"gateway\" | EVAL event=TO_STRING(JSON_EXTRACT(message,\"event\")), op=TO_STRING(JSON_EXTRACT(message,\"op\")), status=TO_LONG(JSON_EXTRACT(message,\"status\")), duration=TO_DOUBLE(JSON_EXTRACT(message,\"duration_ms\")), threshold=TO_DOUBLE(JSON_EXTRACT(message,\"threshold_ms\")) | STATS rows=COUNT(*), success=SUM(CASE(status >= 200 AND status < 300,1,0)), failed=SUM(CASE(event == \"request failed\" OR status >= 500,1,0)), slow=SUM(CASE(event == \"slow request\" AND duration > threshold,1,0)) BY bucket=BUCKET(@timestamp,1 minute), op | SORT bucket DESC | LIMIT 31"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T18:18:24.138Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_uuid": "nightshift-problem-monitor-8d1d604b58b477997a478748",
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T18:15:24.138Z",
+              "to": "2026-11-20T18:18:24.138Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T18:18:24.138Z\") - 3 minutes | WHERE COALESCE(`resource.attributes.service.name`, `service.name`) IN (\"gateway\") AND COALESCE(`resource.attributes.service.namespace`, `service.namespace`) == \"mirage\" |  EVAL event=TO_STRING(JSON_EXTRACT(message,\"event\")), op=TO_STRING(JSON_EXTRACT(message,\"op\")), status=TO_LONG(JSON_EXTRACT(message,\"status\")), duration=TO_DOUBLE(JSON_EXTRACT(message,\"duration_ms\")), threshold=TO_DOUBLE(JSON_EXTRACT(message,\"threshold_ms\")) | STATS rows=COUNT(*), success=SUM(CASE(status >= 200 AND status < 300,1,0)), fail=SUM(CASE(event == \"request failed\" OR status >= 500,1,0)), slow=SUM(CASE(event == \"slow request\" AND duration > threshold,1,0)) BY bucket=BUCKET(@timestamp,1 minute), op | SORT bucket DESC | LIMIT 31"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T18:18:24.139Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_uuid": "nightshift-problem-monitor-8d1d604b58b477997a478748",
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T18:15:24.139Z",
+              "to": "2026-11-20T18:18:24.139Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T18:18:24.139Z\") - 3 minutes | WHERE COALESCE(`resource.attributes.service.name`, `service.name`) IN (\"gateway\") AND COALESCE(`resource.attributes.service.namespace`, `service.namespace`) == \"mirage\" |  EVAL event=TO_STRING(JSON_EXTRACT(message,\"event\")), op=TO_STRING(JSON_EXTRACT(message,\"op\")), status=TO_LONG(JSON_EXTRACT(message,\"status\")), duration=TO_DOUBLE(JSON_EXTRACT(message,\"duration_ms\")), threshold=TO_DOUBLE(JSON_EXTRACT(message,\"threshold_ms\")) | STATS rows=COUNT(*), success=SUM(CASE(status >= 200 AND status < 300,1,0)), fail=SUM(CASE(event == \"request failed\" OR status >= 500,1,0)), slow=SUM(CASE(event == \"slow request\" AND duration > threshold,1,0)) BY bucket=BUCKET(@timestamp,1 minute), op | SORT bucket DESC | LIMIT 31"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T18:18:24.258Z",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "metadata": {
+            "query_id": "query-current-trace-http-outcomes",
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T18:15:24.258Z",
+              "to": "2026-11-20T18:18:24.258Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-traces | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T18:18:24.258Z\") - 3 minutes |  WHERE `resource.attributes.service.name` IS NOT NULL | STATS spans=COUNT(*), failures=SUM(CASE(`attributes.http.response.status_code` >= 500,1,0)), successes=SUM(CASE(`attributes.http.response.status_code` >= 200 AND `attributes.http.response.status_code` < 300,1,0)), unknown=SUM(CASE(`attributes.http.response.status_code` IS NULL,1,0)) BY `resource.attributes.service.name`, `resource.attributes.service.namespace` | SORT failures DESC | LIMIT 41"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "refutes",
+          "collected_at": "2026-11-20T18:21:33.997Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_uuid": "nightshift-problem-monitor-8d1d604b58b477997a478748",
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T18:18:33.997Z",
+              "to": "2026-11-20T18:21:33.997Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T18:21:33.997Z\") - 3 minutes | WHERE COALESCE(`resource.attributes.service.name`, `service.name`) IN (\"gateway\") AND COALESCE(`resource.attributes.service.namespace`, `service.namespace`) == \"mirage\" |  EVAL event=TO_STRING(JSON_EXTRACT(message,\"event\")), op=TO_STRING(JSON_EXTRACT(message,\"op\")), status=TO_LONG(JSON_EXTRACT(message,\"status\")), duration=TO_DOUBLE(JSON_EXTRACT(message,\"duration_ms\")), threshold=TO_DOUBLE(JSON_EXTRACT(message,\"threshold_ms\")) | STATS rows=COUNT(*), success=SUM(CASE(status >= 200 AND status < 300,1,0)), fail=SUM(CASE(event == \"request failed\" OR status >= 500,1,0)), slow=SUM(CASE(event == \"slow request\" AND duration > threshold,1,0)) BY bucket=BUCKET(@timestamp,1 minute), op | SORT bucket DESC | LIMIT 21"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "refutes",
+          "collected_at": "2026-11-20T18:21:34.638Z",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "metadata": {
+            "query_id": "query-current-trace-http-outcomes",
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T18:18:34.638Z",
+              "to": "2026-11-20T18:21:34.638Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-traces | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T18:21:34.638Z\") - 3 minutes | WHERE COALESCE(`resource.attributes.service.name`, `service.name`) IN (\"gateway\", \"router\") AND COALESCE(`resource.attributes.service.namespace`, `service.namespace`) == \"mirage\" |  STATS spans=COUNT(*), failures=SUM(CASE(`attributes.http.response.status_code` >= 500,1,0)), successes=SUM(CASE(`attributes.http.response.status_code` >= 200 AND `attributes.http.response.status_code` < 300,1,0)), unknown=SUM(CASE(`attributes.http.response.status_code` IS NULL,1,0)) BY bucket=BUCKET(@timestamp,1 minute), `resource.attributes.service.name`, `resource.attributes.service.namespace` | SORT bucket DESC, failures DESC | LIMIT 16"
+          }
+        }
+      ],
+      "affected_entities": [
+        {
+          "feature_id": "service-router-mirage",
+          "subtype": "service",
+          "name": "router (mirage)",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "type": "entity"
+        },
+        {
+          "feature_id": "service-gateway-mirage",
+          "subtype": "service",
+          "name": "gateway (mirage) traces",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "type": "entity"
+        },
+        {
+          "feature_id": "service-router-mirage",
+          "subtype": "service",
+          "name": "router (mirage) traces",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "type": "entity"
+        },
+        {
+          "feature_id": "service-gateway-mirage",
+          "subtype": "service",
+          "name": "gateway (mirage)",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "type": "entity"
+        }
+      ],
+      "causal_features": []
+    },
+    {
+      "event_id": "nightshift-problem-sluice-delivery-queue-growing-backlog",
+      "created_at": "2026-11-20T18:01:32.738Z",
+      "@timestamp": "2026-11-20T18:09:44.473Z",
+      "status": "inactive",
+      "severity": "medium",
+      "confidence": 0.99,
+      "title": "Sluice delivery backlog growing while completions lag",
+      "summary": "Closed after fresh queue inspections repeatedly showed pending=0 from 18:08:16 through 18:09:04 while accepted and completed totals advanced (e.g. 234,780 accepted and 228,893 completed at 18:09:04). Current minute buckets show active intake, queueing and completion with pending maxima 0\u20133 and no request-failure markers. The earlier backlog-growth condition is not present; this does not prove historical retained records were repaired or establish user impact.",
+      "episode_id": "82032ee3-b454-4f67-ab56-208a36f98f73",
+      "signal_count": 4,
+      "signals": [
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T18:01:06.491Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "query_id": "query-sluice-queue-progress-outcomes",
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:58:06.491Z",
+              "to": "2026-11-20T18:01:06.491Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T18:01:06.491Z\") - 3 minutes | WHERE COALESCE(`resource.attributes.service.name`, `service.name`) IN (\"backlog-monitor\") AND COALESCE(`resource.attributes.service.namespace`, `service.namespace`) == \"sluice\" |  WHERE `resource.attributes.service.name` == \"backlog-monitor\" | KEEP `@timestamp`, message | SORT `@timestamp` DESC | LIMIT 40 | LIMIT 41"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "refutes",
+          "collected_at": "2026-11-20T18:09:33.689Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T18:06:33.689Z",
+              "to": "2026-11-20T18:09:33.689Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T18:09:33.689Z\") - 3 minutes | WHERE COALESCE(`resource.attributes.service.name`, `service.name`) IN (\"backlog-monitor\") AND COALESCE(`resource.attributes.service.namespace`, `service.namespace`) == \"sluice\" |  WHERE `resource.attributes.service.namespace` == \"sluice\" AND `resource.attributes.service.name` == \"backlog-monitor\" | KEEP `@timestamp`, message | SORT `@timestamp` DESC | LIMIT 41"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "refutes",
+          "collected_at": "2026-11-20T18:09:33.763Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T18:06:33.763Z",
+              "to": "2026-11-20T18:09:33.763Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T18:09:33.763Z\") - 3 minutes | WHERE COALESCE(`resource.attributes.service.name`, `service.name`) IN (\"intake\", \"delivery-queue\") AND COALESCE(`resource.attributes.service.namespace`, `service.namespace`) == \"sluice\" |  WHERE `resource.attributes.service.namespace` == \"sluice\" AND `resource.attributes.service.name` IN (\"intake\",\"delivery-queue\") | EVAL event=TO_STRING(JSON_EXTRACT(message,\"event\")), status=TO_LONG(JSON_EXTRACT(message,\"status\")) | STATS rows=COUNT(*), failures=SUM(CASE(event == \"request failed\" AND status >= 500,1,0)), accepted=SUM(CASE(event == \"submission accepted\" AND status >= 200 AND status < 300,1,0)), queued=SUM(CASE(event == \"document job queued\",1,0)), completed=SUM(CASE(event == \"job completed\",1,0)), pendingMax=MAX(TO_LONG(JSON_EXTRACT(message,\"pending\"))) BY bucket=BUCKET(@timestamp,1 minute), `resource.attributes.service.name`, event | SORT bucket DESC | LIMIT 31"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "refutes",
+          "collected_at": "2026-11-20T18:09:33.797Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T18:06:33.797Z",
+              "to": "2026-11-20T18:09:33.797Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T18:09:33.797Z\") - 3 minutes | WHERE COALESCE(`resource.attributes.service.name`, `service.name`) IN (\"delivery-queue\") AND COALESCE(`resource.attributes.service.namespace`, `service.namespace`) == \"sluice\" |  WHERE `resource.attributes.service.namespace` == \"sluice\" AND `resource.attributes.service.name` == \"delivery-queue\" | KEEP `@timestamp`, message | SORT `@timestamp` DESC | LIMIT 31"
+          }
+        }
+      ],
+      "affected_entities": [
+        {
+          "feature_id": "service-backlog-monitor-sluice",
+          "subtype": "service",
+          "name": "backlog-monitor (sluice)",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "type": "entity"
+        },
+        {
+          "feature_id": "service-intake-sluice",
+          "subtype": "service",
+          "name": "intake (sluice)",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "type": "entity"
+        },
+        {
+          "feature_id": "service-delivery-queue-sluice",
+          "subtype": "service",
+          "name": "delivery-queue (sluice)",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "type": "entity"
+        }
+      ],
+      "causal_features": []
+    },
+    {
+      "event_id": "nightshift-problem-escrow-credit-audit-ledger-reconciliation-mismatches",
+      "created_at": "2026-11-20T17:40:36.619Z",
+      "@timestamp": "2026-11-20T17:59:06.876Z",
+      "status": "inactive",
+      "severity": "high",
+      "confidence": 0.99,
+      "title": "Escrow credit-audit ledger reconciliation mismatches",
+      "summary": "Closed after fresh recurring reconciliation rows showed zero mismatches: 10/10 at 17:58 and 20/20 in each of 17:57, 17:56, and 17:55. This verifies the earlier positive-mismatch mechanism cleared in the current window. Root cause, affected ledger scope, and downstream impact remain unknown.",
+      "episode_id": "80b64e4f-3e5f-4556-aa29-4010bfc74f84",
+      "signal_count": 6,
+      "signals": [
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:40:00.565Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:37:00.565Z",
+              "to": "2026-11-20T17:40:00.565Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:40:00.565Z\") - 3 minutes |  WHERE `resource.attributes.service.name` == \"credit-audit\" AND `resource.attributes.service.namespace` == \"escrow\" | EVAL event=TO_STRING(JSON_EXTRACT(message,\"event\")), mismatches=TO_LONG(JSON_EXTRACT(message,\"mismatches\")) | WHERE event == \"ledger reconciliation\" | STATS rows=COUNT(*), mismatchRows=SUM(CASE(mismatches > 0,1,0)), totalMismatches=SUM(mismatches), zeroRows=SUM(CASE(mismatches == 0,1,0)) BY bucket=BUCKET(@timestamp,1 minute) | SORT bucket DESC | LIMIT 21"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:40:00.674Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:37:00.674Z",
+              "to": "2026-11-20T17:40:00.674Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:40:00.674Z\") - 3 minutes |  WHERE `resource.attributes.service.name` == \"credit-audit\" AND `resource.attributes.service.namespace` == \"escrow\" | EVAL event=TO_STRING(JSON_EXTRACT(message,\"event\")), mismatches=TO_LONG(JSON_EXTRACT(message,\"mismatches\")) | WHERE event == \"ledger reconciliation\" AND mismatches > 0 | KEEP `@timestamp`, `resource.attributes.service.name`, `resource.attributes.service.namespace`, message | SORT `@timestamp` DESC | LIMIT 12 | LIMIT 13"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:40:00.565Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_uuid": "nightshift-problem-monitor-90d36197b6c2e852bde5203a",
+            "query_id": "query-escrow-ledger-mismatch-outcomes",
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:37:00.565Z",
+              "to": "2026-11-20T17:40:00.565Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:40:00.565Z\") - 3 minutes |  WHERE `resource.attributes.service.name` == \"credit-audit\" AND `resource.attributes.service.namespace` == \"escrow\" | EVAL event=TO_STRING(JSON_EXTRACT(message,\"event\")), mismatches=TO_LONG(JSON_EXTRACT(message,\"mismatches\")) | WHERE event == \"ledger reconciliation\" | STATS rows=COUNT(*), mismatchRows=SUM(CASE(mismatches > 0,1,0)), totalMismatches=SUM(mismatches), zeroRows=SUM(CASE(mismatches == 0,1,0)) BY bucket=BUCKET(@timestamp,1 minute) | SORT bucket DESC | LIMIT 21"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:41:02.964Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_uuid": "nightshift-problem-monitor-90d36197b6c2e852bde5203a",
+            "query_id": "query-escrow-ledger-mismatch-outcomes",
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:38:02.964Z",
+              "to": "2026-11-20T17:41:02.964Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:41:02.964Z\") - 3 minutes |  WHERE `resource.attributes.service.name` == \"credit-audit\" AND `resource.attributes.service.namespace` == \"escrow\" | EVAL event=TO_STRING(JSON_EXTRACT(message,\"event\")), mismatches=TO_LONG(JSON_EXTRACT(message,\"mismatches\")) | WHERE event == \"ledger reconciliation\" AND mismatches > 0 | KEEP `@timestamp`, `resource.attributes.service.name`, `resource.attributes.service.namespace`, message | SORT `@timestamp` DESC | LIMIT 5 | LIMIT 6"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:49:57.217Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_uuid": "nightshift-problem-monitor-90d36197b6c2e852bde5203a",
+            "query_id": "query-escrow-ledger-mismatch-outcomes",
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:46:57.217Z",
+              "to": "2026-11-20T17:49:57.217Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:49:57.217Z\") - 3 minutes |  WHERE `resource.attributes.service.namespace` == \"escrow\" AND `resource.attributes.service.name` == \"credit-audit\" | EVAL event=TO_STRING(JSON_EXTRACT(message,\"event\")), mismatches=TO_LONG(JSON_EXTRACT(message,\"mismatches\")) | WHERE event == \"ledger reconciliation\" | STATS rows=COUNT(*), mismatchRows=SUM(CASE(mismatches > 0,1,0)), totalMismatches=SUM(mismatches), zeroRows=SUM(CASE(mismatches == 0,1,0)) BY bucket=BUCKET(@timestamp,1 minute), `resource.attributes.service.name`, `resource.attributes.service.namespace` | SORT bucket DESC | LIMIT 11"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "refutes",
+          "collected_at": "2026-11-20T17:58:56.385Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_uuid": "nightshift-problem-monitor-90d36197b6c2e852bde5203a",
+            "query_id": "query-escrow-ledger-mismatch-outcomes",
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:55:56.385Z",
+              "to": "2026-11-20T17:58:56.385Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:58:56.385Z\") - 3 minutes | WHERE COALESCE(`resource.attributes.service.name`, `service.name`) IN (\"credit-audit\") AND COALESCE(`resource.attributes.service.namespace`, `service.namespace`) == \"escrow\" |  EVAL event=TO_STRING(JSON_EXTRACT(message,\"event\")), mismatches=TO_LONG(JSON_EXTRACT(message,\"mismatches\")) | WHERE event == \"ledger reconciliation\" | STATS rows=COUNT(*), mismatchRows=SUM(CASE(mismatches > 0,1,0)), totalMismatches=SUM(mismatches), zeroRows=SUM(CASE(mismatches == 0,1,0)) BY bucket=BUCKET(@timestamp,1 minute), `resource.attributes.service.name`, `resource.attributes.service.namespace` | SORT bucket DESC | LIMIT 21"
+          }
+        }
+      ],
+      "affected_entities": [
+        {
+          "feature_id": "service-credit-audit-escrow",
+          "subtype": "service",
+          "name": "credit-audit (escrow)",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "type": "entity"
+        }
+      ],
+      "causal_features": []
+    },
+    {
+      "event_id": "nightshift-problem-spoke-catalogue-search-http-503",
+      "created_at": "2026-11-20T17:30:54.341Z",
+      "@timestamp": "2026-11-20T17:50:34.624Z",
+      "status": "inactive",
+      "severity": "high",
+      "confidence": 0.99,
+      "title": "Spoke catalogue and search experiencing sustained HTTP 503 failures",
+      "summary": "Closed after fresh current evidence from traces and logs showed the 5xx mechanism cleared. Three complete trace minutes had zero 5xx with positive 2xx across all five services. Logs independently showed zero 5xx markers and positive outcomes. Preserve prior high severity; trace counts are not unique requests and reach/cause remain unknown.",
+      "episode_id": "f80657ea-bdd6-43f7-8219-66b54159c7bb",
+      "signal_count": 9,
+      "signals": [
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:29:52.221Z",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "metadata": {
+            "rule_uuid": "nightshift-problem-monitor-7f914cdf35694de26d5486ec",
+            "query_id": "query-spoke-catalogue-search-5xx-outcomes",
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:26:52.221Z",
+              "to": "2026-11-20T17:29:52.221Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-traces | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:29:52.221Z\") - 3 minutes |  WHERE `resource.attributes.service.namespace` == \"spoke\" AND `resource.attributes.service.name` IN (\"catalogue\",\"search\",\"profile\",\"checkout\",\"receipts\") | STATS spans=COUNT(*), http5xx=SUM(CASE(`attributes.http.response.status_code` >= 500,1,0)), http2xx=SUM(CASE(`attributes.http.response.status_code` >= 200 AND `attributes.http.response.status_code` < 300,1,0)), unknown=SUM(CASE(`attributes.http.response.status_code` IS NULL,1,0)) BY bucket=BUCKET(@timestamp,1 minute), `resource.attributes.service.name`, `attributes.app.operation` | SORT bucket DESC, http5xx DESC | LIMIT 61"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:29:52.307Z",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "metadata": {
+            "rule_uuid": "nightshift-problem-monitor-7f914cdf35694de26d5486ec",
+            "query_id": "query-spoke-catalogue-search-5xx-outcomes",
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:26:52.307Z",
+              "to": "2026-11-20T17:29:52.307Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-traces | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:29:52.307Z\") - 3 minutes |  WHERE `resource.attributes.service.namespace` == \"spoke\" AND `resource.attributes.service.name` IN (\"catalogue\",\"search\") AND `attributes.http.response.status_code` >= 500 | KEEP `resource.attributes.service.name`, `resource.attributes.service.namespace`, `attributes.app.operation`, `attributes.http.route`, `attributes.http.response.status_code`, `attributes.peer.service`, `trace.id` | LIMIT 8 | LIMIT 9"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:30:04.041Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:27:04.041Z",
+              "to": "2026-11-20T17:30:04.041Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:30:04.041Z\") - 3 minutes |  WHERE `resource.attributes.service.namespace` == \"spoke\" AND `resource.attributes.service.name` IN (\"catalogue\",\"search\") | EVAL msg=TO_LOWER(TO_STRING(message)) | STATS rows=COUNT(*), failures=SUM(CASE(msg RLIKE \".*(request failed|status=503|status 503).*\",1,0)), successes=SUM(CASE(msg RLIKE \".*(status=200|status 200|search answered|entry handled).*\",1,0)) BY bucket=BUCKET(@timestamp,1 minute), `resource.attributes.service.name` | SORT bucket DESC | LIMIT 31"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:39:35.701Z",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:36:35.701Z",
+              "to": "2026-11-20T17:39:35.701Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-traces | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:39:35.701Z\") - 3 minutes |  WHERE `resource.attributes.service.name` IS NOT NULL | STATS spans=COUNT(*), http5xx=SUM(CASE(`attributes.http.response.status_code` >= 500,1,0)), http2xx=SUM(CASE(`attributes.http.response.status_code` >= 200 AND `attributes.http.response.status_code` < 300,1,0)), unknown=SUM(CASE(`attributes.http.response.status_code` IS NULL,1,0)) BY bucket=BUCKET(@timestamp,1 minute), `resource.attributes.service.name`, `resource.attributes.service.namespace` | SORT bucket DESC, http5xx DESC | LIMIT 26"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:39:49.476Z",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:36:49.476Z",
+              "to": "2026-11-20T17:39:49.476Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-traces | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:39:49.476Z\") - 3 minutes |  WHERE `resource.attributes.service.name` IS NOT NULL | STATS spans=COUNT(*), http5xx=SUM(CASE(`attributes.http.response.status_code` >= 500,1,0)), http2xx=SUM(CASE(`attributes.http.response.status_code` >= 200 AND `attributes.http.response.status_code` < 300,1,0)), unknown=SUM(CASE(`attributes.http.response.status_code` IS NULL,1,0)) BY bucket=BUCKET(@timestamp,1 minute), `resource.attributes.service.name`, `resource.attributes.service.namespace` | SORT bucket DESC, http5xx DESC | LIMIT 56"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:39:49.620Z",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:36:49.620Z",
+              "to": "2026-11-20T17:39:49.620Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-traces | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:39:49.620Z\") - 3 minutes |  WHERE `resource.attributes.service.name` IS NOT NULL | STATS spans=COUNT(*), http5xx=SUM(CASE(`attributes.http.response.status_code` >= 500,1,0)), http2xx=SUM(CASE(`attributes.http.response.status_code` >= 200 AND `attributes.http.response.status_code` < 300,1,0)), unknown=SUM(CASE(`attributes.http.response.status_code` IS NULL,1,0)) BY bucket=BUCKET(@timestamp,1 minute), `resource.attributes.service.name`, `resource.attributes.service.namespace`, `attributes.app.operation` | SORT bucket DESC, http5xx DESC | LIMIT 36"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "refutes",
+          "collected_at": "2026-11-20T17:49:57.169Z",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "metadata": {
+            "rule_uuid": "nightshift-problem-monitor-67b77857cf408c41aeee7d5f",
+            "query_id": "query-spoke-http-outcomes",
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:46:57.169Z",
+              "to": "2026-11-20T17:49:57.169Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-traces | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:49:57.169Z\") - 3 minutes |  WHERE `resource.attributes.service.namespace` == \"spoke\" AND `resource.attributes.service.name` IN (\"search\",\"catalogue\",\"profile\",\"checkout\",\"receipts\") | STATS spans=COUNT(*), http5xx=SUM(CASE(`attributes.http.response.status_code` >= 500,1,0)), http2xx=SUM(CASE(`attributes.http.response.status_code` >= 200 AND `attributes.http.response.status_code` < 300,1,0)), unknown=SUM(CASE(`attributes.http.response.status_code` IS NULL,1,0)) BY bucket=BUCKET(@timestamp,1 minute), `resource.attributes.service.name`, `resource.attributes.service.namespace` | SORT bucket DESC | LIMIT 51"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "refutes",
+          "collected_at": "2026-11-20T17:49:57.170Z",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "metadata": {
+            "rule_uuid": "nightshift-problem-monitor-67b77857cf408c41aeee7d5f",
+            "query_id": "query-spoke-http-outcomes",
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:46:57.170Z",
+              "to": "2026-11-20T17:49:57.170Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-traces | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:49:57.170Z\") - 3 minutes |  WHERE `resource.attributes.service.namespace` == \"spoke\" AND `resource.attributes.service.name` IN (\"search\",\"catalogue\",\"profile\",\"checkout\",\"receipts\") | STATS spans=COUNT(*), http5xx=SUM(CASE(`attributes.http.response.status_code` >= 500,1,0)), http2xx=SUM(CASE(`attributes.http.response.status_code` >= 200 AND `attributes.http.response.status_code` < 300,1,0)), unknown=SUM(CASE(`attributes.http.response.status_code` IS NULL,1,0)) BY bucket=BUCKET(@timestamp,1 minute), `resource.attributes.service.name`, `resource.attributes.service.namespace` | SORT bucket DESC | LIMIT 51"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "refutes",
+          "collected_at": "2026-11-20T17:50:21.321Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:47:21.321Z",
+              "to": "2026-11-20T17:50:21.321Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:50:21.321Z\") - 3 minutes | WHERE COALESCE(`resource.attributes.service.namespace`, `service.namespace`) == \"spoke\" |  WHERE `resource.attributes.service.namespace` == \"spoke\" AND `resource.attributes.service.name` IN (\"search\",\"catalogue\",\"profile\",\"checkout\",\"receipts\") | EVAL msg=TO_LOWER(TO_STRING(message)) | STATS rows=COUNT(*), failures=SUM(CASE(msg RLIKE \".*(request failed|status=503|status 503|http 5[0-9][0-9]).*\",1,0)), successes=SUM(CASE(msg RLIKE \".*(status=200|status 200|search answered|entry handled|profile served|receipt).*\",1,0)) BY bucket=BUCKET(@timestamp,1 minute), `resource.attributes.service.name`, `resource.attributes.service.namespace` | SORT bucket DESC | LIMIT 31"
+          }
+        }
+      ],
+      "affected_entities": [
+        {
+          "feature_id": "service-receipts-spoke",
+          "subtype": "service",
+          "name": "receipts (spoke) traces",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "type": "entity"
+        },
+        {
+          "feature_id": "service-profile-spoke",
+          "subtype": "service",
+          "name": "profile (spoke)",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "type": "entity"
+        },
+        {
+          "feature_id": "service-search-spoke",
+          "subtype": "service",
+          "name": "search (spoke)",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "type": "entity"
+        },
+        {
+          "feature_id": "service-checkout-spoke",
+          "subtype": "service",
+          "name": "checkout (spoke) traces",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "type": "entity"
+        },
+        {
+          "feature_id": "service-profile-spoke",
+          "subtype": "service",
+          "name": "profile (spoke) traces",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "type": "entity"
+        },
+        {
+          "feature_id": "service-checkout-spoke",
+          "subtype": "service",
+          "name": "checkout (spoke)",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "type": "entity"
+        },
+        {
+          "feature_id": "service-receipts-spoke",
+          "subtype": "service",
+          "name": "receipts (spoke)",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "type": "entity"
+        },
+        {
+          "feature_id": "service-search-spoke",
+          "subtype": "service",
+          "name": "search (spoke) traces",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "type": "entity"
+        },
+        {
+          "feature_id": "service-catalogue-spoke",
+          "subtype": "service",
+          "name": "catalogue (spoke) traces",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "type": "entity"
+        },
+        {
+          "feature_id": "service-catalogue-spoke",
+          "subtype": "service",
+          "name": "catalogue (spoke)",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "type": "entity"
+        }
+      ],
+      "causal_features": [
+        {
+          "feature_id": "dependency-spoke-search-catalogue",
+          "subtype": "service_call",
+          "name": "search calls catalogue (spoke traces)",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "type": "dependency"
+        }
+      ]
+    },
+    {
+      "event_id": "nightshift-problem-spoke-multi-service-http-5xx-burst",
+      "created_at": "2026-11-20T17:05:49.791Z",
+      "@timestamp": "2026-11-20T17:17:01.766Z",
+      "status": "inactive",
+      "severity": "medium",
+      "confidence": 0.99,
+      "title": "Spoke services experiencing elevated HTTP 5xx responses",
+      "summary": "Closed after verified recovery. Fresh complete trace buckets at 17:14\u201317:16 show zero 5xx for search, catalogue, profile, checkout and receipts, with 2xx responses continuing (e.g. 17:16: search 2,276/2,338 2xx; catalogue 2,079/2,114; profile 986/992; checkout 450/450; receipts 226/227). Prior trace-span failures were substantial but not unique logical request counts. Cause and user-level reach remain unknown.",
+      "episode_id": "c6cf7c42-7047-4b3c-a8d9-4f847905268c",
+      "signal_count": 6,
+      "signals": [
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:05:38.557Z",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:02:38.557Z",
+              "to": "2026-11-20T17:05:38.557Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-traces | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:05:38.557Z\") - 3 minutes |  WHERE `resource.attributes.service.namespace` == \"spoke\" AND `resource.attributes.service.name` IN (\"search\",\"catalogue\",\"profile\",\"checkout\",\"receipts\") | STATS spans=COUNT(*), http5xx=SUM(CASE(`attributes.http.response.status_code` >= 500,1,0)), http2xx=SUM(CASE(`attributes.http.response.status_code` >= 200 AND `attributes.http.response.status_code` < 300,1,0)), http4xx=SUM(CASE(`attributes.http.response.status_code` >= 400 AND `attributes.http.response.status_code` < 500,1,0)) BY `resource.attributes.service.name`, `attributes.app.operation` | SORT http5xx DESC | LIMIT 51"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:05:38.617Z",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T16:52:38.617Z",
+              "to": "2026-11-20T17:02:38.617Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-traces | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:05:38.617Z\") - 13 minutes AND `@timestamp` < TO_DATETIME(\"2026-11-20T17:05:38.617Z\") - 3 minutes |  WHERE `resource.attributes.service.namespace` == \"spoke\" AND `resource.attributes.service.name` IN (\"search\",\"catalogue\",\"profile\",\"checkout\",\"receipts\") | STATS spans=COUNT(*), http5xx=SUM(CASE(`attributes.http.response.status_code` >= 500,1,0)), http2xx=SUM(CASE(`attributes.http.response.status_code` >= 200 AND `attributes.http.response.status_code` < 300,1,0)) BY `resource.attributes.service.name` | SORT http5xx DESC | LIMIT 31"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:05:38.557Z",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:02:38.557Z",
+              "to": "2026-11-20T17:05:38.557Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-traces | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:05:38.557Z\") - 3 minutes |  WHERE `resource.attributes.service.namespace` == \"spoke\" AND `resource.attributes.service.name` IN (\"search\",\"catalogue\",\"profile\",\"checkout\",\"receipts\") | STATS spans=COUNT(*), http5xx=SUM(CASE(`attributes.http.response.status_code` >= 500,1,0)), http2xx=SUM(CASE(`attributes.http.response.status_code` >= 200 AND `attributes.http.response.status_code` < 300,1,0)), http4xx=SUM(CASE(`attributes.http.response.status_code` >= 400 AND `attributes.http.response.status_code` < 500,1,0)) BY `resource.attributes.service.name`, `attributes.app.operation` | SORT http5xx DESC | LIMIT 51"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:05:38.617Z",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T16:52:38.617Z",
+              "to": "2026-11-20T17:02:38.617Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-traces | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:05:38.617Z\") - 13 minutes AND `@timestamp` < TO_DATETIME(\"2026-11-20T17:05:38.617Z\") - 3 minutes |  WHERE `resource.attributes.service.namespace` == \"spoke\" AND `resource.attributes.service.name` IN (\"search\",\"catalogue\",\"profile\",\"checkout\",\"receipts\") | STATS spans=COUNT(*), http5xx=SUM(CASE(`attributes.http.response.status_code` >= 500,1,0)), http2xx=SUM(CASE(`attributes.http.response.status_code` >= 200 AND `attributes.http.response.status_code` < 300,1,0)) BY `resource.attributes.service.name` | SORT http5xx DESC | LIMIT 31"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:07:54.810Z",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:04:54.810Z",
+              "to": "2026-11-20T17:07:54.810Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-traces | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:07:54.810Z\") - 3 minutes |  WHERE `resource.attributes.service.namespace` == \"spoke\" AND `resource.attributes.service.name` IN (\"search\",\"catalogue\",\"profile\",\"checkout\",\"receipts\") | STATS spans=COUNT(*), http5xx=SUM(CASE(`attributes.http.response.status_code` >= 500,1,0)), http2xx=SUM(CASE(`attributes.http.response.status_code` >= 200 AND `attributes.http.response.status_code` < 300,1,0)), http4xx=SUM(CASE(`attributes.http.response.status_code` >= 400 AND `attributes.http.response.status_code` < 500,1,0)) BY bucket=BUCKET(@timestamp,1 minute), `resource.attributes.service.name`, `resource.attributes.service.namespace` | SORT bucket DESC | LIMIT 26"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "refutes",
+          "collected_at": "2026-11-20T17:16:52.029Z",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "metadata": {
+            "rule_uuid": "nightshift-problem-monitor-67b77857cf408c41aeee7d5f",
+            "query_id": "query-spoke-http-outcomes",
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:13:52.029Z",
+              "to": "2026-11-20T17:16:52.029Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-traces | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:16:52.029Z\") - 3 minutes |  WHERE `resource.attributes.service.namespace` == \"spoke\" AND `resource.attributes.service.name` IN (\"search\",\"catalogue\",\"profile\",\"checkout\",\"receipts\") | STATS spans=COUNT(*), http5xx=SUM(CASE(`attributes.http.response.status_code` >= 500,1,0)), http2xx=SUM(CASE(`attributes.http.response.status_code` >= 200 AND `attributes.http.response.status_code` < 300,1,0)), http4xx=SUM(CASE(`attributes.http.response.status_code` >= 400 AND `attributes.http.response.status_code` < 500,1,0)) BY bucket=BUCKET(@timestamp,1 minute), `resource.attributes.service.name`, `resource.attributes.service.namespace` | SORT bucket DESC | LIMIT 41"
+          }
+        }
+      ],
+      "affected_entities": [
+        {
+          "feature_id": "service-receipts-spoke",
+          "subtype": "service",
+          "name": "receipts (spoke) traces",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "type": "entity"
+        },
+        {
+          "feature_id": "service-checkout-spoke",
+          "subtype": "service",
+          "name": "checkout (spoke) traces",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "type": "entity"
+        },
+        {
+          "feature_id": "service-catalogue-spoke",
+          "subtype": "service",
+          "name": "catalogue (spoke) traces",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "type": "entity"
+        },
+        {
+          "feature_id": "service-search-spoke",
+          "subtype": "service",
+          "name": "search (spoke) traces",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "type": "entity"
+        },
+        {
+          "feature_id": "service-profile-spoke",
+          "subtype": "service",
+          "name": "profile (spoke) traces",
+          "source_id": "c6df0da5-1434-4d72-96fe-4e6d35dfedcf",
+          "type": "entity"
+        }
+      ],
+      "causal_features": []
+    },
+    {
+      "event_id": "nightshift-problem-sluice-intake-delivery-queue-http-503-outage",
+      "created_at": "2026-11-20T16:57:16.239Z",
+      "@timestamp": "2026-11-20T17:08:19.050Z",
+      "status": "inactive",
+      "severity": "high",
+      "confidence": 0.96,
+      "title": "Sluice intake and delivery-queue HTTP 503 outage",
+      "summary": "Closed: fresh exact 3-minute query found no request-failed outcomes for intake or delivery-queue. Positive operation evidence shows repeated accepted 200 submissions, queued jobs, and completed jobs with pending 0\u20131. This refutes an ongoing 503 outage; longer-term backlog drain and any failed work outside this window remain unmeasured.",
+      "episode_id": "d36f4042-38ce-43f6-a1f0-b54dcc0b3eaa",
+      "signal_count": 7,
+      "signals": [
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T16:55:51.781Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T16:52:51.781Z",
+              "to": "2026-11-20T16:55:51.781Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T16:55:51.781Z\") - 3 minutes |  WHERE `resource.attributes.service.namespace` == \"sluice\" AND `resource.attributes.service.name` IN (\"intake\",\"delivery-queue\",\"backlog-monitor\") | KEEP `@timestamp`, `resource.attributes.service.name`, message | SORT `@timestamp` DESC | LIMIT 30 | LIMIT 31"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T16:56:02.201Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T16:53:02.201Z",
+              "to": "2026-11-20T16:56:02.201Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T16:56:02.201Z\") - 3 minutes |  WHERE `resource.attributes.service.namespace` == \"sluice\" AND `resource.attributes.service.name` IN (\"intake\",\"delivery-queue\") | EVAL event=TO_STRING(JSON_EXTRACT(message,\"event\")), status=TO_LONG(JSON_EXTRACT(message,\"status\")), operation=TO_STRING(JSON_EXTRACT(message,\"op\")) | WHERE event == \"request failed\" | STATS outcomes=COUNT(*), failures=SUM(CASE(status >= 500,1,0)), successes=SUM(CASE(status >= 200 AND status < 300,1,0)) BY bucket=BUCKET(@timestamp,1 minute), `resource.attributes.service.name`, operation | SORT bucket DESC, `resource.attributes.service.name`, operation | LIMIT 21"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:01:48.351Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T16:58:48.351Z",
+              "to": "2026-11-20T17:01:48.351Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:01:48.351Z\") - 3 minutes |  WHERE `resource.attributes.service.namespace` == \"sluice\" AND `resource.attributes.service.name` IN (\"intake\",\"delivery-queue\",\"backlog-monitor\") | KEEP `@timestamp`, `resource.attributes.service.name`, message | SORT `@timestamp` DESC | LIMIT 60 | LIMIT 26"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:01:48.417Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T16:58:48.417Z",
+              "to": "2026-11-20T17:01:48.417Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:01:48.417Z\") - 3 minutes |  WHERE `resource.attributes.service.namespace` == \"sluice\" AND `resource.attributes.service.name` IN (\"intake\",\"delivery-queue\") | EVAL event=TO_STRING(JSON_EXTRACT(message,\"event\")), status=TO_LONG(JSON_EXTRACT(message,\"status\")), operation=TO_STRING(JSON_EXTRACT(message,\"op\")) | WHERE event == \"request failed\" | STATS outcomes=COUNT(*), failures=SUM(CASE(status >= 500,1,0)), successes=SUM(CASE(status >= 200 AND status < 300,1,0)) BY bucket=BUCKET(@timestamp,1 minute), `resource.attributes.service.name`, operation | SORT bucket DESC | LIMIT 26"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:05:15.985Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:02:15.985Z",
+              "to": "2026-11-20T17:05:15.985Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:05:15.985Z\") - 3 minutes |  WHERE `resource.attributes.service.namespace` == \"sluice\" AND `resource.attributes.service.name` IN (\"intake\",\"delivery-queue\") | EVAL event=TO_STRING(JSON_EXTRACT(message,\"event\")), status=TO_LONG(JSON_EXTRACT(message,\"status\")), operation=TO_STRING(JSON_EXTRACT(message,\"op\")) | WHERE event == \"request failed\" | STATS outcomes=COUNT(*), failures=SUM(CASE(status >= 500,1,0)), successes=SUM(CASE(status >= 200 AND status < 300,1,0)) BY bucket=BUCKET(@timestamp,1 minute), `resource.attributes.service.name`, operation | SORT bucket DESC, `resource.attributes.service.name`, operation | LIMIT 101"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "confirms",
+          "collected_at": "2026-11-20T17:05:27.343Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:03:27.343Z",
+              "to": "2026-11-20T17:05:27.343Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:05:27.343Z\") - 2 minutes | WHERE COALESCE(`resource.attributes.service.name`, `service.name`) IN (\"intake\") AND COALESCE(`resource.attributes.service.namespace`, `service.namespace`) == \"sluice\" |  WHERE `resource.attributes.service.name` == \"intake\" AND `resource.attributes.service.namespace` == \"sluice\" | KEEP `@timestamp`, message | SORT `@timestamp` DESC | LIMIT 21"
+          }
+        },
+        {
+          "type": "query",
+          "verdict": "refutes",
+          "collected_at": "2026-11-20T17:08:03.073Z",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "metadata": {
+            "rule_name": "Verified source evidence"
+          },
+          "evidence": {
+            "result": "found",
+            "time_range": {
+              "from": "2026-11-20T17:05:03.073Z",
+              "to": "2026-11-20T17:08:03.073Z"
+            },
+            "esql_query": "FROM $.nightshift.sources.default.all-logs | WHERE `@timestamp` >= TO_DATETIME(\"2026-11-20T17:08:03.073Z\") - 3 minutes |  WHERE `resource.attributes.service.namespace` == \"sluice\" AND `resource.attributes.service.name` IN (\"intake\",\"delivery-queue\",\"backlog-monitor\") | KEEP `@timestamp`, `resource.attributes.service.name`, message | SORT `@timestamp` DESC | LIMIT 35 | LIMIT 26"
+          }
+        }
+      ],
+      "affected_entities": [
+        {
+          "feature_id": "service-intake-sluice",
+          "subtype": "service",
+          "name": "intake (sluice)",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "type": "entity"
+        },
+        {
+          "feature_id": "service-delivery-queue-sluice",
+          "subtype": "service",
+          "name": "delivery-queue (sluice)",
+          "source_id": "a19c4e7e-59b9-4a78-b46b-f6c1995d7467",
+          "type": "entity"
+        }
+      ],
+      "causal_features": []
+    },
+    {
+      "event_id": "nightshift-problem-relay-search-supplier-hotel-partial-results",
+      "created_at": "2026-11-20T16:09:23.118Z",
+      "@timestamp": "2026-11-20T16:13:56.293Z",
+      "status": "inactive",
+      "severity": "medium",
+      "confidence": 0.94,
+      "title": "Relay search returning elevated partial results",
+      "summary": "Closed: the earlier supplier-hotel-associated partial-search surge has subsided. Exact search-complete results were 1/67 partial at 16:12 and 2/33 at 16:13, versus 34/76 at 16:11 and 51/74 at 16:10. Fresh rows show search completions and supplier-hotel quote-ok outcomes. One isolated supplier-air timeout caused a partial result; insufficient evidence for a new sustained incident.",
+      "episode_id": "f2b54f05-e970-4932-bd09-7306811420c0",
+      "signal_count": 0,
+      "signals": [],
+      "affected_entities": [],
+      "causal_features": []
+    }
+  ],
+  "owned_crawls": {
+    "spoke": "a11cd835-7a20-4c52-af51-9dfbf2b2bd75",
+    "sluice": "17a847f3-bf33-4d0d-8ccc-7476bf3ddf8c",
+    "escrow": "3eea8834-08a6-491a-bc9a-595035425a65"
+  },
+  "timelines": {
+    "spoke": {
+      "run_id": "a11cd835-7a20-4c52-af51-9dfbf2b2bd75",
+      "from": "2026-11-20T16:24:17.028Z",
+      "to": "2026-11-20T17:42:45.518Z",
+      "live": true,
+      "entries": [
+        {
+          "id": "ledger-0",
+          "at": "2026-11-20T16:24:17.028Z",
+          "category": "run",
+          "title": "Crawl started",
+          "detail": "spoke \u00b7 compose"
+        },
+        {
+          "id": "recording-6dae9d6e-b6ad-4650-a9b3-16f30dbb3acd",
+          "at": "2026-11-20T16:24:17.028Z",
+          "category": "recording",
+          "title": "Recording active",
+          "detail": "Spoke Retail Catalogue \u2014 2026-11-20 16:24:17 UTC"
+        },
+        {
+          "id": "ledger-1",
+          "at": "2026-11-20T16:24:26.513Z",
+          "category": "run",
+          "title": "Services started",
+          "detail": "7 services"
+        },
+        {
+          "id": "ledger-2",
+          "at": "2026-11-20T17:04:29.103Z",
+          "category": "fault",
+          "title": "service.error-rate",
+          "target": "catalogue",
+          "detail": "Fault injected",
+          "end_at": "2026-11-20T17:12:21.418Z"
+        },
+        {
+          "id": "ledger-3",
+          "at": "2026-11-20T17:12:21.418Z",
+          "category": "recovery",
+          "title": "Fault reverted",
+          "target": "catalogue",
+          "detail": "service.error-rate \u00b7 Revert completed; service recovery is not confirmed by this action."
+        },
+        {
+          "id": "ledger-4",
+          "at": "2026-11-20T17:28:04.580Z",
+          "category": "fault",
+          "title": "service.error-rate",
+          "target": "catalogue",
+          "detail": "Fault injected",
+          "end_at": "2026-11-20T17:42:45.466Z"
+        },
+        {
+          "id": "ledger-5",
+          "at": "2026-11-20T17:42:45.466Z",
+          "category": "recovery",
+          "title": "Fault reverted",
+          "target": "catalogue",
+          "detail": "service.error-rate \u00b7 Revert completed; service recovery is not confirmed by this action."
+        }
+      ],
+      "nightshift": {
+        "status": "available",
+        "message": "Stream/time matches are context, not proof of attribution to this crawl. Change points do not confirm recovery.",
+        "truncated": false
+      }
+    },
+    "sluice": {
+      "run_id": "17a847f3-bf33-4d0d-8ccc-7476bf3ddf8c",
+      "from": "2026-11-20T16:34:02.781Z",
+      "to": "2026-11-20T18:12:01.166Z",
+      "live": true,
+      "entries": [
+        {
+          "id": "ledger-0",
+          "at": "2026-11-20T16:34:02.781Z",
+          "category": "run",
+          "title": "Crawl started",
+          "detail": "sluice \u00b7 compose"
+        },
+        {
+          "id": "recording-68b17804-39e1-48e7-8fb6-1913b8cf5cdd",
+          "at": "2026-11-20T16:34:02.781Z",
+          "category": "recording",
+          "title": "Recording active",
+          "detail": "Sluice Document Delivery \u2014 2026-11-20 16:34:02 UTC"
+        },
+        {
+          "id": "ledger-1",
+          "at": "2026-11-20T16:34:12.981Z",
+          "category": "run",
+          "title": "Services started",
+          "detail": "8 services"
+        },
+        {
+          "id": "ledger-2",
+          "at": "2026-11-20T16:50:18.357Z",
+          "category": "fault",
+          "title": "queue.pause",
+          "target": "delivery-queue",
+          "detail": "Fault injected",
+          "end_at": "2026-11-20T17:04:11.826Z"
+        },
+        {
+          "id": "ledger-3",
+          "at": "2026-11-20T17:04:11.826Z",
+          "category": "recovery",
+          "title": "Fault reverted",
+          "target": "delivery-queue",
+          "detail": "queue.pause \u00b7 Revert completed; service recovery is not confirmed by this action."
+        },
+        {
+          "id": "ledger-4",
+          "at": "2026-11-20T17:49:27.836Z",
+          "category": "fault",
+          "title": "queue.pause",
+          "target": "delivery-queue",
+          "detail": "Fault injected",
+          "end_at": "2026-11-20T17:54:25.873Z"
+        },
+        {
+          "id": "ledger-5",
+          "at": "2026-11-20T17:54:25.873Z",
+          "category": "recovery",
+          "title": "Fault reverted",
+          "target": "delivery-queue",
+          "detail": "queue.pause \u00b7 Revert completed; service recovery is not confirmed by this action."
+        },
+        {
+          "id": "ledger-6",
+          "at": "2026-11-20T17:58:26.681Z",
+          "category": "fault",
+          "title": "queue.pause",
+          "target": "delivery-queue",
+          "detail": "Fault injected",
+          "end_at": "2026-11-20T18:02:06.502Z"
+        },
+        {
+          "id": "ledger-7",
+          "at": "2026-11-20T18:02:06.502Z",
+          "category": "recovery",
+          "title": "Fault reverted",
+          "target": "delivery-queue",
+          "detail": "queue.pause \u00b7 Revert completed; service recovery is not confirmed by this action."
+        }
+      ],
+      "nightshift": {
+        "status": "available",
+        "message": "Stream/time matches are context, not proof of attribution to this crawl. Change points do not confirm recovery.",
+        "truncated": false
+      }
+    },
+    "escrow": {
+      "run_id": "3eea8834-08a6-491a-bc9a-595035425a65",
+      "from": "2026-11-20T17:05:23.500Z",
+      "to": "2026-11-20T17:42:45.580Z",
+      "live": true,
+      "entries": [
+        {
+          "id": "ledger-0",
+          "at": "2026-11-20T17:05:23.500Z",
+          "category": "run",
+          "title": "Crawl started",
+          "detail": "escrow \u00b7 compose"
+        },
+        {
+          "id": "recording-16498676-6ab1-4a4f-94ac-387c9749928a",
+          "at": "2026-11-20T17:05:23.500Z",
+          "category": "recording",
+          "title": "Recording active",
+          "detail": "Escrow Split Ledger \u2014 2026-11-20 17:05:23 UTC"
+        },
+        {
+          "id": "ledger-1",
+          "at": "2026-11-20T17:05:34.166Z",
+          "category": "run",
+          "title": "Services started",
+          "detail": "7 services"
+        },
+        {
+          "id": "ledger-2",
+          "at": "2026-11-20T17:07:24.500Z",
+          "category": "fault",
+          "title": "correctness.drift",
+          "target": "credit",
+          "detail": "Fault injected",
+          "end_at": "2026-11-20T17:12:39.754Z"
+        },
+        {
+          "id": "ledger-3",
+          "at": "2026-11-20T17:12:39.754Z",
+          "category": "recovery",
+          "title": "Fault reverted",
+          "target": "credit",
+          "detail": "correctness.drift \u00b7 Revert completed; service recovery is not confirmed by this action."
+        },
+        {
+          "id": "ledger-4",
+          "at": "2026-11-20T17:28:04.380Z",
+          "category": "fault",
+          "title": "correctness.drift",
+          "target": "credit",
+          "detail": "Fault injected",
+          "end_at": "2026-11-20T17:42:45.268Z"
+        },
+        {
+          "id": "ledger-5",
+          "at": "2026-11-20T17:42:45.268Z",
+          "category": "recovery",
+          "title": "Fault reverted",
+          "target": "credit",
+          "detail": "correctness.drift \u00b7 Revert completed; service recovery is not confirmed by this action."
+        }
+      ],
+      "nightshift": {
+        "status": "available",
+        "message": "Stream/time matches are context, not proof of attribution to this crawl. Change points do not confirm recovery.",
+        "truncated": false
+      }
+    }
+  },
+  "recording_captures": {
+    "spoke-capture": {
+      "id": "6dae9d6e-b6ad-4650-a9b3-16f30dbb3acd",
+      "run_id": "a11cd835-7a20-4c52-af51-9dfbf2b2bd75",
+      "dungeon_id": "spoke",
+      "status": "complete",
+      "started_at": "2026-11-20T16:24:17.028Z",
+      "stopped_at": "2026-11-20T18:19:04.613Z",
+      "doc_count": 1120813,
+      "bundle_id": "14217f24-3531-42c0-bc85-8dd93a8a8615"
+    },
+    "escrow-capture": {
+      "id": "16498676-6ab1-4a4f-94ac-387c9749928a",
+      "run_id": "3eea8834-08a6-491a-bc9a-595035425a65",
+      "dungeon_id": "escrow",
+      "status": "complete",
+      "started_at": "2026-11-20T17:05:23.500Z",
+      "stopped_at": "2026-11-20T18:25:19.435Z",
+      "doc_count": 845943,
+      "bundle_id": "922fce4e-0ad0-4f16-a8bc-3b155633cacc"
+    },
+    "sluice-capture": {
+      "id": "68b17804-39e1-48e7-8fb6-1913b8cf5cdd",
+      "run_id": "17a847f3-bf33-4d0d-8ccc-7476bf3ddf8c",
+      "dungeon_id": "sluice",
+      "status": "complete",
+      "started_at": "2026-11-20T16:34:02.781Z",
+      "stopped_at": "2026-11-20T18:21:40.025Z",
+      "doc_count": 1716244,
+      "bundle_id": "35f550aa-a4f1-4ae7-b5ea-f6965d4dfacb"
+    }
+  },
+  "validation": {
+    "backend_jest": {
+      "tests": 390,
+      "suites": 20,
+      "passed": true
+    },
+    "ui_jest": {
+      "tests": 79,
+      "suites": 7,
+      "passed": true
+    },
+    "scoped_types": [
+      "significant_events",
+      "nightshift",
+      "significant-events-schema"
+    ],
+    "lint": "Changed TypeScript: no errors; one EBT wrapper warning despite supported ebt prop",
+    "repository_check": "local and staged --no-fix invoked; affected-file checks skipped by shallow-history detection",
+    "i18n": "Nightshift namespace/path check --fix passed; five stale status-banner keys removed from five locales"
+  },
+  "final_schedule": {
+    "enabled": false,
+    "intervalMinutes": 5,
+    "runningRunId": null
+  },
+  "native_monitoring_inventory": {
+    "queries_total": 18,
+    "native_rules": 7
+  },
+  "final_native_feature_counts": {
+    "logs": 70,
+    "metrics": 14,
+    "traces": 17
+  },
+  "observer_queue_first_synchronous_error": "2026-11-20T18:01:45.347Z",
+  "cleanup": {
+    "owned_crawls_stopped": true,
+    "remaining_sessions": [
+      {
+        "id": "9b37a595-db43-40bb-aa15-0930da71e8bf",
+        "phase": "up",
+        "active_fault_count": 0
+      },
+      {
+        "id": "745d98ae-583f-4d9d-af1a-98148be20996",
+        "phase": "up",
+        "active_fault_count": 0
+      },
+      {
+        "id": "d08f9fe9-c95c-415a-9b8e-9482782ee12c",
+        "phase": "up",
+        "active_fault_count": 0
+      }
+    ]
+  },
+  "final_queue_timing": {
+    "injected_at": "2026-11-20T17:58:26.680Z",
+    "event_created_at": "2026-11-20T18:01:32.738Z",
+    "first_synchronous_failure_at": "2026-11-20T18:01:45.347Z",
+    "lead_seconds": 12.609
+  }
+}

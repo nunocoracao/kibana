@@ -8,7 +8,10 @@
 import type { Feature } from '@kbn/significant-events-schema';
 import type { NightshiftSource } from '@kbn/nightshift-shared';
 import type { ExplorationRun, ExplorationState } from '../../../common/knowledge_exploration';
-import { emptyExplorationTokens } from '../../../common/knowledge_exploration';
+import {
+  emptyExplorationTokens,
+  selectExplorationLimits,
+} from '../../../common/knowledge_exploration';
 import type { RouteHandlerScopedClients } from '../../routes/types';
 import {
   assessDetectionLearningFocus,
@@ -134,4 +137,13 @@ it('keeps learning until saved foundations exist and returns to learning for a n
     'operate_and_improve',
     'learn_system',
   ]);
+});
+
+it('removes ceilings only for explicitly marked evaluation runs', () => {
+  const evaluation = selectExplorationLimits('initial_learning', true);
+  const ordinary = selectExplorationLimits('initial_learning');
+  expect(evaluation.maxDurationMinutes).toBeNull();
+  expect(evaluation.maxEstimatedCostUsd).toBeNull();
+  expect(ordinary.maxDurationMinutes).not.toBeNull();
+  expect(ordinary.maxEstimatedCostUsd).not.toBeNull();
 });

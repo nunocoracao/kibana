@@ -36,10 +36,10 @@ export interface ExplorationPricing {
 
 export interface ExplorationLimits {
   mode: 'initial_learning' | 'incremental';
-  maxDurationMinutes: number;
-  maxTurns: number;
-  maxCumulativeTokens: number;
-  maxEstimatedCostUsd: number;
+  maxDurationMinutes: number | null;
+  maxTurns: number | null;
+  maxCumulativeTokens: number | null;
+  maxEstimatedCostUsd: number | null;
 }
 
 export const incrementalExplorationLimits: ExplorationLimits = {
@@ -56,6 +56,24 @@ export const initialExplorationLimits: ExplorationLimits = {
   maxTurns: 96,
   maxCumulativeTokens: 5120000,
   maxEstimatedCostUsd: 50,
+};
+
+/** Explicit evaluation calls may run to a natural assessment; normal defaults stay bounded. */
+export const selectExplorationLimits = (
+  mode: ExplorationLimits['mode'],
+  evaluationMode = false
+): ExplorationLimits => {
+  const normal =
+    mode === 'initial_learning' ? initialExplorationLimits : incrementalExplorationLimits;
+  return evaluationMode
+    ? {
+        ...normal,
+        maxDurationMinutes: null,
+        maxTurns: null,
+        maxCumulativeTokens: null,
+        maxEstimatedCostUsd: null,
+      }
+    : { ...normal };
 };
 
 export type ExplorerAgent = 'knowledge' | 'monitoring' | 'events' | 'problems';
@@ -81,6 +99,7 @@ export interface DetectionLearningFocus {
 }
 
 export interface ExplorationRun {
+  evaluationMode?: boolean;
   learningFocus?: DetectionLearningFocus;
   agent?: ExplorerAgent;
   coverage?: MonitoringCoverage[];

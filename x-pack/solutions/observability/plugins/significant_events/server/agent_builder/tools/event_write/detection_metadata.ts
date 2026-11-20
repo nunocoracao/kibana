@@ -45,7 +45,11 @@ export const fillDetectionMetadata = async <TItem extends WithInputSignals>({
 }): Promise<Array<WithSignals<TItem>>> => {
   const detectionIds = [
     ...new Set(
-      items.flatMap(({ signals }) => (signals ?? []).map(({ metadata }) => metadata.detection_id))
+      items.flatMap(({ signals }) =>
+        (signals ?? []).flatMap((signal) =>
+          signal.type === 'detection' ? [signal.metadata.detection_id] : []
+        )
+      )
     ),
   ];
   const stored = new Map(
@@ -58,6 +62,7 @@ export const fillDetectionMetadata = async <TItem extends WithInputSignals>({
   return items.map((item) => ({
     ...item,
     signals: (item.signals ?? []).map((signal, index): SignalEntry => {
+      if (signal.type !== 'detection') return signalEntrySchema.parse(signal);
       const detection = stored.get(signal.metadata.detection_id);
       if (detection && detection.rule_uuid !== signal.metadata.rule_uuid) {
         throw createBulkWriteValidationError(

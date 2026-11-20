@@ -29,7 +29,10 @@ const mockSignalMetadata = {
 const mockSignal = ({
   verdict = 'confirms',
   ...overrides
-}: Partial<SignalEntry> = {}): SignalEntry => ({
+}: Partial<Extract<SignalEntry, { type: 'detection' }>> = {}): Extract<
+  SignalEntry,
+  { type: 'detection' }
+> => ({
   type: 'detection',
   source_id: 'logs.web-frontend',
   description: 'Latency spike detected',

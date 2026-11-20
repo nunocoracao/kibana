@@ -6,6 +6,7 @@
  */
 
 import { timeoutSignal } from '@kbn/std';
+import { SEVERITY_CONTRACT_RULE, CONFIDENCE_CONTRACT_RULE } from '@kbn/significant-events-schema';
 
 import type { KibanaRequest } from '@kbn/core/server';
 import type { ChatCompletionTokenCount, Message } from '@kbn/inference-common';
@@ -25,6 +26,7 @@ import {
   emptyExplorationTokens,
   incrementalExplorationLimits,
   initialExplorationLimits,
+  selectExplorationLimits,
 } from '../../../common/knowledge_exploration';
 import type { GetScopedClients } from '../../routes/types';
 import type { SignificantEventsServer } from '../../types';
@@ -139,6 +141,10 @@ export class KnowledgeExplorationService {
   private get systemPrompt() {
     return (
       prompt +
+      '\nEVENT SEVERITY CONTRACT\n' +
+      SEVERITY_CONTRACT_RULE +
+      '\nEVENT CONFIDENCE CONTRACT\n' +
+      CONFIDENCE_CONTRACT_RULE +
       '\nBefore tool calls, give a short progress summary of the next action and its purpose. Report evidence and uncertainty without exposing private chain-of-thought.'
     );
   }
@@ -422,7 +428,9 @@ export class KnowledgeExplorationService {
       const activeRun = await store.getRun(id);
       if (
         Date.now() - Date.parse(activeRun.startedAt) <=
-        (activeRun.limits ?? incrementalExplorationLimits).maxDurationMinutes * 60000 + 60000
+        ((activeRun.limits ?? incrementalExplorationLimits).maxDurationMinutes ?? Infinity) *
+          60000 +
+          60000
       )
         return current;
       local.controller.abort(new Error('Exceeded maximum run duration'));
@@ -604,7 +612,7 @@ export class KnowledgeExplorationService {
 
   async start(
     request: KibanaRequest,
-    args: { reason: ExplorationRun['reason']; sourceId?: string }
+    args: { reason: ExplorationRun['reason']; sourceId?: string; evaluationMode?: boolean }
   ): Promise<ExplorationRun> {
     const store = this.store(request);
     const previous = await this.recoverInterrupted(request, store);
@@ -643,7 +651,7 @@ export class KnowledgeExplorationService {
       throw new StatusError('Add an enabled detection source before starting exploration', 409);
     const selected = await this.model(request);
     const pricing = await this.pricing(selected.connectorId, selected.model);
-    if (!pricing)
+    if (!pricing && !args.evaluationMode)
       throw new StatusError(
         'Model pricing is unavailable; choose a priced model so the run cost limit can be enforced',
         409
@@ -667,10 +675,7 @@ export class KnowledgeExplorationService {
       startedAt: new Date().toISOString(),
       thinking: true,
       learningFocus,
-      limits:
-        learningFocus.mode === 'initial_learning'
-          ? { ...initialExplorationLimits }
-          : { ...incrementalExplorationLimits },
+      limits: selectExplorationLimits(learningFocus.mode, args.evaluationMode),
       summary:
         this.agent === 'events'
           ? 'Assessing recent rule firings'
@@ -733,7 +738,7 @@ export class KnowledgeExplorationService {
       const initial = await this.getRun(request, id);
       const deadline =
         Date.parse(initial.startedAt) +
-        (initial.limits ?? incrementalExplorationLimits).maxDurationMinutes * 60000 +
+        ((initial.limits ?? incrementalExplorationLimits).maxDurationMinutes ?? Infinity) * 60000 +
         60000;
       while (Date.now() < deadline) {
         const run = await this.getRun(request, id);
@@ -853,12 +858,19 @@ export class KnowledgeExplorationService {
     store: ExplorationStore
   ): Promise<void> {
     const limits = run.limits ?? incrementalExplorationLimits;
-    const runCostLimit = Math.min(limits.maxEstimatedCostUsd, MAX_AGENT_RUN_COST_USD);
-    const timeout = setTimeout(
-      () =>
-        controller.abort(new Error(`Reached the ${limits.maxDurationMinutes}-minute run limit`)),
-      limits.maxDurationMinutes * 60000
-    );
+    const runCostLimit = run.evaluationMode
+      ? Infinity
+      : Math.min(limits.maxEstimatedCostUsd ?? MAX_AGENT_RUN_COST_USD, MAX_AGENT_RUN_COST_USD);
+    const timeout =
+      limits.maxDurationMinutes === null
+        ? undefined
+        : setTimeout(
+            () =>
+              controller.abort(
+                new Error(`Reached the ${limits.maxDurationMinutes}-minute run limit`)
+              ),
+            limits.maxDurationMinutes * 60000
+          );
     let session:
       | ExplorationToolSession
       | MonitoringToolSession
@@ -929,15 +941,19 @@ export class KnowledgeExplorationService {
           }),
         },
       ];
-      for (let round = 0; round < limits.maxTurns && !session.finished; round++) {
+      for (
+        let round = 0;
+        (limits.maxTurns === null || round < limits.maxTurns) && !session.finished;
+        round++
+      ) {
         controller.signal.throwIfAborted();
         if (
-          run.tokens.total >= limits.maxCumulativeTokens ||
-          run.estimatedCostUsd >= Math.min(limits.maxEstimatedCostUsd, MAX_AGENT_RUN_COST_USD)
+          (limits.maxCumulativeTokens !== null && run.tokens.total >= limits.maxCumulativeTokens) ||
+          run.estimatedCostUsd >= runCostLimit
         ) {
           run.outcome = 'partial';
           run.summary =
-            run.estimatedCostUsd >= Math.min(limits.maxEstimatedCostUsd, MAX_AGENT_RUN_COST_USD)
+            run.estimatedCostUsd >= runCostLimit
               ? 'Estimated cost ceiling reached; saved progress is available for the next run.'
               : 'Cumulative token limit reached; saved progress is available for the next run.';
           break;
@@ -989,7 +1005,8 @@ export class KnowledgeExplorationService {
                   },
                 },
               }),
-              modelSignal
+              modelSignal,
+              run.evaluationMode === true
             ),
             modelSignal
           );
@@ -1035,7 +1052,10 @@ export class KnowledgeExplorationService {
         });
         addTokens(run.tokens, tokens);
         run.estimatedCostUsd += cost ?? 0;
-        if (!response.tokens || cost === undefined || run.estimatedCostUsd >= runCostLimit) {
+        if (
+          (!run.evaluationMode && (!response.tokens || cost === undefined)) ||
+          run.estimatedCostUsd >= runCostLimit
+        ) {
           await store.saveRun(run);
           controller.abort(
             new Error(
