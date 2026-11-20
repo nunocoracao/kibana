@@ -188,6 +188,10 @@ export const DetectionPage = ({
     >
       <NightshiftAppHeader
         {...headerProps}
+        agentExplorerHref={application.getUrlForApp(NIGHTSHIFT_APP_ID, {
+          path: `/detections/agent${tabSearch}`,
+        })}
+        onAgentExplorerClick={() => history.push(`/detections/agent${tabSearch}`)}
         hideMenu={view.type !== 'workspace'}
         page="detection"
         back={{

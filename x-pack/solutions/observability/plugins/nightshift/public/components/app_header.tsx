@@ -49,6 +49,10 @@ const sourcesLabel = i18n.translate('xpack.nightshift.sourcesLinkLabel', {
   defaultMessage: 'Sources',
 });
 
+const agentExplorerLabel = i18n.translate('xpack.nightshift.agentExplorerLinkLabel', {
+  defaultMessage: 'Agent Explorer',
+});
+
 const settingsLabel = i18n.translate('xpack.nightshift.settingsLinkLabel', {
   defaultMessage: 'Settings',
 });
@@ -70,6 +74,12 @@ const knowledgeEbtProps = getEbtProps({
 const sourcesEbtProps = getEbtProps({
   action: NIGHTSHIFT_EBT_ACTIONS.VIEW_SOURCES,
   element: NIGHTSHIFT_EBT_ELEMENTS.PAGE_HEADER,
+});
+
+const agentExplorerEbtProps = getEbtProps({
+  action: NIGHTSHIFT_EBT_ACTIONS.VIEW_DETECTION_TAB,
+  element: NIGHTSHIFT_EBT_ELEMENTS.PAGE_HEADER,
+  detail: 'agent',
 });
 
 const automationsEbtProps = getEbtProps({
@@ -105,6 +115,8 @@ export interface NightshiftAppHeaderProps {
   hideMenu?: boolean;
   onSourcesClick?: () => void | Promise<void>;
   sourcesHref?: string;
+  onAgentExplorerClick?: () => void | Promise<void>;
+  agentExplorerHref?: string;
   onKnowledgeClick?: () => void | Promise<void>;
   knowledgeHref?: string;
   onSettingsClick?: () => void | Promise<void>;
@@ -124,6 +136,8 @@ export function NightshiftAppHeader({
   hideMenu = false,
   onSourcesClick,
   sourcesHref,
+  onAgentExplorerClick,
+  agentExplorerHref,
   onKnowledgeClick,
   knowledgeHref,
   onSettingsClick,
@@ -235,6 +249,21 @@ export function NightshiftAppHeader({
               },
             ]
           : []),
+        ...(isDetectionPage && onAgentExplorerClick && agentExplorerHref
+          ? [
+              {
+                id: 'nightshiftAgentExplorer',
+                label: agentExplorerLabel,
+                iconType: 'commandLine' as const,
+                href: agentExplorerHref,
+                run: (params?: AppMenuRunActionParams) => {
+                  applyEbtProps(agentExplorerEbtProps, params);
+                  void onAgentExplorerClick();
+                },
+                testId: 'nightshiftAgentExplorerLink',
+              },
+            ]
+          : []),
         // Detections and Automations: Settings as a button.
         ...((isDetectionPage || isAutomationsPage) && onSettingsClick && settingsHref
           ? [
@@ -256,12 +285,14 @@ export function NightshiftAppHeader({
       ],
     }),
     [
+      agentExplorerHref,
       automationsHref,
       detectionsHref,
       isAutomationsPage,
       isDetectionPage,
       isLandingPage,
       knowledgeHref,
+      onAgentExplorerClick,
       onAutomationsClick,
       onDetectionsClick,
       onKnowledgeClick,
