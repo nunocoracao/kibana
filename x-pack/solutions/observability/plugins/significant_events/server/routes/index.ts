@@ -5,6 +5,7 @@
  * 2.0.
  */
 
+import { problemAgentRoutes } from './internal/problem_agent/route';
 import { internalAvailabilityRoutes } from './internal/availability/route';
 import { internalSlackAppRoutes } from './internal/apps/slack/route';
 import { internalDetectionOverviewRoutes } from './internal/detection_overview/route';
@@ -30,6 +31,7 @@ import { internalScheduledDiscoveryRoutes } from './internal/scheduled_discovery
 import { internalTopologyRoutes } from './internal/topology/route';
 
 export const significantEventsRouteRepository = {
+  ...problemAgentRoutes,
   // internal APIs
   ...internalAvailabilityRoutes,
   ...internalSlackAppRoutes,

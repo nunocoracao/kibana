@@ -43,8 +43,8 @@ jest.mock('./general_settings_tab', () => ({
 jest.mock('./investigations_settings_tab', () => ({
   InvestigationsSettingsTab: () => <div data-test-subj="investigations-settings-content" />,
 }));
-jest.mock('./detections_settings_tab', () => ({
-  DetectionsSettingsTab: () => <div data-test-subj="detections-settings-content" />,
+jest.mock('./problem_agent_settings_tab', () => ({
+  ProblemAgentSettingsTab: () => <div data-test-subj="detections-settings-content" />,
 }));
 
 const mockUseAppsEnabled = useAppsEnabled as jest.MockedFunction<typeof useAppsEnabled>;

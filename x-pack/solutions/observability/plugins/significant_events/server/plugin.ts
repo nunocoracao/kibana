@@ -5,8 +5,8 @@
  * 2.0.
  */
 
-import { OBSERVABILITY_NIGHTSHIFT_CONTINUOUS_ONBOARDING_ENABLED } from '@kbn/management-settings-ids';
-import type { NightshiftSource } from '@kbn/nightshift-shared';
+import type { AlertActionsClientApi, AlertEventsClientApi } from '@kbn/alerting-v2-plugin/server';
+import { asSpaceId } from '@kbn/core-spaces-common';
 import type {
   CoreSetup,
   CoreStart,
@@ -16,9 +16,11 @@ import type {
   PluginInitializerContext,
 } from '@kbn/core/server';
 import { SavedObjectsClient } from '@kbn/core/server';
+import { PROJECT_ROUTING_ALL } from '@kbn/cps-server-utils';
+import type { NightshiftSource } from '@kbn/nightshift-shared';
+import { NIGHTSHIFT_ENABLED_FLAG } from '@kbn/nightshift-shared';
 import { registerRoutes } from '@kbn/server-route-repository';
-import { asSpaceId, DEFAULT_SPACE_ID } from '@kbn/core-spaces-common';
-import type { AlertActionsClientApi, AlertEventsClientApi } from '@kbn/alerting-v2-plugin/server';
+import type { Subscription } from 'rxjs';
 import {
   catchError,
   combineLatest,
@@ -31,110 +33,79 @@ import {
   switchMap,
   timer,
 } from 'rxjs';
-import type { Subscription } from 'rxjs';
-import { PROJECT_ROUTING_ALL } from '@kbn/cps-server-utils';
-import { NIGHTSHIFT_ENABLED_FLAG } from '@kbn/nightshift-shared';
-import { SIGNIFICANT_EVENTS_SOURCE_RECONCILIATION_WORKFLOW_ID } from '@kbn/workflows/managed';
-import { GLOBAL_WORKFLOW_SPACE_ID } from '@kbn/workflows/server';
+import { registerFeatureFlags } from './feature_flags';
+import { KnowledgeExplorationService } from './lib/knowledge_exploration/service';
+import { explorationSavedObjectTypes } from './lib/knowledge_exploration/store';
 import {
   createSourceKnowledgeStateClient,
-  sourceKnowledgeStateSavedObjectType,
   SOURCE_KNOWLEDGE_STATE_TYPE,
   SOURCE_WRITE_LEASE_WAIT_MS,
+  sourceKnowledgeStateSavedObjectType,
 } from './lib/knowledge_indicators/source_knowledge_state';
+import {
+  createSignificantEventsMaintenanceService,
+  type SignificantEventsMaintenanceService,
+} from './lib/maintenance/maintenance_service';
+import { getSignificantEventsMaintenanceStateSavedObjectType } from './lib/maintenance/saved_object';
+import { whenNightshiftTurnsOff } from './lib/maintenance/when_nightshift_turns_off';
+import { runQuotaLedgerSavedObjectType, runQuotaSettingsSavedObjectType } from './lib/run_quotas';
+import {
+  createSeveritySync,
+  registerAfterInvestigationHook,
+} from './lib/significant_events/events/severity';
+import { getSignificantEventsTuningConfig } from './lib/significant_events/helpers/get_significant_events_tuning_config';
 import {
   getRelayAppConnectionSavedObjectType,
   RELAY_APP_CONNECTION_SO_TYPE,
 } from './lib/slack_app/saved_object';
 import { SlackAppService } from './lib/slack_app/service';
 import {
-  createSeveritySync,
-  registerAfterInvestigationHook,
-} from './lib/significant_events/events/severity';
-import { getSignificantEventsMaintenanceStateSavedObjectType } from './lib/maintenance/saved_object';
-import { runQuotaLedgerSavedObjectType, runQuotaSettingsSavedObjectType } from './lib/run_quotas';
-import {
-  createSignificantEventsMaintenanceService,
-  type SignificantEventsMaintenanceService,
-} from './lib/maintenance/maintenance_service';
-import { whenNightshiftTurnsOff } from './lib/maintenance/when_nightshift_turns_off';
-import {
   createManagedWorkflowsInstaller,
   type ManagedWorkflowsInstaller,
 } from './lib/workflows/setup/managed_workflows_installer';
-import { registerFeatureFlags } from './feature_flags';
-import { getSignificantEventsTuningConfig } from './lib/significant_events/helpers/get_significant_events_tuning_config';
+import { reconcileSourceCatalog } from './routes/internal/knowledge_indicators/reconcile_source_catalog';
 
-import { createSignificantEventsAlertingContextResolver } from './lib/significant_events/alerting/significant_events_alerting_context';
 import type { SignificantEventsAlertingContext } from './lib/significant_events/alerting/significant_events_alerting_context';
+import { createSignificantEventsAlertingContextResolver } from './lib/significant_events/alerting/significant_events_alerting_context';
 
-import { EbtTelemetryService } from './lib/telemetry/ebt';
-import { getDetectionSnapshotKnowledgeCounts } from './lib/telemetry/detection_snapshot_contributor';
-import { significantEventsRouteRepository } from './routes';
-import type {
-  GetScopedClients,
-  IScheduleSourceOnboardingOptions,
-  RouteHandlerScopedClients,
-} from './routes/types';
+import { SIGNIFICANT_EVENT_TIERED_FEATURES } from '../common/constants';
+import { registerStreamsAgentBuilder } from './agent_builder/register';
+import { registerSignificantEventsSkills } from './agent_builder/skills/register_skills';
+import { registerAgentBuilderSmlTypes } from './agent_builder/sml/register_sml_types';
+import { createSignificantEventsAvailability } from './agent_builder/tools/significant_events_availability';
 import { createPriceService } from './lib/cost/price_service';
+import {
+  type KnowledgeIndicatorClient,
+  knowledgeIndicatorsDataStream,
+  KnowledgeIndicatorService,
+  TopologySnapshotClient,
+} from './lib/knowledge_indicators';
+import { detectionsDataStream } from './lib/significant_events/detections';
+import {
+  createSignificantEventsClients,
+  createSignificantEventsServices,
+} from './lib/significant_events/significant_events_clients';
+import { getDetectionSnapshotKnowledgeCounts } from './lib/telemetry/detection_snapshot_contributor';
+import { EbtTelemetryService } from './lib/telemetry/ebt';
+import { type CleanupWorkflowService } from './lib/workflows/cleanup_workflow';
+import { type ContinuousOnboardingWorkflowService } from './lib/workflows/continuous_onboarding_workflow';
+import { createWorkflowClients } from './lib/workflows/create_workflow_clients';
+import type { SignificantEventsKIsOnboardingClient } from './lib/workflows/onboarding_workflow_client';
+import { type SignificantEventsScheduledWorkflowsService } from './lib/workflows/significant_events_scheduled_workflows';
+import { type SyncWorkflowService } from './lib/workflows/sync_workflow';
+import { significantEventsRouteRepository } from './routes';
+import type { GetScopedClients, RouteHandlerScopedClients } from './routes/types';
+import { isSignificantEventsAvailable } from './routes/utils/assert_significant_events_access';
+import { getRequestAbortSignal } from './routes/utils/get_request_abort_signal';
+import { classifyDetectionsStepDefinition } from './step_definitions/classify_detections';
+import { resolveModelStepDefinition } from './step_definitions/resolve_model';
 import type {
   SignificantEventsPluginSetupDependencies,
   SignificantEventsPluginStartDependencies,
   SignificantEventsServer,
 } from './types';
-import {
-  type KnowledgeIndicatorClient,
-  KnowledgeIndicatorService,
-  knowledgeIndicatorsDataStream,
-  TopologySnapshotClient,
-} from './lib/knowledge_indicators';
-import {
-  createSignificantEventsClients,
-  createSignificantEventsServices,
-} from './lib/significant_events/significant_events_clients';
-import { detectionsDataStream } from './lib/significant_events/detections';
-import { registerStreamsAgentBuilder } from './agent_builder/register';
-import { registerSignificantEventsSkills } from './agent_builder/skills/register_skills';
-import { registerAgentBuilderSmlTypes } from './agent_builder/sml/register_sml_types';
-import { classifyDetectionsStepDefinition } from './step_definitions/classify_detections';
-import { resolveModelStepDefinition } from './step_definitions/resolve_model';
-import {
-  createContinuousOnboardingWorkflowService,
-  type ContinuousOnboardingWorkflowService,
-} from './lib/workflows/continuous_onboarding_workflow';
-import {
-  createCleanupWorkflowService,
-  type CleanupWorkflowService,
-} from './lib/workflows/cleanup_workflow';
-import { createSyncWorkflowService, type SyncWorkflowService } from './lib/workflows/sync_workflow';
-import {
-  createSignificantEventsScheduledWorkflowsService,
-  type SignificantEventsScheduledWorkflowsService,
-} from './lib/workflows/significant_events_scheduled_workflows';
-import { createWorkflowClients } from './lib/workflows/create_workflow_clients';
-import { registerSignificantEventsWorkflowTriggers } from './workflows/triggers/register_triggers';
 import { createTriggerEmitter } from './workflows/triggers/emit';
-import {
-  installDiscoveryAgents,
-  registerSignificantEventsDiscoveryAgentTypes,
-} from './agent_builder/agents/discovery';
-import {
-  installFeatureIdentificationAgent,
-  registerSignificantEventsFeatureIdentificationAgentTypes,
-} from './agent_builder/agents/feature_identification';
-import {
-  installKIQueryGenerationAgent,
-  registerSignificantEventsKIQueryGenerationAgentTypes,
-} from './agent_builder/agents/ki_query_generation';
-import { createSignificantEventsAvailability } from './agent_builder/tools/significant_events_availability';
-import { SIGNIFICANT_EVENT_TIERED_FEATURES } from '../common/constants';
-import { isSignificantEventsAvailable } from './routes/utils/assert_significant_events_access';
-import { getRequestAbortSignal } from './routes/utils/get_request_abort_signal';
-import type { SignificantEventsKIsOnboardingClient } from './lib/workflows/onboarding_workflow_client';
-import { WorkflowExecutionService } from './lib/workflows/workflow_execution_service';
-import { createSourceChangeListener } from './routes/internal/knowledge_indicators/reconcile_source_catalog';
-import { syncContinuousOnboarding } from './lib/continuous_onboarding/sync_continuous_onboarding';
-import { syncScheduledDiscovery } from './lib/scheduled_discovery/sync_scheduled_discovery';
+import { registerSignificantEventsWorkflowTriggers } from './workflows/triggers/register_triggers';
 
 const SIGNIFICANT_EVENTS_MANAGED_WORKFLOW_OWNER = 'significantEvents';
 const SLACK_CONNECTOR_RECONCILE_INTERVAL_MS = 60_000;
@@ -181,6 +152,8 @@ export class SignificantEventsPlugin
     } as SignificantEventsServer;
     this.server.workflowsManagement = plugins.workflowsManagement;
 
+    core.savedObjects.registerType(explorationSavedObjectTypes[0]);
+    core.savedObjects.registerType(explorationSavedObjectTypes[1]);
     core.savedObjects.registerType(getRelayAppConnectionSavedObjectType());
     core.savedObjects.registerType(getSignificantEventsMaintenanceStateSavedObjectType());
     core.savedObjects.registerType(sourceKnowledgeStateSavedObjectType);
@@ -372,42 +345,7 @@ export class SignificantEventsPlugin
         getKnowledgeIndicatorClient,
         getTopologySnapshotClient,
         sourceKnowledgeState,
-        scheduleSourceOnboarding: async (
-          source: NightshiftSource,
-          { ignoreContinuousSetting = false }: IScheduleSourceOnboardingOptions = {}
-        ): Promise<boolean> => {
-          if (
-            !streamsKIsOnboardingClient ||
-            !source.enabled ||
-            // The toggle governs the periodic sweeps only. A created or edited source is
-            // onboarded once for its new revision whatever the toggle says.
-            (!ignoreContinuousSetting &&
-              !(await uiSettingsClient.get<boolean>(
-                OBSERVABILITY_NIGHTSHIFT_CONTINUOUS_ONBOARDING_ENABLED
-              ))) ||
-            (await this.maintenanceService?.getState({ request })) === 'paused'
-          ) {
-            return false;
-          }
-          const now = Date.now();
-          await streamsKIsOnboardingClient.run({
-            request,
-            inputs: {
-              sourceId: source.id,
-              sourceSlug: source.slug,
-              sourceRevision: source.esql_updated_at,
-              rootTriggeredBy: 'scheduled',
-              features: {
-                skip: false,
-                start: now - 24 * 60 * 60_000,
-                end: now,
-                recencyThresholdHours: 0,
-              },
-              queries: { skip: false },
-            },
-          });
-          return true;
-        },
+        scheduleSourceOnboarding: async () => false,
         getAlertEventsClient,
         getAlertActionsClient,
         ...significantEventsClients,
@@ -467,13 +405,6 @@ export class SignificantEventsPlugin
           };
         },
       });
-      registerSignificantEventsDiscoveryAgentTypes({ agentBuilder: plugins.agentBuilder });
-      registerSignificantEventsFeatureIdentificationAgentTypes({
-        agentBuilder: plugins.agentBuilder,
-      });
-      registerSignificantEventsKIQueryGenerationAgentTypes({
-        agentBuilder: plugins.agentBuilder,
-      });
       void core
         .getStartServices()
         .then(async () => {
@@ -518,47 +449,44 @@ export class SignificantEventsPlugin
     // Custom event-driven triggers users can subscribe to from their own workflows.
     registerSignificantEventsWorkflowTriggers(plugins.workflowsExtensions);
 
-    if (plugins.workflowsManagement && plugins.workflowsExtensions) {
-      const { management: managementApi } = plugins.workflowsManagement;
-      const getManagedWorkflowsClient = async () => {
-        const [, pluginsStart] = await core.getStartServices();
-        if (!pluginsStart.workflowsExtensions) {
-          throw new Error('Workflows extensions are not available');
-        }
-        return pluginsStart.workflowsExtensions.initManagedWorkflowsClient(
-          SIGNIFICANT_EVENTS_MANAGED_WORKFLOW_OWNER
-        );
-      };
-
-      if (streamsKIsOnboardingClient) {
-        continuousOnboardingWorkflowService = createContinuousOnboardingWorkflowService({
-          logger: this.logger,
-          managementApi,
-          streamsKIsOnboardingClient,
-          getManagedWorkflowsClient,
-        });
-      }
-
-      syncWorkflowService = createSyncWorkflowService({
-        logger: this.logger,
-        managementApi,
-        getManagedWorkflowsClient,
-      });
-
-      cleanupWorkflowService = createCleanupWorkflowService({
-        logger: this.logger,
-        managementApi: plugins.workflowsManagement.management,
-        getManagedWorkflowsClient,
-      });
-
-      significantEventsScheduledWorkflowsService = createSignificantEventsScheduledWorkflowsService(
-        {
-          logger: this.logger,
-          managementApi: plugins.workflowsManagement.management,
-          getManagedWorkflowsClient,
-        }
-      );
-    }
+    plugins.taskManager.registerTaskDefinitions({
+      'nightshiftProblemAgent:run': {
+        title: 'Nightshift Problem Agent',
+        description: 'Runs the unified problem agent with the scheduling user credentials.',
+        timeout: '22m',
+        createTaskRunner: ({ taskInstance, fakeRequest, signal }) => ({
+          run: async () => {
+            if (!fakeRequest)
+              throw new Error(
+                'Problem agent schedule has no credentials; save the schedule again.'
+              );
+            const agent = this.server?.problemAgent;
+            if (
+              !agent ||
+              !(await agent.hourlyEnabled(fakeRequest)) ||
+              !(await agent.sources(fakeRequest)).some((source) => source.enabled) ||
+              (await this.maintenanceService?.getState({ request: fakeRequest })) === 'paused' ||
+              !this.server ||
+              !(await isSignificantEventsAvailable({
+                server: this.server,
+                licensing: this.server.licensing,
+              }))
+            )
+              return { state: taskInstance.state };
+            const run = await agent.start(fakeRequest, { reason: 'hourly' });
+            if (run.reason !== 'hourly') return { state: taskInstance.state };
+            const cancel = () => agent.cancel(fakeRequest);
+            signal.addEventListener('abort', cancel, { once: true });
+            try {
+              await agent.wait(fakeRequest, run.id);
+            } finally {
+              signal.removeEventListener('abort', cancel);
+            }
+            return { state: taskInstance.state };
+          },
+        }),
+      },
+    });
 
     core.pricing.registerProductFeatures(SIGNIFICANT_EVENT_TIERED_FEATURES);
     registerFeatureFlags(core, this.logger, plugins.cloud);
@@ -583,55 +511,17 @@ export class SignificantEventsPlugin
       },
     });
 
-    const sourceReconciliation = plugins.workflowsManagement?.management
-      ? new WorkflowExecutionService<{ sourceId: string; sourceSlug: string }>({
-          managementApi: plugins.workflowsManagement.management,
-          workflowId: SIGNIFICANT_EVENTS_SOURCE_RECONCILIATION_WORKFLOW_ID,
-          workflowSpaceId: GLOBAL_WORKFLOW_SPACE_ID,
-        })
-      : undefined;
-    plugins.nightshiftSources.onSourceChange(
-      createSourceChangeListener({
-        enqueueReconciliation: async ({ sourceId, sourceSlug, request }) => {
-          if (!sourceReconciliation) {
-            throw new Error('Workflows management is required to reconcile source knowledge');
-          }
-          await sourceReconciliation.execute({
-            executionSpaceId: request.spaceId,
-            inputs: { sourceId, sourceSlug },
-            request,
-          });
-        },
-        ensurePeriodicReconciliation: async (request) => {
-          // Keep periodic repair available even when continuous onboarding is switched off.
-          if ((await this.maintenanceService?.getState({ request })) !== 'paused') {
-            await syncWorkflowService?.ensureEnabled({ request, spaceId: request.spaceId });
-          }
-        },
-        syncContinuousOnboarding: (event) =>
-          syncContinuousOnboarding({
-            event,
-            workflowService: continuousOnboardingWorkflowService,
-            maintenanceService: this.maintenanceService,
-            getStartServices: async () => {
-              const [coreStart, pluginsStart] = await core.getStartServices();
-              return { coreStart, pluginsStart };
-            },
-            logger: this.logger,
-          }),
-        syncScheduledDiscovery: (event) =>
-          syncScheduledDiscovery({
-            event,
-            workflowService: significantEventsScheduledWorkflowsService,
-            maintenanceService: this.maintenanceService,
-            getStartServices: async () => {
-              const [coreStart, pluginsStart] = await core.getStartServices();
-              return { coreStart, pluginsStart };
-            },
-            logger: this.logger,
-          }),
-      })
-    );
+    plugins.nightshiftSources.onSourceChange(async (event) => {
+      this.server?.problemAgent?.cancel(event.request);
+      const clients = await this.getScopedClients!({ request: event.request });
+      await reconcileSourceCatalog({
+        sourcesClient: clients.sourcesClient,
+        kiClient: await clients.getKnowledgeIndicatorClient(),
+        sourceKnowledgeState: clients.sourceKnowledgeState,
+        maintenanceService: this.maintenanceService!,
+        request: event.request,
+      });
+    });
 
     const priceService = createPriceService({
       fetchFn: fetch,
@@ -643,6 +533,12 @@ export class SignificantEventsPlugin
       maxScopedRows: 10_000,
       baseUrl: plugins.cloud?.baseUrl ?? 'https://cloud.elastic.co',
     });
+
+    this.server.problemAgent = new KnowledgeExplorationService(
+      () => this.server,
+      this.getScopedClients,
+      () => priceService
+    );
 
     registerRoutes({
       repository: significantEventsRouteRepository,
@@ -669,6 +565,7 @@ export class SignificantEventsPlugin
   public start(core: CoreStart, plugins: SignificantEventsPluginStartDependencies): void {
     if (this.server) {
       this.server.core = core;
+      this.server.taskManager = plugins.taskManager;
       this.server.isServerless = this.server.cloud?.isServerlessEnabled ?? false;
       this.server.security = plugins.security;
       this.server.actions = plugins.actions;
@@ -784,33 +681,6 @@ export class SignificantEventsPlugin
     // enablement and manual discovery execute, and for the feature identification and KI query
     // generation agents from the routes that run them.
     // Pause re-assert runs inside ensureSignificantEventsInstalled after every install.
-    if (plugins.agentBuilder && this.server) {
-      const agentBuilder = plugins.agentBuilder;
-      const availability = createSignificantEventsAvailability({
-        server: this.server,
-        logger: this.logger,
-      });
-      void installDiscoveryAgents({ agentBuilder, spaceId: DEFAULT_SPACE_ID, availability }).catch(
-        (error: unknown) => {
-          this.logManagedResourceError('significant events agents', error);
-        }
-      );
-      void installFeatureIdentificationAgent({
-        agentBuilder,
-        spaceId: DEFAULT_SPACE_ID,
-        availability,
-      }).catch((error: unknown) => {
-        this.logManagedResourceError('feature identification agent', error);
-      });
-      void installKIQueryGenerationAgent({
-        agentBuilder,
-        spaceId: DEFAULT_SPACE_ID,
-        availability,
-      }).catch((error: unknown) => {
-        this.logManagedResourceError('KI query generation agent', error);
-      });
-    }
-
     if (plugins.agentBuilder && this.server && this.getScopedClients) {
       const agentBuilder = plugins.agentBuilder;
       const telemetry = this.ebtTelemetryService.getClient();
@@ -910,6 +780,7 @@ export class SignificantEventsPlugin
   }
 
   public async stop() {
+    await this.server?.problemAgent?.stop();
     this.subscriptions.forEach((s) => s.unsubscribe());
   }
 }

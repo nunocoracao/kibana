@@ -136,7 +136,7 @@ export const ONBOARDING_PAUSED_TOAST_TEXT = i18n.translate(
   'xpack.nightshift.sources.onboardingPausedToastText',
   {
     defaultMessage:
-      'Onboarding is paused because significant events activity is paused. Resume it in settings to onboard the source.',
+      'The source is saved. Resume detection activity in settings before running the Problem Agent.',
   }
 );
 

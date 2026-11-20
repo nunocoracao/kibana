@@ -5,12 +5,11 @@
  * 2.0.
  */
 
-import type { Logger } from '@kbn/core/server';
 import type { DataStreamsStart } from '@kbn/core-data-streams-server';
+import type { Logger } from '@kbn/core/server';
 import type { PluginScopedManagedWorkflowsApi } from '@kbn/workflows/server/types';
-import { DETECTIONS_DATA_STREAM } from '../../significant_events/detections/data_stream';
 import { KNOWLEDGE_INDICATORS_DATA_STREAM } from '../../knowledge_indicators/data_stream';
-import { installWorkflows } from './install_workflows';
+import { DETECTIONS_DATA_STREAM } from '../../significant_events/detections/data_stream';
 
 // Created before any workflow or request can use them. Managed workflows read detections with raw
 // Elasticsearch requests (ES|QL `FROM` fails on a missing index). Knowledge indicators are read right
@@ -19,11 +18,7 @@ import { installWorkflows } from './install_workflows';
 const EAGER_DATA_STREAMS = [DETECTIONS_DATA_STREAM, KNOWLEDGE_INDICATORS_DATA_STREAM];
 
 export interface ManagedWorkflowsInstaller {
-  /**
-   * Installs the full managed-workflow set and closes the
-   * reconciliation window exactly once. Resolves when this install completes and rejects if it
-   * fails.
-   */
+  /** Initializes resources and closes the legacy owner reconciliation window. */
   install: () => Promise<void>;
 }
 
@@ -34,15 +29,7 @@ export interface CreateManagedWorkflowsInstallerOptions {
   logger: Logger;
 }
 
-/**
- * Creates the single owner of significant events managed-workflow installation.
- *
- * `install()` is the only place that calls `client.ready()`, and every install writes the full
- * current workflow set before doing so. Calls are serialized through a promise chain, so a runtime
- * flag flip can never close the reconciliation window with a partial set — which would make the
- * platform prune the owner's other workflows as orphans. `ready()` runs only once per process
- * (further installs are idempotent upserts that don't need to reconcile again).
- */
+/** Retires legacy detection workflows and initializes shared data streams once available. */
 export const createManagedWorkflowsInstaller = ({
   getClient,
   dataStreams,
@@ -67,16 +54,17 @@ export const createManagedWorkflowsInstaller = ({
 
     const client = await getClient();
 
-    await installWorkflows({ client });
+    // The unified agent replaces detection workflows. Closing the owner reconciliation
+    // without installing them retires existing legacy definitions on this branch.
 
     // Log success only after the whole sequence (including reconciliation) has actually landed, and
     // only once at INFO. Re-installs on later flag flips are routine, so keep them at debug.
     if (!reconciled) {
       await client.ready();
       reconciled = true;
-      logger.info('Significant events managed workflows installed');
+      logger.info('Legacy detection workflows retired; unified agent ready');
     } else {
-      logger.debug('Significant events managed workflows re-installed');
+      logger.debug('Unified agent resources reconciled');
     }
   };
 

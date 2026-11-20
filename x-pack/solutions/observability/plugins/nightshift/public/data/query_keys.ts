@@ -64,3 +64,7 @@ export const detectionByIdQueryKey = (detectionId: string | undefined) =>
 
 export const detectionHistoryQueryKey = (ruleUuid: string | undefined) =>
   [...DETECTION_HISTORY_QUERY_KEY, ruleUuid] as const;
+
+export const PROBLEM_AGENT_STATUS_QUERY_KEY = ['problem-agent-status'] as const;
+export const PROBLEM_AGENT_RUN_QUERY_KEY = ['problem-agent-run'] as const;
+export const PROBLEM_AGENT_ANATOMY_QUERY_KEY = ['problem-agent-anatomy'] as const;

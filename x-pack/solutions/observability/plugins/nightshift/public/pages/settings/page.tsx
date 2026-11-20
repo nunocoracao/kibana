@@ -13,7 +13,7 @@ import { getNightshiftCapabilities } from '@kbn/nightshift-shared';
 import { Redirect, useHistory, useLocation, useParams } from 'react-router-dom';
 import { NightshiftAppHeader } from '../../components/app_header';
 import { useKibana } from '../../hooks/use_kibana';
-import { DetectionsSettingsTab } from './detections_settings_tab';
+import { ProblemAgentSettingsTab } from './problem_agent_settings_tab';
 import { GeneralSettingsTab } from './general_settings_tab';
 import { useAppsEnabled } from './hooks/use_apps_enabled';
 import { InvestigationsSettingsTab } from './investigations_settings_tab';
@@ -117,7 +117,7 @@ export function SettingsPage({ headerProps }: { headerProps: SettingsPageHeaderP
             canManageSandboxAllowlist={canManage}
           />
         )}
-        {tab === 'detections' && <DetectionsSettingsTab />}
+        {tab === 'detections' && <ProblemAgentSettingsTab />}
       </EuiPageTemplate.Section>
     </>
   );

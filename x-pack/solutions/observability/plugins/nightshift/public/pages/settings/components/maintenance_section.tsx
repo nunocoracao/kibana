@@ -40,7 +40,7 @@ const SECTION_DESCRIPTION = i18n.translate(
   'xpack.nightshift.settings.maintenance.spaceDescription',
   {
     defaultMessage:
-      'Controls detection activity in this space, including knowledge indicator extraction, query alerting, rule creation, and significant event discovery. Other spaces are not affected. The cost estimates and run limits on this page are not scoped to this space. Existing data always persists.',
+      'Pauses the Problem Agent and detection activity in this space. Existing data persists. Model, frequency, run history and reset controls are in Agent Explorer.',
   }
 );
 
@@ -251,11 +251,11 @@ export function MaintenanceSection({ canManage }: { canManage: boolean }) {
                 {paused
                   ? i18n.translate('xpack.nightshift.settings.maintenance.spaceResumeConfirmBody', {
                       defaultMessage:
-                        'This re-enables the workflows and alerting rules that Pause disabled in this space, and restores scheduled discovery / continuous onboarding only if they were enabled before pause. It does not restart executions that were cancelled. Other spaces are not affected.',
+                        'This allows manual and scheduled Problem Agent runs again and re-enables alerting rules that Pause disabled in this space. Cancelled runs are not restarted.',
                     })
                   : i18n.translate('xpack.nightshift.settings.maintenance.spacePauseConfirmBody', {
                       defaultMessage:
-                        'This disables the Significant Events workflows of this space, cancels their in-flight executions, and disables the alerting rules backing knowledge indicator queries in this space. Workflows shared by every space stay enabled, but their executions in this space are cancelled. Other spaces keep running. No data is deleted.',
+                        'This stops the current Problem Agent run and blocks new runs in this space. It also pauses legacy detection activity and its alerting rules. No data is deleted.',
                     })}
               </p>
             </EuiText>

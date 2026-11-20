@@ -1,0 +1,308 @@
+{
+  "evaluatedAt": "2026-11-20",
+  "branch": "one_agent_to_rule_them_all",
+  "portedFrom": "nuno/ki-extraction-agent-improvements@9111b1a089da4b659b8e8093f6115a93fe56971d",
+  "model": ".openai-gpt-6-luna-pro-chat_completion",
+  "estimatedReportedChatCostUsd": 0.159459715,
+  "scope": "Live log-based local smoke campaign. Not a broad accuracy benchmark. CARL fault metadata was never passed to the target agent.",
+  "sessions": {
+    "relay": "616f6123-2fc2-40b3-944c-27d88d34d534",
+    "sluice": "9c1fa933-3412-4485-bc1f-b2ace5b830f1"
+  },
+  "recordings": {
+    "relay": "5ce120f0-02cf-415d-98f5-0d8678011ebe",
+    "sluice": "93a9f68c-3476-47df-96f8-e9e12d338112"
+  },
+  "eventVersionsBeforeReset": [
+    {
+      "at": "2026-11-20T11:20:26.765Z",
+      "eventId": "nightshift-problem-relay-search-supplier-air-quote-timeout-partial-results",
+      "status": "active",
+      "episodeId": "89444269-33f0-438d-a855-cf5c042c9795"
+    },
+    {
+      "at": "2026-11-20T11:36:21.613Z",
+      "eventId": "nightshift-problem-relay-search-supplier-air-quote-timeout-partial-results",
+      "status": "inactive",
+      "episodeId": "89444269-33f0-438d-a855-cf5c042c9795"
+    },
+    {
+      "at": "2026-11-20T11:41:24.192Z",
+      "eventId": "nightshift-problem-relay-pricing-price-http-500",
+      "status": "active",
+      "episodeId": "9a642a74-65d1-4f61-9a1e-e6bc4a4a93ac"
+    },
+    {
+      "at": "2026-11-20T11:45:09.927Z",
+      "eventId": "nightshift-problem-relay-pricing-price-http-500",
+      "status": "inactive",
+      "episodeId": "9a642a74-65d1-4f61-9a1e-e6bc4a4a93ac"
+    },
+    {
+      "at": "2026-11-20T11:45:10.792Z",
+      "eventId": "nightshift-problem-sluice-delivery-queue-request-503",
+      "status": "active",
+      "episodeId": "acdb6149-0454-483c-bc88-d9137c262db9"
+    },
+    {
+      "at": "2026-11-20T11:49:13.876Z",
+      "eventId": "nightshift-problem-sluice-delivery-queue-request-503",
+      "status": "inactive",
+      "episodeId": "acdb6149-0454-483c-bc88-d9137c262db9"
+    },
+    {
+      "at": "2026-11-20T11:49:14.766Z",
+      "eventId": "nightshift-problem-relay-pricing-price-http-500",
+      "status": "active",
+      "episodeId": "e321820c-6577-49c3-bf44-0c920a64dfdf"
+    },
+    {
+      "at": "2026-11-20T11:52:30.094Z",
+      "eventId": "nightshift-problem-relay-pricing-price-http-500",
+      "status": "inactive",
+      "episodeId": "e321820c-6577-49c3-bf44-0c920a64dfdf"
+    }
+  ],
+  "runs": [
+    {
+      "label": "baseline",
+      "id": "515d62e8-fd1e-48b6-934b-c7c97378105e",
+      "status": "completed",
+      "reason": "manual",
+      "startedAt": "2026-11-20T11:19:29.646Z",
+      "finishedAt": "2026-11-20T11:20:33.256Z",
+      "outcome": "assessed",
+      "summary": "Checked the only enabled source (Relay logs; 1,633 documents in the initial 3-minute window) and confirmed one current, intermittent supplier-air quote timeout that caused an explicitly partial search at 11:19:20. Subsequent full search outcomes were observed through 11:19:51, so this is not a sustained outage; the active medium-severity event records the limited confirmed impact and unknown root cause. No prior problems were pending review.",
+      "coverageComplete": true,
+      "remainingGaps": [],
+      "estimatedCostUsd": 0.01403735,
+      "costEstimateComplete": true,
+      "written": 1,
+      "failedSteps": 2,
+      "steps": 26
+    },
+    {
+      "label": "baseline-round2",
+      "id": "00ef61db-3cb9-4a2e-9c42-ee2e0c83602f",
+      "status": "completed",
+      "reason": "manual",
+      "startedAt": "2026-11-20T11:25:07.021Z",
+      "finishedAt": "2026-11-20T11:25:54.812Z",
+      "outcome": "assessed",
+      "summary": "Reviewed the sole active event and kept it active. Fresh Relay search traffic shows continuing intermittent partial results (1 partial/78 outcomes in the 11:24 minute vs 6/194 outcomes across sampled older buckets), alongside many successful full results and a current 11:25 minute with 30 full, 0 partial so far. No evidence supports a sustained outage or recovery; exact partial-failure attribution remains uncertain.",
+      "coverageComplete": false,
+      "remainingGaps": [
+        "Relay search partial outcomes were reassessed; exact cause/attribution of partial responses to supplier-air is unconfirmed. Continue monitoring current partial/full outcome rates in subsequent runs.",
+        "Only the priority Relay logs source was enabled and checked; broader service/namespace outcome inventory was not completed in this run."
+      ],
+      "estimatedCostUsd": 0.010494749999999999,
+      "costEstimateComplete": true,
+      "written": 0,
+      "failedSteps": 0,
+      "steps": 18
+    },
+    {
+      "label": "baseline-round3",
+      "id": "d542dd18-510a-419b-ace9-63d4b3473a3b",
+      "status": "completed",
+      "reason": "manual",
+      "startedAt": "2026-11-20T11:30:06.030Z",
+      "finishedAt": "2026-11-20T11:30:44.449Z",
+      "outcome": "partial",
+      "summary": "Reviewed the existing Relay search partial-results event with fresh current evidence. Repeated supplier-air quote timeouts are paired with partial search completions and fewer offers. Newest window had 4/185 partials versus 6/396 in the adjacent older comparison; low-rate degradation is recurring, so the existing event remains active rather than being treated as recovered. Only one source is enabled; broader outcome coverage across its services remains incomplete.",
+      "coverageComplete": false,
+      "remainingGaps": [
+        "Relay search/supplier-air partial responses persist; exact cause and impact beyond the observed reduced offer counts remain unconfirmed. Recheck newest outcomes and comparative partial/full rates next run.",
+        "The enabled Relay source inventory identified 11 emitting services, but a broad current operation/outcome assessment of services other than search was not completed. Only this one configured source was available."
+      ],
+      "estimatedCostUsd": 0.009283334999999998,
+      "costEstimateComplete": true,
+      "written": 0,
+      "failedSteps": 0,
+      "steps": 15
+    },
+    {
+      "label": "pricing",
+      "id": "b14ed4fc-91f6-4362-9096-a57288c46d95",
+      "status": "completed",
+      "reason": "manual",
+      "startedAt": "2026-11-20T11:35:35.848Z",
+      "finishedAt": "2026-11-20T11:36:26.437Z",
+      "outcome": "assessed",
+      "summary": "Reassessed the existing Relay search/supplier-air event using fresh operation outcomes and closed it inactive: partial search rate is not elevated against the bounded prior window, and full searches continue returning offers despite downstream timeout/500 logs. No sustained user-visible search failure is established. Source-wide coverage is partial because operation outcomes for the other emitting services were not assessed.",
+      "coverageComplete": false,
+      "remainingGaps": [
+        "A fresh bounded operation/outcome assessment for Relay services other than search remains incomplete; inventory shows 12 emitting services. The broad aggregate attempt failed because COUNT_IF is unsupported. Follow up with schema-appropriate per-service or sampled outcomes.",
+        "Supplier-air timeouts and occasional partial search results persist, but observed partial rate is stable (~1.9% newest 3 minutes vs ~2.1% preceding 5 minutes); exact downstream cause and broader impact remain unconfirmed."
+      ],
+      "estimatedCostUsd": 0.011587475,
+      "costEstimateComplete": true,
+      "written": 1,
+      "failedSteps": 1,
+      "steps": 20
+    },
+    {
+      "label": "estate",
+      "id": "335dfa74-ee8c-4cb1-a8d0-99edd5ca55d6",
+      "status": "completed",
+      "reason": "manual",
+      "startedAt": "2026-11-20T11:40:43.417Z",
+      "finishedAt": "2026-11-20T11:41:36.949Z",
+      "outcome": "partial",
+      "summary": "Indexed both enabled log sources and the complete event inventory; no prior active events required review. Recorded active high-severity issue relay-pricing-price-http-500 (event nightshift-problem-relay-pricing-price-http-500): repeated pricing failures in all three newest minute buckets, linked booking HTTP 500 and gateway HTTP 502 failures, with successful searches continuing. The earlier supplier-air/partial-search event remains inactive; current supplier quote successes and previously stable partial rates do not justify reopening it. Checked broad current operation evidence across Relay (12 services) and Sluice (5 services). Sluice showed ongoing successful intake/render/archive and queue completions, pending zero, zero runtime errors; 409 duplicate and 422 validation rejections are expected outcomes, not a demonstrated incident. Coverage is partial because pricing\u2019s fail-versus-success denominator was not obtained, and supplier-air error impact remains unclear.",
+      "coverageComplete": false,
+      "remainingGaps": [
+        "Relay current pricing-failure rate denominator and positive pricing-operation completions were not isolated successfully: the targeted aggregate matched only failure logs (104/139/83 per newest minute bucket) and did not return positive outcomes. Compare fail/total with a correct positive-operation signature; active failures and linked booking impact are nevertheless directly evidenced.",
+        "Relay sample output for supplier-air was truncated while showing socket BrokenPipe/connection exceptions; quote successes were also observed through 11:41:22, so the operational significance of those occasional failures remains unresolved. Check current window again later, including supplier-air failure/quote outcome denominator and search partial-rate baseline if possible.",
+        "High-level current outcomes were checked for all 12 Relay and 5 Sluice emitters; some Relay low-volume services have only a few observations, and Sluice delivery-queue pending was directly seen at zero while other Sluice service outcomes included successful processing plus expected validation/duplicate rejections."
+      ],
+      "estimatedCostUsd": 0.0189709,
+      "costEstimateComplete": true,
+      "written": 1,
+      "failedSteps": 0,
+      "steps": 25
+    },
+    {
+      "label": "queue",
+      "id": "2be13f08-d572-4cc4-9ae1-26e1ee646fed",
+      "status": "completed",
+      "reason": "manual",
+      "startedAt": "2026-11-20T11:44:23.958Z",
+      "finishedAt": "2026-11-20T11:45:27.607Z",
+      "outcome": "assessed",
+      "summary": "Reassessed both enabled log sources and all prior events. Closed the Relay pricing HTTP 500 incident after fresh positive pricing, booking, and search outcomes through 11:44:52; the previously inactive supplier-air/search event remains closed, with sampled supplier-air quote successes and no established sustained search outage. Opened active high-severity issue sluice-delivery-queue-request-503: current Sluice aggregates show 4,655 delivery-queue and 9,291 intake failure-marker rows in the latest two minutes, plus raw matching 503 failures across operations and tenants; 2,120 and 2,525 delivery-queue request failures were observed in the 11:43 and partial 11:44 minute buckets. Other Sluice job completions were observed earlier, but do not establish recovery of current request operations. Broad source checks were performed; Relay generic search failure markers remain ambiguous, so full coverage is not claimed.",
+      "coverageComplete": false,
+      "remainingGaps": [
+        "Relay's broad generic failure-marker aggregate flags many search rows (117 in the 2-minute window), but this predicate is not operation-specific and does not distinguish downstream errors from user-visible search failures. Recheck search completion partial/full denominators and correlate any current error signature before attributing an incident.",
+        "Sluice delivery-queue/intake 503 outage is active; current positive request outcomes and its backlog/completion impact remain unverified. Root cause is unknown."
+      ],
+      "estimatedCostUsd": 0.019235865,
+      "costEstimateComplete": true,
+      "written": 2,
+      "failedSteps": 0,
+      "steps": 27
+    },
+    {
+      "label": "recurrence",
+      "id": "11f1e056-95da-4c9f-be2e-d03f43c3e3d1",
+      "status": "completed",
+      "reason": "manual",
+      "startedAt": "2026-11-20T11:48:13.280Z",
+      "finishedAt": "2026-11-20T11:49:25.318Z",
+      "outcome": "partial",
+      "summary": "Read both enabled log sources and the existing event inventory. Closed the Sluice delivery-queue 503 event after its 11:45 burst ceased and fresh intake status-200 submissions plus completed jobs (pending=0) established positive recovery. Reopened the existing Relay pricing HTTP-500 issue identity: current pricing failure counts substantially exceed successful priced outcomes, with sampled search and booking failures explicitly citing pricing 500s; successful paths also continue. Relay search itself remains mostly full (1 partial versus 106 full results in the newest three minutes), so no separate broad search outage is established. Source inventory identified 11 Relay services; the rest of that estate was not fully assessed for new operation failures, so coverage is partial.",
+      "coverageComplete": false,
+      "remainingGaps": [
+        "Relay: investigate operation-level outcomes for the remaining emitting services (availability, inventory, notifier, payments, supplier-air, supplier-hotel, supplier-rail, gateway, booking) and determine whether current pricing failures have broadened impact beyond sampled search/booking evidence.",
+        "Relay: pricing HTTP 500 cause and complete user-impact rate remain unknown; current 11:47 complete minute 84 failures/18 successes, and 11:48 partial minute 97/27.",
+        "Sluice: recheck whether recovery persists after this run; current positive status-200 submissions and completed jobs support closure, but the prior 11:45 503 burst was severe."
+      ],
+      "estimatedCostUsd": 0.024011379999999995,
+      "costEstimateComplete": true,
+      "written": 2,
+      "failedSteps": 0,
+      "steps": 31
+    },
+    {
+      "label": "recovered",
+      "id": "b3047375-36c5-4315-84ba-2daa7f94c0bb",
+      "status": "completed",
+      "reason": "manual",
+      "startedAt": "2026-11-20T11:51:48.201Z",
+      "finishedAt": "2026-11-20T11:52:50.777Z",
+      "outcome": "partial",
+      "summary": "Reviewed both enabled log sources and all indexed prior events. The only previously active incident, Relay pricing HTTP 500 disruption, has been closed after fresh positive priced outcomes through 11:51:52, successful full search completions, and gateway search successes. Sluice\u2019s earlier 503 incident remains inactive with current accepted submissions, completed jobs, and pending=0; current 409 duplicate and 422 invalid-input rejections are expected declines. Broad current samples covered all 12 Relay and five Sluice emitting services; no further sustained outage established. Relay has intermittent supplier-air timeouts and some search/booking failures amid healthy outcomes, but comparative operation-level rates remain unresolved, so source coverage is partial.",
+      "coverageComplete": false,
+      "remainingGaps": [
+        "Relay supplier-air timeout incidence: recent samples show occasional timeouts (including one at 11:51:30) while quote successes continue through 11:51:52; no comparable older/newer operation-level failure-rate denominator was obtained. Follow up with structured JSON outcome extraction or targeted per-minute positive/failed counts before classifying this as an incident.",
+        "Relay booking/search isolated failures within the lookback were observed alongside healthy operations; the attempted per-minute category query was insufficient to establish failure rates versus an older window. No separate sustained problem established."
+      ],
+      "estimatedCostUsd": 0.017466025,
+      "costEstimateComplete": true,
+      "written": 1,
+      "failedSteps": 2,
+      "steps": 26
+    },
+    {
+      "label": "scheduled",
+      "id": "99f47637-2e8b-446d-bb54-0fb4d1177358",
+      "status": "completed",
+      "reason": "hourly",
+      "startedAt": "2026-11-20T11:53:38.448Z",
+      "finishedAt": "2026-11-20T11:54:45.255Z",
+      "outcome": "nothing_new",
+      "summary": "Checked both enabled log sources and all services observed in their current inventories (Relay 11, Sluice 5). No pre-existing events required review. Relay shows successful booking/search operations and supplier-air quote success; a prior gateway booking-failure spike has subsided, while current gateway failures and search partials are low. Sluice shows successful intake/render/archive operations, ongoing queue completions and low pending depth; duplicate/validation rejects persist but are not elevated relative to the comparison window. No current, consequential operational problem is supported, so no event was created. Coverage is incomplete for durable confirmation of the brief Relay symptom and external user impact.",
+      "coverageComplete": false,
+      "remainingGaps": [
+        "Recheck Relay gateway /trips/book and search partial-result rates in the next run: current minute showed 1 gateway failure among 77 service rows after a prior 12/296 failure minute, and search partials remain low. Current positives and decline argue against an active incident, but the brief recent window cannot establish durable clearance.",
+        "Sluice delivery-queue/renderer 409 duplicate and 422 validation rejection rates persist at lower levels than the earlier 11:45 peak; they appear expected and do not currently impede completions or create backlog, but operation-specific impact beyond these logs is not observed."
+      ],
+      "estimatedCostUsd": 0.016554515,
+      "costEstimateComplete": true,
+      "written": 0,
+      "failedSteps": 0,
+      "steps": 32
+    },
+    {
+      "label": "scheduled-repeat",
+      "id": "03128f03-96de-4b7c-8771-b4618113a74a",
+      "status": "completed",
+      "reason": "hourly",
+      "startedAt": "2026-11-20T11:54:47.468Z",
+      "finishedAt": "2026-11-20T11:56:03.089Z",
+      "outcome": "partial",
+      "summary": "Checked both enabled log sources and found no existing events. Relay search continues producing successful complete results; gateway booking has ongoing but improving short 402/409 failures mixed with successful bookings, with significance unresolved. Sluice renderer/queue rejects are explicitly duplicate-record (409) and invalid-amount (422) validations; runtime error counts are zero, many jobs complete, and observed pending depth is near zero. No event was created because current evidence does not establish a consequential sustained problem. Follow up Relay booking rates and response semantics on the next run.",
+      "coverageComplete": false,
+      "remainingGaps": [
+        "Relay relay/gateway /trips/book: latest 3-minute sample has 6 booking_failed of 32 booking rows, alongside 26 successful bookings; failures are short 409 conflict and 402 responses (raw rows), and gateway errors fell from 94/737 in the preceding 10 minutes to 7/254 recently. Establish from a later fresh window whether failures persist or rise, and determine the normal/expected 402/409 semantics before opening or ruling out an incident.",
+        "Relay service outcomes were inspected across the observed 12-service inventory; no broad ongoing search outage is indicated (search partial=false in current successful examples). Sluice's five observed services were checked; no evidence of queue backlog or technical renderer failure. No pre-existing events were indexed."
+      ],
+      "estimatedCostUsd": 0.01781812,
+      "costEstimateComplete": true,
+      "written": 0,
+      "failedSteps": 0,
+      "steps": 30
+    }
+  ],
+  "checks": {
+    "backendJest": {
+      "suites": 13,
+      "tests": 104,
+      "status": "passed"
+    },
+    "frontendJest": {
+      "suites": 7,
+      "tests": 91,
+      "status": "passed"
+    },
+    "changedTypeScriptLint": {
+      "files": 56,
+      "status": "passed"
+    },
+    "focusedPluginTypeChecks": "passed (significant_events and nightshift)",
+    "dependencyBuild": "21 errors in 8 unchanged dependency files; no changed plugin errors",
+    "browser": "No browser available through the configured in-app runtime",
+    "resetOwnership": "Live agent KI removed; user KI preserved; test fixture subsequently removed",
+    "resetOutputs": "3 owned event identities removed; sources, history and cost totals preserved",
+    "schedule": "Two credentialed Task Manager invocations completed with reason hourly and zero event writes; scheduling is off and the task was removed."
+  },
+  "bundles": {
+    "relay": {
+      "id": "480ec4d7-5724-430f-9455-f97c38393d50",
+      "documents": 33135
+    },
+    "sluice": {
+      "id": "27a5c660-a75c-4e4b-b3fb-751f9f4af86a",
+      "documents": 368577
+    }
+  },
+  "finalState": {
+    "sources": 2,
+    "knowledgeIndicators": 0,
+    "problemEvents": 0,
+    "scheduleEnabled": false,
+    "taskCount": 0,
+    "completedRuns": 10,
+    "faults": 0
+  }
+}

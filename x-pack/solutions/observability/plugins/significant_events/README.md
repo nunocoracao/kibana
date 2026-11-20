@@ -4,6 +4,10 @@ This plugin provides an interface to manage significant events.
 
 The data model (source-id keys, space scope, unchanged route paths) is documented in [`AGENTS.md`](./AGENTS.md#data-model). The UI lives in the [`nightshift`](../nightshift/README.md) plugin.
 
+## Unified-agent prototype
+
+On `one_agent_to_rule_them_all`, detection runs through one problem agent. See the [runtime and controls](server/lib/knowledge_exploration/README.md) and [live CARL evaluation](server/lib/knowledge_exploration/evaluation_2026_11_20.md).
+
 ## CPS telemetry targets
 
 Every Significant Events EBT event includes `space_id`. On CPS deployments it also includes:

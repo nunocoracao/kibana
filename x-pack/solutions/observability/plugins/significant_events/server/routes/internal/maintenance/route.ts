@@ -80,6 +80,7 @@ const pauseRoute = createServerRoute({
     await assertSignificantEventsAccess({ server, licensing, ignore: ['feature_flag'] });
 
     const updatedBy = server.core.security.authc.getCurrentUser(request)?.username;
+    server.problemAgent?.cancel(request);
     return maintenanceService.pause({ request, updatedBy });
   },
 });

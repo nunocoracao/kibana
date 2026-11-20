@@ -6,6 +6,7 @@
  */
 
 import {
+  euiCanAnimate,
   EuiFlexGroup,
   EuiFlexItem,
   EuiLoadingSpinner,
@@ -13,7 +14,6 @@ import {
   EuiSpacer,
   EuiTab,
   EuiTabs,
-  euiCanAnimate,
   useEuiTheme,
 } from '@elastic/eui';
 import { css } from '@emotion/react';
@@ -34,39 +34,42 @@ import React, {
   type UIEvent,
 } from 'react';
 import { useHistory, useLocation } from 'react-router-dom';
-import { NightshiftAppHeader } from '../../components/app_header';
-import type { NightshiftAppHeaderProps } from '../../components/app_header';
 import { NIGHTSHIFT_EBT_ACTIONS, NIGHTSHIFT_EBT_ELEMENTS } from '../../common/ebt_constants';
 import {
   NIGHTSHIFT_EVENT_ID_QUERY_PARAM,
   NIGHTSHIFT_RULE_ID_QUERY_PARAM,
   NIGHTSHIFT_SIGNAL_ID_QUERY_PARAM,
 } from '../../common/url_params';
+import type { NightshiftAppHeaderProps } from '../../components/app_header';
+import { NightshiftAppHeader } from '../../components/app_header';
 import { useDetectionOverview } from '../../data/detection_overview/use_detection_overview';
 import { useMaintenanceStatus } from '../../data/maintenance/use_significant_events_maintenance';
-import { useKibana } from '../../hooks/use_kibana';
 import { useDeveloperMode } from '../../hooks/use_developer_mode';
+import { useKibana } from '../../hooks/use_kibana';
+import { PAGE_QUERY_PARAM } from './constants';
 import type { DetectionTabId } from './detection_tabs';
 import { DETECTION_TAB_LABELS, getVisibleDetectionTabs } from './detection_tabs';
-import { getStatusFromSearch } from './events/use_events_url_state';
-import { DetectionOverview } from './overview/detection_overview';
 import { EntitiesPanel } from './entities/entities_panel';
-import { PAGE_QUERY_PARAM } from './constants';
-import { RunLimitsBanner } from './run_limits_banner';
-import { useEntitySelection } from './use_entity_selection';
+import { getStatusFromSearch } from './events/use_events_url_state';
+import { DetectionOnboarding } from './onboarding/detection_onboarding';
+import { NoSourcesCallout } from './onboarding/no_sources_callout';
 import {
   HISTORY_LOOKUP_ERROR_DESCRIPTION,
   HISTORY_LOOKUP_ERROR_TITLE,
   HISTORY_LOOKUP_RETRY_LABEL,
 } from './onboarding/translations';
+import { DetectionOverview } from './overview/detection_overview';
+import { useDetectionOnboardingState } from './use_detection_onboarding_state';
 import {
   RANGE_FROM_QUERY_PARAM,
   RANGE_TO_QUERY_PARAM,
   useDetectionTimeRange,
 } from './use_detection_time_range';
-import { DetectionOnboarding } from './onboarding/detection_onboarding';
-import { NoSourcesCallout } from './onboarding/no_sources_callout';
-import { useDetectionOnboardingState } from './use_detection_onboarding_state';
+import { useEntitySelection } from './use_entity_selection';
+
+const AgentExplorer = lazy(() =>
+  import('./agent_explorer/page').then(({ AgentExplorer: Panel }) => ({ default: Panel }))
+);
 
 const EventsTab = lazy(() =>
   import('./events/events_tab').then(({ EventsTab: Tab }) => ({ default: Tab }))
@@ -211,8 +214,31 @@ export const DetectionPage = ({
           `,
         }}
       >
-        <RunLimitsBanner />
-        {view.type === 'loading' ? (
+        <EuiTabs size="m">
+          {getVisibleDetectionTabs(isDeveloperMode)
+            .filter((id) => view.type === 'workspace' || id === 'agent')
+            .map((id) => (
+              <EuiTab
+                key={id}
+                isSelected={tab === id}
+                {...reactRouterNavigate(history, `/detections/${id}${tabSearch}`)}
+                data-test-subj={`nightshiftDetectionTab-${id}`}
+                {...getEbtProps({
+                  action: NIGHTSHIFT_EBT_ACTIONS.VIEW_DETECTION_TAB,
+                  element: NIGHTSHIFT_EBT_ELEMENTS.DETECTION_WORKSPACE_TABS,
+                  detail: id,
+                })}
+              >
+                {DETECTION_TAB_LABELS[id]}
+              </EuiTab>
+            ))}
+        </EuiTabs>
+        <EuiSpacer size="m" />
+        {tab === 'agent' ? (
+          <Suspense fallback={<EuiLoadingSpinner />}>
+            <AgentExplorer />
+          </Suspense>
+        ) : view.type === 'loading' ? (
           <EuiFlexGroup
             justifyContent="center"
             alignItems="center"
@@ -319,24 +345,6 @@ export const DetectionPage = ({
                       min-height: 0;
                     `}
                   >
-                    <EuiTabs size="m">
-                      {getVisibleDetectionTabs(isDeveloperMode).map((id) => (
-                        <EuiTab
-                          key={id}
-                          isSelected={tab === id}
-                          {...reactRouterNavigate(history, `/detections/${id}${tabSearch}`)}
-                          data-test-subj={`nightshiftDetectionTab-${id}`}
-                          {...getEbtProps({
-                            action: NIGHTSHIFT_EBT_ACTIONS.VIEW_DETECTION_TAB,
-                            element: NIGHTSHIFT_EBT_ELEMENTS.DETECTION_WORKSPACE_TABS,
-                            detail: id,
-                          })}
-                        >
-                          {DETECTION_TAB_LABELS[id]}
-                        </EuiTab>
-                      ))}
-                    </EuiTabs>
-                    <EuiSpacer size="m" />
                     <div
                       css={css`
                         flex: 1 1 auto;

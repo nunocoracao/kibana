@@ -6,16 +6,10 @@
  */
 
 import { loggerMock } from '@kbn/logging-mocks';
-import { SIGNIFICANT_EVENTS_DETECTION_WORKFLOW_ID } from '@kbn/workflows/managed';
 import type { PluginScopedManagedWorkflowsApi } from '@kbn/workflows/server/types';
 import { DETECTIONS_DATA_STREAM } from '../../significant_events/detections/data_stream';
 import { KNOWLEDGE_INDICATORS_DATA_STREAM } from '../../knowledge_indicators/data_stream';
-import { GLOBAL_MAINTENANCE_WORKFLOW_IDS } from '../../maintenance/managed_workflow_targets';
 import { createManagedWorkflowsInstaller } from './managed_workflows_installer';
-
-// Significant events is gated solely by the availability flag now, so the installer always writes
-// the full global set (via `installWorkflows`). Derived so adding a workflow can't leave it stale.
-const TOTAL_WORKFLOW_COUNT = GLOBAL_MAINTENANCE_WORKFLOW_IDS.length;
 
 const createClientMock = () => {
   const client = {
@@ -27,9 +21,6 @@ const createClientMock = () => {
   } as unknown as jest.Mocked<PluginScopedManagedWorkflowsApi>;
   return client;
 };
-
-const installedIds = (client: jest.Mocked<PluginScopedManagedWorkflowsApi>) =>
-  client.install.mock.calls.map((call) => call[0]);
 
 const createInstaller = (
   overrides: Partial<Parameters<typeof createManagedWorkflowsInstaller>[0]> = {}
@@ -60,7 +51,7 @@ describe('createManagedWorkflowsInstaller', () => {
     expect(dataStreams.initializeClient).not.toHaveBeenCalled();
   });
 
-  it('creates the detections and knowledge indicators data streams before installing any workflow', async () => {
+  it('creates the detections and knowledge indicators data streams before retiring legacy workflows', async () => {
     const { client, dataStreams, installer } = createInstaller();
 
     await installer.install();
@@ -68,7 +59,7 @@ describe('createManagedWorkflowsInstaller', () => {
     expect(dataStreams.initializeClient).toHaveBeenCalledWith(DETECTIONS_DATA_STREAM);
     expect(dataStreams.initializeClient).toHaveBeenCalledWith(KNOWLEDGE_INDICATORS_DATA_STREAM);
     expect(dataStreams.initializeClient.mock.invocationCallOrder[1]).toBeLessThan(
-      client.install.mock.invocationCallOrder[0]
+      client.ready.mock.invocationCallOrder[0]
     );
   });
 
@@ -81,7 +72,7 @@ describe('createManagedWorkflowsInstaller', () => {
     expect(client.install).not.toHaveBeenCalled();
   });
 
-  it('installs nothing while unavailable, then installs and reconciles once the flag flips on', async () => {
+  it('installs nothing while unavailable, then retires workflows once the flag flips on', async () => {
     const { client, installer } = createInstaller({
       isAvailable: jest.fn().mockResolvedValueOnce(false).mockResolvedValue(true),
     });
@@ -91,21 +82,21 @@ describe('createManagedWorkflowsInstaller', () => {
     expect(client.ready).not.toHaveBeenCalled();
 
     await installer.install();
-    expect(client.install).toHaveBeenCalledTimes(TOTAL_WORKFLOW_COUNT);
+    expect(client.install).toHaveBeenCalledTimes(0);
     expect(client.ready).toHaveBeenCalledTimes(1);
   });
 
-  it('installs the full workflow set and calls ready() once when available', async () => {
+  it('retires legacy detection workflows without installing replacements', async () => {
     const { client, installer } = createInstaller();
 
     await installer.install();
 
-    expect(installedIds(client)).toContain(SIGNIFICANT_EVENTS_DETECTION_WORKFLOW_ID);
-    expect(client.install).toHaveBeenCalledTimes(TOTAL_WORKFLOW_COUNT);
+    expect(client.install).not.toHaveBeenCalled();
+    expect(client.install).toHaveBeenCalledTimes(0);
     expect(client.ready).toHaveBeenCalledTimes(1);
   });
 
-  it('installs the full set before calling ready() so reconciliation never sees a partial set', async () => {
+  it('closes reconciliation with an empty workflow set', async () => {
     const { client, installer } = createInstaller();
 
     let installCountAtReady = -1;
@@ -115,17 +106,17 @@ describe('createManagedWorkflowsInstaller', () => {
 
     await installer.install();
 
-    expect(client.install).toHaveBeenCalledTimes(TOTAL_WORKFLOW_COUNT);
-    expect(installCountAtReady).toBe(TOTAL_WORKFLOW_COUNT);
+    expect(client.install).toHaveBeenCalledTimes(0);
+    expect(installCountAtReady).toBe(0);
   });
 
-  it('re-installs on later calls but reconciles (ready) only once', async () => {
+  it('keeps workflows retired on repeated initialization', async () => {
     const { client, installer } = createInstaller();
 
     await installer.install();
     await installer.install();
 
-    expect(client.install).toHaveBeenCalledTimes(TOTAL_WORKFLOW_COUNT * 2);
+    expect(client.install).toHaveBeenCalledTimes(0);
     expect(client.ready).toHaveBeenCalledTimes(1);
   });
 
@@ -135,7 +126,7 @@ describe('createManagedWorkflowsInstaller', () => {
     await Promise.all([installer.install(), installer.install()]);
 
     expect(client.ready).toHaveBeenCalledTimes(1);
-    expect(client.install).toHaveBeenCalledTimes(TOTAL_WORKFLOW_COUNT * 2);
+    expect(client.install).toHaveBeenCalledTimes(0);
   });
 
   it('propagates install failures and retries reconciliation on the next call', async () => {
@@ -150,8 +141,8 @@ describe('createManagedWorkflowsInstaller', () => {
   });
 
   it('keeps the queue alive after a failure so later flips still install', async () => {
-    const { client, installer } = createInstaller();
-    client.install.mockRejectedValueOnce(new Error('install boom'));
+    const { client, dataStreams, installer } = createInstaller();
+    dataStreams.initializeClient.mockRejectedValueOnce(new Error('install boom'));
 
     await expect(installer.install()).rejects.toThrow('install boom');
 

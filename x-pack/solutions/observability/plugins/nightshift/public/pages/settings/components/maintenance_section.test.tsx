@@ -59,7 +59,7 @@ describe('MaintenanceSection', () => {
 
     expect(screen.getByRole('alertdialog')).toHaveTextContent('Pause detection engine?');
     expect(screen.getByRole('alertdialog')).toHaveTextContent(
-      'This disables the Significant Events workflows of this space'
+      'This stops the current Problem Agent run'
     );
     const confirmButton = screen.getByTestId('streams-settings-maintenance-confirm-button');
     expect(confirmButton).toHaveTextContent('Pause');

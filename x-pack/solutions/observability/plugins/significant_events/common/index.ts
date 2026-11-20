@@ -144,3 +144,11 @@ export type {
   PeriodCost,
   TokenTrackingCoverage,
 } from './cost';
+
+export type {
+  ExplorationRun,
+  ExplorationStatus,
+  ExplorationStep,
+  ExplorationTokens,
+  ExplorerAgent,
+} from './knowledge_exploration';

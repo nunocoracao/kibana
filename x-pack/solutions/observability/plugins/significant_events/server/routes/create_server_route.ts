@@ -5,21 +5,21 @@
  * 2.0.
  */
 
-import { createServerRouteFactory } from '@kbn/server-route-repository';
-import type { CreateServerRouteFactory } from '@kbn/server-route-repository-utils/src/typings';
-import { badRequest, conflict, forbidden, internal, isBoom, notFound } from '@hapi/boom';
 import { errors } from '@elastic/elasticsearch';
-import {
-  NightshiftModelBlockedError,
-  NightshiftModelNotFoundError,
-} from '@kbn/significant-events-schema';
+import { badRequest, conflict, forbidden, internal, isBoom, notFound } from '@hapi/boom';
 import {
   isNightshiftSpaceGatedEndpoint,
   isNightshiftSupportedSpace,
   NIGHTSHIFT_UNSUPPORTED_SPACE_MESSAGE,
 } from '@kbn/nightshift-shared';
-import type { SignificantEventsRouteHandlerResources } from './types';
+import { createServerRouteFactory } from '@kbn/server-route-repository';
+import type { CreateServerRouteFactory } from '@kbn/server-route-repository-utils/src/typings';
+import {
+  NightshiftModelBlockedError,
+  NightshiftModelNotFoundError,
+} from '@kbn/significant-events-schema';
 import type { StatusError } from '../lib/errors/status_error';
+import type { SignificantEventsRouteHandlerResources } from './types';
 
 // Errors can come from other plugins with their own StatusError class, so match status
 // errors by shape, not by class.
@@ -60,6 +60,20 @@ export const createServerRoute: CreateServerRouteFactory<
     },
     // Async, so the refusal below surfaces as a rejected promise like any other route error.
     handler: async (options) => {
+      if (
+        options.server.problemAgent &&
+        /^(POST|PUT) /.test(config.endpoint) &&
+        !config.endpoint.includes('/problem_agent') &&
+        !config.endpoint.includes('status') &&
+        (/\/(onboarding|discovery|continuous_ki_extraction|scheduled_discovery)\//.test(
+          config.endpoint
+        ) ||
+          /\/(features|queries)\/_(identify|generate)/.test(config.endpoint))
+      ) {
+        throw conflict(
+          'The Problem Agent replaces the legacy detection workflow. Use Agent Explorer to run or schedule it.'
+        );
+      }
       if (gated && !isNightshiftSupportedSpace(options.request.spaceId)) {
         throw badRequest(NIGHTSHIFT_UNSUPPORTED_SPACE_MESSAGE);
       }

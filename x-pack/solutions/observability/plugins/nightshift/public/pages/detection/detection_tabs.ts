@@ -7,13 +7,16 @@
 
 import { i18n } from '@kbn/i18n';
 
-export const DETECTION_TAB_IDS = ['events', 'rules', 'signals', 'topology'] as const;
+export const DETECTION_TAB_IDS = ['events', 'rules', 'agent', 'signals', 'topology'] as const;
 
 export type DetectionTabId = (typeof DETECTION_TAB_IDS)[number];
 
 const DEVELOPER_MODE_TAB_IDS: readonly DetectionTabId[] = ['signals', 'topology'];
 
 export const DETECTION_TAB_LABELS: Record<DetectionTabId, string> = {
+  agent: i18n.translate('xpack.nightshift.detectionPage.tabs.agent', {
+    defaultMessage: 'Agent Explorer',
+  }),
   events: i18n.translate('xpack.nightshift.detectionPage.tabs.events', {
     defaultMessage: 'Events',
   }),

@@ -35,6 +35,7 @@ const createSetupDeps = ({
 } = {}) =>
   ({
     nightshiftSources: { onSourceChange },
+    taskManager: { registerTaskDefinitions: jest.fn() },
     ...(workflowsExtensions ? { workflowsExtensions } : {}),
   } as unknown as SignificantEventsPluginSetupDependencies);
 

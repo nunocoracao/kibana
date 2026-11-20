@@ -45,3 +45,7 @@ Follow the [`nightshift-pr-description` skill](../../../../../.agents/skills/nig
 ## Keeping this file current
 
 Update this file when you make a change that would mislead an agent reading it: cross-package ownership changes, pipeline restructuring, addition or removal of concepts relevant to the pipeline, or naming convention updates. Do not update it for type field additions or directory reorganisations within a package — those are discoverable from the code.
+
+## Unified problem-agent branch
+
+On `one_agent_to_rule_them_all`, `server.problemAgent` owns detection: one model loop with exploration, native monitoring and event tools. KIs and native rules are optional; current telemetry can create an event directly. Source changes reconcile catalog ownership but do not run onboarding. Legacy detection workflows are retired and their execution routes return a conflict; investigation workflows remain independent. The Agent Explorer and `/internal/significant_events/problem_agent` control manual runs, cancellation, model, run history, resets and the credentialed Task Manager schedule. Every existing active problem must be rechecked before a run claims completion.

@@ -5,49 +5,56 @@
  * 2.0.
  */
 
-import type { AgenticInvestigationsPluginStart } from '@kbn/agentic-investigations-plugin/server';
 import type {
-  NightshiftInvestigationsServerSetup,
-  NightshiftInvestigationsServerStart,
-} from '@kbn/nightshift-investigations-plugin/server';
-import type { AlertingServerSetup, AlertingServerStart } from '@kbn/alerting-plugin/server';
-import type { AlertingServerStart as AlertingV2ServerStart } from '@kbn/alerting-v2-plugin/server';
+  TaskManagerSetupContract,
+  TaskManagerStartContract,
+} from '@kbn/task-manager-plugin/server';
+
 import type {
   PluginStartContract as ActionsPluginStart,
   RelayClientContract,
 } from '@kbn/actions-plugin/server';
-import type { CoreStart, Logger } from '@kbn/core/server';
 import type { AgentBuilderPluginSetup, AgentBuilderPluginStart } from '@kbn/agent-builder-server';
 import type {
   AgentBuilderSmlPluginSetup,
   AgentBuilderSmlPluginStart,
 } from '@kbn/agent-builder-sml-plugin/server';
+import type { AgenticInvestigationsPluginStart } from '@kbn/agentic-investigations-plugin/server';
+import type { AlertingServerSetup, AlertingServerStart } from '@kbn/alerting-plugin/server';
+import type { AlertingServerStart as AlertingV2ServerStart } from '@kbn/alerting-v2-plugin/server';
+import type { CloudSetup } from '@kbn/cloud-plugin/server';
+import type { CoreStart, Logger } from '@kbn/core/server';
+import type { CPSServerSetup, CPSServerStart } from '@kbn/cps/server';
 import type {
   EncryptedSavedObjectsPluginSetup,
   EncryptedSavedObjectsPluginStart,
 } from '@kbn/encrypted-saved-objects-plugin/server';
-import type { InferenceServerStart } from '@kbn/inference-plugin/server';
-import type { LicensingPluginStart } from '@kbn/licensing-plugin/server';
-import type { SecurityPluginStart } from '@kbn/security-plugin/server';
-import type { CloudSetup } from '@kbn/cloud-plugin/server';
-import type { CPSServerSetup, CPSServerStart } from '@kbn/cps/server';
 import type {
   FieldsMetadataServerSetup,
   FieldsMetadataServerStart,
 } from '@kbn/fields-metadata-plugin/server';
-import type { SpacesPluginStart } from '@kbn/spaces-plugin/server';
-import type { WorkflowsServerPluginSetup } from '@kbn/workflows-management-plugin/server';
+import type { InferenceServerStart } from '@kbn/inference-plugin/server';
+import type { LicensingPluginStart } from '@kbn/licensing-plugin/server';
 import type {
-  WorkflowsExtensionsServerPluginSetup,
-  WorkflowsExtensionsServerPluginStart,
-} from '@kbn/workflows-extensions/server';
+  NightshiftInvestigationsServerSetup,
+  NightshiftInvestigationsServerStart,
+} from '@kbn/nightshift-investigations-plugin/server';
 import type {
   NightshiftSourcesServerSetup,
   NightshiftSourcesServerStart,
 } from '@kbn/nightshift-sources-plugin/server';
+import type { SecurityPluginStart } from '@kbn/security-plugin/server';
+import type { SpacesPluginStart } from '@kbn/spaces-plugin/server';
+import type {
+  WorkflowsExtensionsServerPluginSetup,
+  WorkflowsExtensionsServerPluginStart,
+} from '@kbn/workflows-extensions/server';
+import type { WorkflowsServerPluginSetup } from '@kbn/workflows-management-plugin/server';
+import type { KnowledgeExplorationService } from './lib/knowledge_exploration/service';
 import type { SeveritySync } from './lib/significant_events/events/severity';
 
 export interface SignificantEventsPluginSetupDependencies {
+  taskManager: TaskManagerSetupContract;
   agentBuilder?: AgentBuilderPluginSetup;
   agentBuilderSml?: AgentBuilderSmlPluginSetup;
   encryptedSavedObjects: EncryptedSavedObjectsPluginSetup;
@@ -69,6 +76,7 @@ export interface SignificantEventsPluginSetupDependencies {
 }
 
 export interface SignificantEventsPluginStartDependencies {
+  taskManager: TaskManagerStartContract;
   actions: ActionsPluginStart;
   security: SecurityPluginStart;
   encryptedSavedObjects: EncryptedSavedObjectsPluginStart;
@@ -88,6 +96,8 @@ export interface SignificantEventsPluginStartDependencies {
 }
 
 export interface SignificantEventsServer {
+  taskManager: TaskManagerStartContract;
+  problemAgent: KnowledgeExplorationService;
   core: CoreStart;
   logger: Logger;
   security: SecurityPluginStart;
