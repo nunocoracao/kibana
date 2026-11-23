@@ -8,8 +8,9 @@ import React from 'react';
 import { EuiProvider } from '@elastic/eui';
 import { I18nProvider } from '@kbn/i18n-react';
 import { QueryClient, QueryClientProvider } from '@kbn/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ExplorationStatus, ExplorationRun } from '@kbn/significant-events-plugin/common';
+import { PROBLEM_AGENT_RUN_QUERY_KEY } from '../../../data/query_keys';
 import { AgentExplorer } from './page';
 
 const mockHttp = { get: jest.fn(), post: jest.fn(), put: jest.fn() };
@@ -127,4 +128,49 @@ it('marks totals as incomplete when a provider request has unreported usage', as
   expect(
     screen.getByText(/cumulative total includes runs with missing usage or pricing/)
   ).toBeInTheDocument();
+});
+
+it('follows updated activity until the user scrolls back and resumes when requested', async () => {
+  status.runningRunId = run.id;
+  status.runs = [run];
+  run.steps = [
+    {
+      id: 'model',
+      kind: 'model',
+      name: 'Reasoning 1',
+      startedAt: run.startedAt,
+      status: 'running',
+      durationMs: 0,
+      input: '',
+      output: '',
+    },
+  ];
+  mount();
+  await screen.findByText(run.summary);
+  const activity = screen.getByRole('region', { name: 'Live activity' });
+  const follow = screen.getByTestId('nightshiftAgentExplorerFollowLive');
+  Object.defineProperties(activity, {
+    scrollHeight: { value: 1000 },
+    clientHeight: { value: 200 },
+  });
+  const updateActivity = async (output: string) => {
+    run.steps = [{ ...run.steps[0], output }];
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: PROBLEM_AGENT_RUN_QUERY_KEY });
+    });
+    expect(await screen.findByText(output)).toBeInTheDocument();
+  };
+
+  await updateActivity('Checking recent telemetry.');
+  expect(activity.scrollTop).toBe(1000);
+  expect(follow).toBeChecked();
+
+  fireEvent.scroll(activity, { target: { scrollTop: 200 } });
+  expect(follow).not.toBeChecked();
+  await updateActivity('Comparing operation outcomes.');
+  expect(activity.scrollTop).toBe(200);
+
+  fireEvent.click(follow);
+  expect(follow).toBeChecked();
+  expect(activity.scrollTop).toBe(1000);
 });

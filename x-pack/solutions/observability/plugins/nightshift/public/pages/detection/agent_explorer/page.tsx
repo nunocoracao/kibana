@@ -7,6 +7,7 @@
 
 import { getEbtProps } from '@kbn/ebt-click';
 import {
+  euiMaxBreakpoint,
   EuiBadge,
   EuiBasicTable,
   EuiButton,
@@ -124,7 +125,8 @@ interface Anatomy {
 
 export const AgentExplorer = (): React.ReactElement => {
   const { http } = useKibana().services;
-  const { euiTheme } = useEuiTheme();
+  const theme = useEuiTheme();
+  const { euiTheme } = theme;
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string>();
   const [frequency, setFrequency] = useState<string>();
@@ -170,7 +172,7 @@ export const AgentExplorer = (): React.ReactElement => {
     Number.isInteger(intervalMinutes) && intervalMinutes >= 1 && intervalMinutes <= 10080;
   useEffect(() => {
     if (followLive && activity.current) activity.current.scrollTop = activity.current.scrollHeight;
-  }, [run?.steps.length, run?.summary, followLive]);
+  }, [run?.steps, run?.summary, showModels, followLive]);
 
   const act = async <T,>(action: () => Promise<T>): Promise<void> => {
     setBusy(true);
@@ -185,214 +187,264 @@ export const AgentExplorer = (): React.ReactElement => {
       setBusy(false);
     }
   };
+  const selectRun = (id: string) => {
+    setFollowLive(false);
+    setSelectedId(id);
+    if (activity.current) activity.current.scrollTop = 0;
+  };
+  const panelStyles = css`
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  `;
+  const scrollStyles = css`
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  `;
   const steps = (run?.steps ?? []).filter((step) => showModels || step.kind === 'tool');
   let previousTool: ExplorationStep | undefined;
   return (
     <div
       data-test-subj="nightshiftProblemAgentExplorer"
       css={css`
-        overflow: auto;
+        display: flex;
+        flex: 1 1 0;
+        flex-direction: column;
+        min-width: 0;
         min-height: 0;
+        overflow: hidden;
+        gap: ${euiTheme.size.m};
         padding: ${euiTheme.size.s};
       `}
     >
-      {Boolean(error || status.error) && (
-        <>
-          <KbnDangerCallout
-            title={copy.error}
-            text={
-              error ?? (status.error instanceof Error ? status.error.message : String(status.error))
-            }
-          />
-          <EuiSpacer />
-        </>
-      )}
-      {data?.costEstimateComplete === false && (
-        <>
-          <KbnWarningCallout
-            title={i18n.translate('xpack.nightshift.problemAgent.incompleteEstimate', {
-              defaultMessage: 'Total cost estimate incomplete',
-            })}
-            text={i18n.translate('xpack.nightshift.problemAgent.incompleteEstimateDescription', {
-              defaultMessage:
-                'The cumulative total includes runs with missing usage or pricing. Timed-out or interrupted model requests can be billed without returning usage. Affected runs are marked *; later runs can still have complete estimates.',
-            })}
-          />
-          <EuiSpacer />
-        </>
-      )}
-      <EuiPanel hasBorder>
-        <EuiFlexGroup alignItems="center" wrap>
-          <EuiFlexItem grow={false}>
-            <EuiTitle size="s">
-              <h2>{copy.title}</h2>
-            </EuiTitle>
-          </EuiFlexItem>
-          <EuiFlexItem grow={false}>
-            <EuiBadge color={running ? 'primary' : 'hollow'}>
-              {running
-                ? i18n.translate('xpack.nightshift.problemAgent.running', {
-                    defaultMessage: 'Running',
-                  })
-                : i18n.translate('xpack.nightshift.problemAgent.idle', { defaultMessage: 'Idle' })}
-            </EuiBadge>
-          </EuiFlexItem>
-          <EuiFlexItem>
-            <EuiSelect
-              {...getEbtProps({ action: 'agentExplorer1', element: 'problemAgent' })}
-              data-test-subj="nightshiftAgentExplorerSelect"
-              aria-label={copy.model}
-              value={data?.connectorId ?? ''}
-              options={(data?.availableModels ?? []).map(({ connectorId, model }) => ({
-                value: connectorId,
-                text: model,
-              }))}
-              disabled={busy || running}
-              onChange={(event) => {
-                void act(() =>
-                  http.put('/internal/significant_events/problem_agent/model', {
-                    body: JSON.stringify({ connectorId: event.target.value }),
-                  })
-                );
-              }}
-            />
-          </EuiFlexItem>
-          <EuiFlexItem grow={false}>
-            <EuiButtonEmpty
-              {...getEbtProps({ action: 'agentExplorer2', element: 'problemAgent' })}
-              data-test-subj="nightshiftAgentExplorerButton"
-              onClick={() => setShowAnatomy(true)}
-            >
-              {copy.anatomy}
-            </EuiButtonEmpty>
-          </EuiFlexItem>
-        </EuiFlexGroup>
-        <EuiSpacer size="m" />
-        <EuiFlexGroup alignItems="center" wrap>
-          <EuiFlexItem grow={false}>
-            <EuiSwitch
-              id="nightshift-agent-schedule"
-              label={copy.schedule}
-              checked={data?.enabled ?? false}
-              disabled={busy || !data}
-              onChange={(event) => {
-                void act(() =>
-                  http.put('/internal/significant_events/problem_agent/settings', {
-                    body: JSON.stringify({
-                      enabled: event.target.checked,
-                      intervalMinutes: data?.intervalMinutes ?? 60,
-                    }),
-                  })
-                );
-              }}
-            />
-          </EuiFlexItem>
-          <EuiFlexItem grow={false}>
-            <EuiFieldNumber
-              data-test-subj="nightshiftAgentExplorerFieldNumber"
-              aria-label={copy.minutes}
-              value={frequencyValue}
-              min={1}
-              max={10080}
-              step={1}
-              isInvalid={!validFrequency}
-              onChange={(event) => setFrequency(event.target.value)}
-              compressed
-            />
-          </EuiFlexItem>
-          <EuiFlexItem grow={false}>
-            <EuiButtonEmpty
-              {...getEbtProps({ action: 'agentExplorer3', element: 'problemAgent' })}
-              data-test-subj="nightshiftAgentExplorerButton"
-              disabled={busy || !validFrequency || !data}
-              onClick={() => {
-                void act(async () => {
-                  await http.put('/internal/significant_events/problem_agent/settings', {
-                    body: JSON.stringify({ enabled: data?.enabled ?? false, intervalMinutes }),
-                  });
-                  setFrequency(undefined);
-                });
-              }}
-            >
-              {copy.save}
-            </EuiButtonEmpty>
-          </EuiFlexItem>
-          <EuiFlexItem />
-          <EuiFlexItem grow={false}>
-            <EuiButton
-              {...getEbtProps({ action: 'agentExplorer4', element: 'problemAgent' })}
-              data-test-subj="nightshiftAgentExplorerButton"
-              fill
-              disabled={
-                busy || !data || (!running && !data.sources.some((source) => source.enabled))
+      <div
+        css={css`
+          flex: 0 0 auto;
+          max-height: 50%;
+          overflow: auto;
+        `}
+      >
+        {Boolean(error || status.error) && (
+          <>
+            <KbnDangerCallout
+              title={copy.error}
+              text={
+                error ??
+                (status.error instanceof Error ? status.error.message : String(status.error))
               }
-              color={running ? 'danger' : 'primary'}
-              onClick={() => {
-                setSelectedId(undefined);
-                void act(() =>
-                  http.post(
-                    running
-                      ? '/internal/significant_events/problem_agent/_cancel'
-                      : '/internal/significant_events/problem_agent/_run'
-                  )
-                );
-              }}
-            >
-              {running ? copy.stop : copy.run}
-            </EuiButton>
-          </EuiFlexItem>
-        </EuiFlexGroup>
-        <EuiSpacer />
-        <EuiFlexGroup wrap>
-          <EuiFlexItem>
-            <EuiStat
-              title={money(data?.totalCostUsd ?? 0)}
-              description={copy.total}
-              titleSize="s"
             />
-          </EuiFlexItem>
-          <EuiFlexItem>
-            <EuiStat
-              title={money(
-                (data?.totalCostUsd ?? 0) / Math.max(1, (data?.totalRuns ?? 0) + (running ? 1 : 0))
-              )}
-              description={copy.average}
-              titleSize="s"
+            <EuiSpacer />
+          </>
+        )}
+        {data?.costEstimateComplete === false && (
+          <>
+            <KbnWarningCallout
+              title={i18n.translate('xpack.nightshift.problemAgent.incompleteEstimate', {
+                defaultMessage: 'Total cost estimate incomplete',
+              })}
+              text={i18n.translate('xpack.nightshift.problemAgent.incompleteEstimateDescription', {
+                defaultMessage:
+                  'The cumulative total includes runs with missing usage or pricing. Timed-out or interrupted model requests can be billed without returning usage. Affected runs are marked *; later runs can still have complete estimates.',
+              })}
             />
-          </EuiFlexItem>
-          <EuiFlexItem>
-            <EuiStat title={data?.totalRuns ?? 0} description={copy.runs} titleSize="s" />
-          </EuiFlexItem>
-          <EuiFlexItem>
-            <EuiStat
-              title={duration(data?.averageRunDurationMs ?? 0)}
-              description={copy.duration}
-              titleSize="s"
-            />
-          </EuiFlexItem>
-        </EuiFlexGroup>
-      </EuiPanel>
-      <EuiSpacer />
-      {!data?.sources.some((source) => source.enabled) && (
-        <EuiEmptyPrompt
-          iconType="magnify"
-          title={<h3>{copy.emptyTitle}</h3>}
-          body={copy.emptyBody}
-        />
-      )}
-      <EuiFlexGroup alignItems="flexStart" wrap>
-        <EuiFlexItem grow={1}>
-          <EuiPanel hasBorder>
-            <EuiTitle size="xs">
-              <h3>{copy.history}</h3>
-            </EuiTitle>
-            <EuiSpacer size="s" />
+            <EuiSpacer />
+          </>
+        )}
+        <EuiPanel hasBorder>
+          <EuiFlexGroup alignItems="center" wrap>
+            <EuiFlexItem grow={false}>
+              <EuiTitle size="s">
+                <h2>{copy.title}</h2>
+              </EuiTitle>
+            </EuiFlexItem>
+            <EuiFlexItem grow={false}>
+              <EuiBadge color={running ? 'primary' : 'hollow'}>
+                {running
+                  ? i18n.translate('xpack.nightshift.problemAgent.running', {
+                      defaultMessage: 'Running',
+                    })
+                  : i18n.translate('xpack.nightshift.problemAgent.idle', {
+                      defaultMessage: 'Idle',
+                    })}
+              </EuiBadge>
+            </EuiFlexItem>
+            <EuiFlexItem>
+              <EuiSelect
+                {...getEbtProps({ action: 'agentExplorer1', element: 'problemAgent' })}
+                data-test-subj="nightshiftAgentExplorerSelect"
+                aria-label={copy.model}
+                value={data?.connectorId ?? ''}
+                options={(data?.availableModels ?? []).map(({ connectorId, model }) => ({
+                  value: connectorId,
+                  text: model,
+                }))}
+                disabled={busy || running}
+                onChange={(event) => {
+                  void act(() =>
+                    http.put('/internal/significant_events/problem_agent/model', {
+                      body: JSON.stringify({ connectorId: event.target.value }),
+                    })
+                  );
+                }}
+              />
+            </EuiFlexItem>
+            <EuiFlexItem grow={false}>
+              <EuiButtonEmpty
+                {...getEbtProps({ action: 'agentExplorer2', element: 'problemAgent' })}
+                data-test-subj="nightshiftAgentExplorerButton"
+                onClick={() => setShowAnatomy(true)}
+              >
+                {copy.anatomy}
+              </EuiButtonEmpty>
+            </EuiFlexItem>
+          </EuiFlexGroup>
+          <EuiSpacer size="m" />
+          <EuiFlexGroup alignItems="center" wrap>
+            <EuiFlexItem grow={false}>
+              <EuiSwitch
+                id="nightshift-agent-schedule"
+                label={copy.schedule}
+                checked={data?.enabled ?? false}
+                disabled={busy || !data}
+                onChange={(event) => {
+                  void act(() =>
+                    http.put('/internal/significant_events/problem_agent/settings', {
+                      body: JSON.stringify({
+                        enabled: event.target.checked,
+                        intervalMinutes: data?.intervalMinutes ?? 60,
+                      }),
+                    })
+                  );
+                }}
+              />
+            </EuiFlexItem>
+            <EuiFlexItem grow={false}>
+              <EuiFieldNumber
+                data-test-subj="nightshiftAgentExplorerFieldNumber"
+                aria-label={copy.minutes}
+                value={frequencyValue}
+                min={1}
+                max={10080}
+                step={1}
+                isInvalid={!validFrequency}
+                onChange={(event) => setFrequency(event.target.value)}
+                compressed
+              />
+            </EuiFlexItem>
+            <EuiFlexItem grow={false}>
+              <EuiButtonEmpty
+                {...getEbtProps({ action: 'agentExplorer3', element: 'problemAgent' })}
+                data-test-subj="nightshiftAgentExplorerButton"
+                disabled={busy || !validFrequency || !data}
+                onClick={() => {
+                  void act(async () => {
+                    await http.put('/internal/significant_events/problem_agent/settings', {
+                      body: JSON.stringify({ enabled: data?.enabled ?? false, intervalMinutes }),
+                    });
+                    setFrequency(undefined);
+                  });
+                }}
+              >
+                {copy.save}
+              </EuiButtonEmpty>
+            </EuiFlexItem>
+            <EuiFlexItem />
+            <EuiFlexItem grow={false}>
+              <EuiButton
+                {...getEbtProps({ action: 'agentExplorer4', element: 'problemAgent' })}
+                data-test-subj="nightshiftAgentExplorerButton"
+                fill
+                disabled={
+                  busy || !data || (!running && !data.sources.some((source) => source.enabled))
+                }
+                color={running ? 'danger' : 'primary'}
+                onClick={() => {
+                  setSelectedId(undefined);
+                  void act(() =>
+                    http.post(
+                      running
+                        ? '/internal/significant_events/problem_agent/_cancel'
+                        : '/internal/significant_events/problem_agent/_run'
+                    )
+                  );
+                }}
+              >
+                {running ? copy.stop : copy.run}
+              </EuiButton>
+            </EuiFlexItem>
+          </EuiFlexGroup>
+          <EuiSpacer />
+          <EuiFlexGroup wrap>
+            <EuiFlexItem>
+              <EuiStat
+                title={money(data?.totalCostUsd ?? 0)}
+                description={copy.total}
+                titleSize="s"
+              />
+            </EuiFlexItem>
+            <EuiFlexItem>
+              <EuiStat
+                title={money(
+                  (data?.totalCostUsd ?? 0) /
+                    Math.max(1, (data?.totalRuns ?? 0) + (running ? 1 : 0))
+                )}
+                description={copy.average}
+                titleSize="s"
+              />
+            </EuiFlexItem>
+            <EuiFlexItem>
+              <EuiStat title={data?.totalRuns ?? 0} description={copy.runs} titleSize="s" />
+            </EuiFlexItem>
+            <EuiFlexItem>
+              <EuiStat
+                title={duration(data?.averageRunDurationMs ?? 0)}
+                description={copy.duration}
+                titleSize="s"
+              />
+            </EuiFlexItem>
+          </EuiFlexGroup>
+        </EuiPanel>
+        {!data?.sources.some((source) => source.enabled) && (
+          <EuiEmptyPrompt
+            iconType="magnify"
+            title={<h3>{copy.emptyTitle}</h3>}
+            body={copy.emptyBody}
+          />
+        )}
+      </div>
+      <div
+        css={css`
+          display: grid;
+          grid-template-columns: minmax(${euiTheme.base * 22}px, 1fr) minmax(0, 2fr);
+          grid-template-rows: minmax(0, 1fr);
+          gap: ${euiTheme.size.m};
+          flex: 1 1 0;
+          min-height: 0;
+
+          ${euiMaxBreakpoint(theme, 'm')} {
+            grid-template-columns: minmax(0, 1fr);
+            grid-template-rows: minmax(0, 1fr) minmax(0, 2fr);
+          }
+        `}
+      >
+        <EuiPanel hasBorder css={panelStyles}>
+          <EuiTitle size="xs">
+            <h3>{copy.history}</h3>
+          </EuiTitle>
+          <EuiSpacer size="s" />
+          <div role="region" aria-label={copy.history} tabIndex={0} css={scrollStyles}>
             <EuiBasicTable
               tableCaption={copy.history}
+              responsiveBreakpoint={false}
               items={data?.runs ?? []}
               noItemsMessage={copy.noHistory}
               rowProps={(item) => ({
-                onClick: () => setSelectedId(item.id),
+                onClick: () => selectRun(item.id),
                 'data-test-subj': 'problemAgentRun-' + item.id,
               })}
               columns={[
@@ -406,7 +458,8 @@ export const AgentExplorer = (): React.ReactElement => {
                       {...getEbtProps({ action: 'agentExplorer5', element: 'problemAgent' })}
                       data-test-subj="nightshiftAgentExplorerButton"
                       size="xs"
-                      onClick={() => setSelectedId(item.id)}
+                      onClick={() => selectRun(item.id)}
+                      title={new Date(value).toLocaleString()}
                     >
                       {new Date(value).toLocaleString()}
                     </EuiButtonEmpty>
@@ -414,12 +467,17 @@ export const AgentExplorer = (): React.ReactElement => {
                 },
                 {
                   field: 'status',
+                  width: `${euiTheme.base * 6}px`,
+                  truncateText: true,
                   name: i18n.translate('xpack.nightshift.problemAgent.status', {
                     defaultMessage: 'Status',
                   }),
                 },
                 {
                   field: 'estimatedCostUsd',
+                  width: `${euiTheme.base * 6}px`,
+                  textOnly: true,
+                  truncateText: true,
                   name: i18n.translate('xpack.nightshift.problemAgent.cost', {
                     defaultMessage: 'Est. cost',
                   }),
@@ -428,7 +486,9 @@ export const AgentExplorer = (): React.ReactElement => {
                 },
               ]}
             />
-            <EuiSpacer />
+          </div>
+          <div>
+            <EuiSpacer size="s" />
             <EuiButtonEmpty
               {...getEbtProps({ action: 'agentExplorer6', element: 'problemAgent' })}
               data-test-subj="nightshiftAgentExplorerButton"
@@ -457,36 +517,55 @@ export const AgentExplorer = (): React.ReactElement => {
             >
               {copy.resetOutputs}
             </EuiButtonEmpty>
-          </EuiPanel>
-        </EuiFlexItem>
-        <EuiFlexItem grow={2}>
-          <EuiPanel hasBorder>
-            <EuiFlexGroup alignItems="center" wrap>
-              <EuiFlexItem>
-                <EuiTitle size="xs">
-                  <h3>{copy.activity}</h3>
-                </EuiTitle>
-              </EuiFlexItem>
-              <EuiFlexItem grow={false}>
-                <EuiSwitch
-                  compressed
-                  label={copy.models}
-                  checked={showModels}
-                  onChange={(event) => setShowModels(event.target.checked)}
-                />
-              </EuiFlexItem>
-              <EuiFlexItem grow={false}>
-                <EuiSwitch
-                  compressed
-                  label={copy.follow}
-                  checked={followLive}
-                  onChange={(event) => setFollowLive(event.target.checked)}
-                />
-              </EuiFlexItem>
-            </EuiFlexGroup>
+          </div>
+        </EuiPanel>
+        <EuiPanel hasBorder css={panelStyles}>
+          <EuiFlexGroup
+            alignItems="center"
+            wrap
+            css={css`
+              flex: 0 0 auto;
+            `}
+          >
+            <EuiFlexItem>
+              <EuiTitle size="xs">
+                <h3>{copy.activity}</h3>
+              </EuiTitle>
+            </EuiFlexItem>
+            <EuiFlexItem grow={false}>
+              <EuiSwitch
+                compressed
+                label={copy.models}
+                checked={showModels}
+                onChange={(event) => setShowModels(event.target.checked)}
+              />
+            </EuiFlexItem>
+            <EuiFlexItem grow={false}>
+              <EuiSwitch
+                compressed
+                label={copy.follow}
+                data-test-subj="nightshiftAgentExplorerFollowLive"
+                checked={followLive}
+                onChange={(event) => setFollowLive(event.target.checked)}
+              />
+            </EuiFlexItem>
+          </EuiFlexGroup>
+          <EuiSpacer size="m" />
+          <div
+            ref={activity}
+            role="region"
+            aria-label={copy.activity}
+            tabIndex={0}
+            css={scrollStyles}
+            onScroll={(event) => {
+              const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
+              if (scrollHeight - scrollTop - clientHeight > euiTheme.base) {
+                setFollowLive(false);
+              }
+            }}
+          >
             {run && (
               <>
-                <EuiSpacer size="m" />
                 <EuiText size="s">
                   <p>{run.summary}</p>
                 </EuiText>
@@ -511,27 +590,22 @@ export const AgentExplorer = (): React.ReactElement => {
                 </EuiFlexGroup>
               </>
             )}
-            <div
-              ref={activity}
-              css={css`
-                max-height: 65vh;
-                overflow: auto;
-              `}
-            >
-              {steps.map((step) => {
-                const preceding = previousTool;
-                if (step.kind === 'tool') previousTool = step;
-                return (
-                  <RunStep
-                    key={step.id}
-                    step={step}
-                    previousTool={preceding}
-                    onInspect={() => setInspect(step)}
-                  />
-                );
-              })}
-              {running && <EuiLoadingSpinner />}
-            </div>
+            {steps.map((step) => {
+              const preceding = previousTool;
+              if (step.kind === 'tool') previousTool = step;
+              return (
+                <RunStep
+                  key={step.id}
+                  step={step}
+                  previousTool={preceding}
+                  onInspect={() => {
+                    setFollowLive(false);
+                    setInspect(step);
+                  }}
+                />
+              );
+            })}
+            {running && <EuiLoadingSpinner />}
             {run?.remainingGaps?.length ? (
               <>
                 <EuiSpacer />
@@ -544,9 +618,9 @@ export const AgentExplorer = (): React.ReactElement => {
                 </EuiText>
               </>
             ) : null}
-          </EuiPanel>
-        </EuiFlexItem>
-      </EuiFlexGroup>
+          </div>
+        </EuiPanel>
+      </div>
       {showAnatomy && (
         <EuiFlyout onClose={() => setShowAnatomy(false)} size="l" aria-label={copy.anatomy}>
           <EuiFlyoutHeader>
