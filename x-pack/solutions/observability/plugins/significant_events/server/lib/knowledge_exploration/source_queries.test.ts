@@ -154,6 +154,24 @@ describe('source query planning and evidence', () => {
     });
   });
 
+  it('warns about literal dotted JSON keys when parsed values silently come back null', async () => {
+    await session.execute('source_esql', args);
+    query.mockResolvedValue({
+      columns: [{ name: 'error', type: 'keyword' }],
+      values: [[null]],
+    });
+    expect(
+      await session.execute('source_esql', {
+        ...args,
+        pipeline: '| EVAL error=JSON_EXTRACT(message, "error.message") | KEEP error',
+      })
+    ).toMatchObject({
+      results: [
+        { warnings: expect.arrayContaining([expect.stringContaining('bracket notation')]) },
+      ],
+    });
+  });
+
   it('does not record partial query results as usable current evidence', async () => {
     await session.execute('source_esql', args);
     query.mockResolvedValue({

@@ -126,3 +126,35 @@ it.each([true, false])(
     expect(signal.description).toContain('Historical comparison');
   }
 );
+
+it('keeps rows from other services contextual instead of confirming the selected affected service', () => {
+  const check = {
+    sourceId: 'logs',
+    checkedAt: Date.now(),
+    query:
+      'FROM $.logs | WHERE `@timestamp` >= NOW() - 2 minutes | STATS failures=COUNT(*) BY service.name',
+    row: { 'service.name': 'api', 'service.namespace': 'production', failures: '3' },
+  };
+  const affected: Feature = {
+    id: 'api',
+    uuid: 'api',
+    description: '',
+    confidence: 95,
+    source_id: 'logs',
+    type: 'entity',
+    subtype: 'service',
+    properties: { name: 'api', service_namespace: 'production' },
+  };
+  const signals = buildEventQuerySignals(
+    [check, { ...check, row: { ...check.row, 'service.name': 'worker', failures: '8' } }],
+    'API failures',
+    false,
+    [],
+    [affected]
+  );
+  expect(signals).toHaveLength(2);
+  expect(signals[0].verdict).toBe('confirms');
+  expect(signals[0].description).not.toContain('worker');
+  expect(signals[1].verdict).toBe('inconclusive');
+  expect(signals[1].description).toContain('outside the affected service scope');
+});

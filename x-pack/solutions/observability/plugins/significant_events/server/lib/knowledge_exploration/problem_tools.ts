@@ -34,6 +34,7 @@ const boundedTexts = (maxItems: number, maxLength: number) => ({
 const eventInput = lazySchema(() =>
   z.object({
     action: z.enum(['index', 'read', 'upsert', 'review']),
+    includeInactive: z.boolean().default(false),
     eventId: text.optional(),
     eventIds: z.array(text).max(25).default([]),
     issueKey: z
@@ -77,13 +78,18 @@ export const problemTools: Record<string, ToolDefinition> = {
   events: {
     ...discoveryTools.events,
     description:
-      'Index/read/upsert this agent’s native significant events, or review an unchanged active event. Direct source telemetry can establish a problem before a rule fires. Every write must have actual query signals and at least one affected entity reference. The server attaches executed query evidence automatically; pass actual featureIds for affected services/dependencies, queryIds for saved measurements and ruleIds for relevant native monitors. It can resolve cited emitting service rows to existing KIs when namespace is unambiguous. Save a missing verified entity first. Create a useful problem-specific native rule and then attach its real ruleIds; never invent a firing or detection ID. Index existing problems before creating any. A new issueKey overlapping prior affected entities requires identity review: reuse the prior event for recurrence/narrowed attribution. Only a genuinely independent mechanism may use separateFromEventIds with an explicit distinctProblemReason. issueKey is a stable lowercase slug naming namespace, service/operation and failure mechanism, never a time or run ID. Reuse eventId and issueKey for continuation, recovery and recurrence. upsert requires sourceIds, evidenceRefs from THIS run, title, summary, assessmentNote and active/inactive status. Every selected source needs fresh evidence from source_esql lookbackMinutes<=3, endOffsetMinutes=0. Historical errors do not establish current failure. For recovery, verify positive healthy operation outcomes and clearance of all confirming mechanisms; missing data, a stopped container or a successful fault revert alone do not prove recovery. New healthy/false-alarm candidates create no events. Review means the existing operational problem remains supported; refuted or benign earlier findings must be updated inactive, not merely left active. Review an unchanged active event with action=review, eventId and current evidenceRefs; finish requires every prior active problem reviewed, or an honest partial outcome. assessmentNote must fit 900 characters. Confidence is 0 to 1. causalFeatureIds must also appear in featureIds. Use the canonical event severity and confidence contracts in the system instructions. Feature IDs are optional actual logical KI IDs in the selected sources. Operator deactivations are honored. Actual queries/results remain in the run trace; the native event links to the run in its assessment note.',
+      'Index/read/upsert this agent’s native significant events, or review an unchanged active event. Index defaults to active/recovering problems only. Use includeInactive=true only after current telemetry suggests a recurrence or identity lookup; inactive events do not need routine health checks. Direct source telemetry can establish a problem before a rule fires. Every write must have actual query signals and at least one affected entity reference. The server attaches executed query evidence automatically; pass actual featureIds for affected services/dependencies, queryIds for saved measurements and ruleIds for relevant native monitors. It can resolve cited emitting service rows to existing KIs when namespace is unambiguous. Save a missing verified entity first. Surface a confirmed problem immediately with its executed query signals; create useful problem-specific native monitoring afterward and attach its real ruleIds; never invent a firing or detection ID. Index existing problems before creating any. A new issueKey overlapping prior affected entities requires identity review: reuse the prior event for recurrence/narrowed attribution. Only a genuinely independent mechanism may use separateFromEventIds with an explicit distinctProblemReason. issueKey is a stable lowercase slug naming namespace, service/operation and failure mechanism, never a time or run ID. Reuse eventId and issueKey for continuation, recovery and recurrence. upsert requires sourceIds, evidenceRefs from THIS run, title, summary, assessmentNote and active/inactive status. Every selected source needs fresh evidence from source_esql lookbackMinutes<=3, endOffsetMinutes=0. Historical errors do not establish current failure. For recovery, verify positive healthy operation outcomes and clearance of all confirming mechanisms; missing data, a stopped container or a successful fault revert alone do not prove recovery. New healthy/false-alarm candidates create no events. Review means the existing operational problem remains supported; refuted or benign earlier findings must be updated inactive, not merely left active. Review an unchanged active event with action=review, eventId and current evidenceRefs; finish requires every prior active problem reviewed, or an honest partial outcome. assessmentNote must fit 900 characters. Confidence is 0 to 1. causalFeatureIds must also appear in featureIds. Use the canonical event severity and confidence contracts in the system instructions. Feature IDs are optional actual logical KI IDs in the selected sources. Operator deactivations are honored. Actual queries/results remain in the run trace; the native event links to the run in its assessment note.',
     schema: {
       type: 'object',
       required: ['action'],
       properties: {
         ...discoveryTools.events.schema?.properties,
         action: { type: 'string', enum: ['index', 'read', 'upsert', 'review'] },
+        includeInactive: {
+          type: 'boolean',
+          description:
+            'Index only: defaults to false. Include closed history only for a fresh candidate’s recurrence/identity check, not routine reinspection.',
+        },
         assessmentNote: boundedText(900),
         summary: boundedText(4000),
         confidence: eventConfidence,
@@ -116,6 +122,17 @@ export const problemTools: Record<string, ToolDefinition> = {
 };
 
 /** One source/evidence session and one objective, with the tools of the three earlier agents. */
+const pendingSourceSignature = (
+  entries: Array<{ sourceId: string; name: string; namespace: string; missing?: readonly string[] }>
+): string =>
+  JSON.stringify(
+    entries
+      .map((entry) =>
+        JSON.stringify([entry.sourceId, entry.name, entry.namespace, entry.missing ?? []])
+      )
+      .sort()
+  );
+
 export class ProblemToolSession {
   private reads: ExplorationToolSession;
   private monitoring: MonitoringToolSession;
@@ -127,9 +144,11 @@ export class ProblemToolSession {
   private monitoringAssessed = false;
   private observedEmitters = new Map<
     string,
-    { sourceId: string; name: string; namespace: string; evidenceRef: string }
+    { sourceId: string; name: string; namespace: string; evidenceRef: string; checkedAt: number }
   >();
   private knowledgeWriteBlocked = false;
+  private requestedCurrentRefresh = false;
+  private pendingCurrentRefresh = new Set<string>();
   private planningFeedbackSent = false;
   private pendingFeedback = new Map<string, { signature: string; repeats: number }>();
   private stalledWork?: string;
@@ -149,12 +168,15 @@ export class ProblemToolSession {
     return { ...entry, sourceType: source?.type, sourceTitle: source?.title };
   }
   private knownEvents = new Map<string, SignificantEvent>();
+  private historicalIdentityChecks = new Set<string>();
   private unavailableSources = new Map<string, string>();
   private checkedWithoutRows = new Map<
     string,
     { sourceId: string; name: string; namespace: string }
   >();
   private payloadInspected = new Set<string>();
+  private latencyChecks = new Map<string, Set<'current' | 'historical'>>();
+  private unavailableLatency = new Map<string, Set<'current' | 'historical'>>();
   private eventLearningCandidates = new Map<
     string,
     { eventId: string; sourceIds: string[]; evidenceRefs: string[] }
@@ -233,6 +255,31 @@ export class ProblemToolSession {
       this.inventoryComplete = false;
     })();
     return this.prepared;
+  }
+
+  private async loadHistoricalIdentities(sourceIds: string[], featureIds: string[]): Promise<void> {
+    const key = JSON.stringify([[...sourceIds].sort(), [...featureIds].sort()]);
+    if (this.historicalIdentityChecks.has(key)) return;
+    const search = await this.clients.getEventSearchClient();
+    for (let page = 1; page <= 10; page++) {
+      const result = await search.findLatestByCurrentStatePaginated({
+        sourceIds,
+        topologyFeatureIds: featureIds,
+        status: ['inactive'],
+        page,
+        perPage: 100,
+      });
+      for (const event of result.hits)
+        if (event.event_id.startsWith(PROBLEM_EVENT_PREFIX))
+          this.knownEvents.set(event.event_id, event);
+      if (page * 100 >= result.total || result.hits.length < 100) {
+        this.historicalIdentityChecks.add(key);
+        return;
+      }
+    }
+    throw new Error(
+      'Historical identity lookup is incomplete. Resolve the existing eventId before creating another problem on these entities.'
+    );
   }
 
   async execute(name: string, parameters: object): Promise<Record<string, unknown>> {
@@ -333,6 +380,40 @@ export class ProblemToolSession {
               } else this.incompleteAggregates.delete(key);
             }
 
+            if (
+              'rows' in read &&
+              Array.isArray(read.rows) &&
+              !read.rows.length &&
+              'pipeline' in parameters &&
+              typeof parameters.pipeline === 'string' &&
+              /(?:duration|latency|elapsed|p(?:50|95|99)_?ms)/i.test(parameters.pipeline) &&
+              /(?:PERCENTILE|MEDIAN|AVG|MAX|MIN)\s*\(/i.test(parameters.pipeline) &&
+              'serviceNames' in parameters &&
+              Array.isArray(parameters.serviceNames) &&
+              'serviceNamespace' in parameters &&
+              typeof parameters.serviceNamespace === 'string'
+            ) {
+              const kind =
+                ('endOffsetMinutes' in parameters && Number(parameters.endOffsetMinutes) > 0) ||
+                ('lookbackMinutes' in parameters && Number(parameters.lookbackMinutes) > 3)
+                  ? 'historical'
+                  : 'current';
+              for (const serviceName of parameters.serviceNames.filter(
+                (value): value is string => typeof value === 'string'
+              )) {
+                const key = JSON.stringify([
+                  read.sourceId,
+                  serviceName,
+                  parameters.serviceNamespace,
+                ]);
+                if (this.latencyChecks.get(key)?.has(kind)) continue;
+                const unavailable =
+                  this.unavailableLatency.get(key) ?? new Set<'current' | 'historical'>();
+                unavailable.add(kind);
+                this.unavailableLatency.set(key, unavailable);
+              }
+            }
+
             const refs = [
               ...('rowRefs' in read && Array.isArray(read.rowRefs) ? read.rowRefs : []),
               ...('rows' in read && Array.isArray(read.rows)
@@ -359,21 +440,67 @@ export class ProblemToolSession {
                 identity.namespace = parameters.serviceNamespace;
               if (!identity.name || !identity.namespace) continue;
               const key = JSON.stringify([read.sourceId, identity.name, identity.namespace]);
-              this.checkedWithoutRows.delete(key);
+              const pipeline =
+                'pipeline' in parameters && typeof parameters.pipeline === 'string'
+                  ? parameters.pipeline
+                  : '';
+              const percentileColumns = [
+                ...pipeline.matchAll(/([\w.]+)\s*=\s*(?:PERCENTILE|MEDIAN|AVG|MAX|MIN)\s*\(/gi),
+              ].map((match) => match[1]);
+              const historical =
+                ('endOffsetMinutes' in parameters && Number(parameters.endOffsetMinutes) > 0) ||
+                ('lookbackMinutes' in parameters && Number(parameters.lookbackMinutes) > 3);
+              const sampled =
+                ('sampleProbability' in parameters && Number(parameters.sampleProbability) < 1) ||
+                /\bSAMPLE\s+(?:0|\.)/i.test(pipeline);
+              if (
+                /(?:duration|latency|elapsed|p(?:50|95|99)_?ms)/i.test(pipeline) &&
+                percentileColumns.length &&
+                (historical || !sampled)
+              ) {
+                const kind = historical ? 'historical' : 'current';
+                if (
+                  percentileColumns.some(
+                    (column) =>
+                      Boolean(check.row[column]) && Number.isFinite(Number(check.row[column]))
+                  )
+                ) {
+                  const checked =
+                    this.latencyChecks.get(key) ?? new Set<'current' | 'historical'>();
+                  checked.add(kind);
+                  this.latencyChecks.set(key, checked);
+                  this.unavailableLatency.get(key)?.delete(kind);
+                } else if (!this.latencyChecks.get(key)?.has(kind)) {
+                  const unavailable =
+                    this.unavailableLatency.get(key) ?? new Set<'current' | 'historical'>();
+                  unavailable.add(kind);
+                  this.unavailableLatency.set(key, unavailable);
+                }
+              }
               if (
                 ['message', 'body.text', 'body', 'sample', 'sample_any', 'sample_low'].some(
                   (field) => check.row[field]
                 )
               )
                 this.payloadInspected.add(key);
-              this.observedEmitters.set(
-                JSON.stringify([read.sourceId, identity.name, identity.namespace]),
-                {
-                  sourceId: read.sourceId,
-                  ...identity,
-                  evidenceRef: ref,
-                }
-              );
+              if (
+                'lookbackMinutes' in parameters &&
+                Number(parameters.lookbackMinutes) <= 3 &&
+                (!('endOffsetMinutes' in parameters) || !parameters.endOffsetMinutes) &&
+                !sampled
+              ) {
+                this.checkedWithoutRows.delete(key);
+                this.observedEmitters.set(
+                  JSON.stringify([read.sourceId, identity.name, identity.namespace]),
+                  {
+                    sourceId: read.sourceId,
+                    ...identity,
+                    evidenceRef: ref,
+                    checkedAt: check.checkedAt,
+                  }
+                );
+                this.pendingCurrentRefresh.delete(key);
+              }
             }
           }
         }
@@ -501,6 +628,42 @@ export class ProblemToolSession {
           nextAction:
             'Volume/schema probes alone are not current operation checks. Inspect a small, deliberately scoped current data read on every available source before finishing. Reuse native saved outcome queries and learned problem/recovery signatures first; return to less urgent learning afterward. Missing source coverage must not hide new problems.',
         };
+      const currentKey = (entity: { sourceId: string; name: string; namespace: string }) =>
+        JSON.stringify([entity.sourceId, entity.name, entity.namespace]);
+      const expiredCurrent = this.reads.emittingServices.filter((entity) => {
+        const observed = this.observedEmitters.get(currentKey(entity));
+        return observed && Date.now() - observed.checkedAt > 3 * 60000;
+      });
+      if (!this.requestedCurrentRefresh && expiredCurrent.length) {
+        this.requestedCurrentRefresh = true;
+        for (const entity of expiredCurrent) this.pendingCurrentRefresh.add(currentKey(entity));
+      }
+      const unassessed = this.reads.emittingServices.filter(
+        (entity) =>
+          !!entity.namespace &&
+          !this.unavailableSources.has(entity.sourceId) &&
+          !this.checkedWithoutRows.has(
+            JSON.stringify([entity.sourceId, entity.name, entity.namespace])
+          ) &&
+          (!this.observedEmitters.has(currentKey(entity)) ||
+            this.pendingCurrentRefresh.has(currentKey(entity)))
+      );
+      if (
+        unassessed.length &&
+        budgetRemaining &&
+        !this.reads.blocked &&
+        this.continuePendingWork(
+          'source-specific current outcome checks',
+          pendingSourceSignature(unassessed)
+        )
+      ) {
+        return {
+          finished: false,
+          unassessedServices: unassessed.slice(0, 25).map((entry) => this.labelSource(entry)),
+          nextAction:
+            'These services actually emitted in the current bounded inventory but no substantive current query/sample rows assessed them within the last three minutes. Historical comparisons, uniform probability samples and learning do not establish exact current operation coverage. A zero sampled error count can miss rare failures. Use cheap native measurements or short, scoped unsampled conditional terminal-outcome aggregates, preserving successes, failures, expected rejections and meaningful cohorts; inspect recent native rule signals. Do not respond with a broad raw-document scan. Old incident reviews do not cover new problems elsewhere. Start with unfamiliar/rare emitters: inspect scoped representative categories and outcome/progress/correctness fields, use sampling when throughput requires it, and confirm suspicious outcomes exactly. An emitter inventory is not a health check. Do not manufacture incidents or claim complete coverage. Finish partial only with the real remaining constraint after useful assessment.',
+        };
+      }
       if (budgetRemaining && !this.reads.blocked && this.reads.emittingServices.length) {
         const logSourceIds = this.sources
           .filter((source) => source.enabled && source.type === 'logs')
@@ -532,7 +695,7 @@ export class ProblemToolSession {
           );
           if (
             unparsed.length &&
-            this.continuePendingWork('unfamiliar payload checks', JSON.stringify(unparsed))
+            this.continuePendingWork('unfamiliar payload checks', pendingSourceSignature(unparsed))
           ) {
             return {
               finished: false,
@@ -541,34 +704,50 @@ export class ProblemToolSession {
                 'A broad marker aggregate or entity inventory does not explain the operation contracts of these emitting services. Inspect small representative payload/category samples for unfamiliar emitters, stratified by source AND namespace/service; use sampleProbability when throughput warrants it. Start with rare/unfamiliar emitters and inspect both normal and abnormal categories, not only an error-keyword filter. Keep service AND namespace with the samples. Then validate actual outcome/progress/correctness conditions, persist useful source-local payload KIs/measurements, and assess fresh problems. Do not infer health from zero generic markers or HTTP success alone. This is a real coverage gap, not an artifact-count target.',
             };
           }
-        }
-      }
-      const unassessed = this.reads.emittingServices.filter(
-        (entity) =>
-          !!entity.namespace &&
-          !this.unavailableSources.has(entity.sourceId) &&
-          !this.checkedWithoutRows.has(
-            JSON.stringify([entity.sourceId, entity.name, entity.namespace])
-          ) &&
-          !this.observedEmitters.has(
-            JSON.stringify([entity.sourceId, entity.name, entity.namespace])
+          const latencySchemas = known.filter(
+            (feature) =>
+              feature.properties.kind !== 'detection_learning' &&
+              /(?:duration|latency|elapsed|p(?:50|95|99)_?ms)/i.test(
+                `${feature.description} ${JSON.stringify(feature.properties)}`
+              )
+          );
+          const latencyGaps = this.reads.emittingServices.flatMap((entity) => {
+            const key = JSON.stringify([entity.sourceId, entity.name, entity.namespace]);
+            if (
+              this.unavailableSources.has(entity.sourceId) ||
+              this.checkedWithoutRows.has(key) ||
+              !latencySchemas.some(
+                (feature) =>
+                  feature.source_id === entity.sourceId &&
+                  (feature.properties.service_namespace ?? feature.properties.namespace) ===
+                    entity.namespace &&
+                  ((typeof feature.properties.service_name === 'string' &&
+                    feature.properties.service_name
+                      .split(',')
+                      .map((serviceName) => serviceName.trim())
+                      .includes(entity.name)) ||
+                    (Array.isArray(feature.properties.services) &&
+                      feature.properties.services.includes(entity.name)))
+              )
+            )
+              return [];
+            const checked = this.latencyChecks.get(key);
+            const missing = (['current', 'historical'] as const).filter(
+              (kind) => !checked?.has(kind) && !this.unavailableLatency.get(key)?.has(kind)
+            );
+            return missing.length ? [{ ...this.labelSource(entity), missing }] : [];
+          });
+          if (
+            latencyGaps.length &&
+            this.continuePendingWork('known latency contracts', pendingSourceSignature(latencyGaps))
           )
-      );
-      if (
-        unassessed.length &&
-        budgetRemaining &&
-        !this.reads.blocked &&
-        this.continuePendingWork(
-          'source-specific current outcome checks',
-          JSON.stringify(unassessed)
-        )
-      ) {
-        return {
-          finished: false,
-          unassessedServices: unassessed.slice(0, 25).map((entry) => this.labelSource(entry)),
-          nextAction:
-            'These services actually emitted in the current bounded inventory but no substantive query/sample rows assessed them this run. Old incident reviews do not cover new problems elsewhere. Start with unfamiliar/rare emitters: inspect scoped representative categories and outcome/progress/correctness fields, use sampling when throughput requires it, and confirm suspicious outcomes exactly. An emitter inventory is not a health check. Do not manufacture incidents or claim complete coverage. Finish partial only with the real remaining constraint after useful assessment.',
-        };
+            return {
+              finished: false,
+              unassessedLatency: latencyGaps.slice(0, 25),
+              nextAction:
+                'These current log emitters have saved payload contracts exposing duration/latency, but no usable current percentile/mean and historical comparison were checked for them. Successful statuses do not assess successful-operation latency. Reuse the actual saved fields/units, inspect esql_guide topic=latency, and batch deliberately scoped per-service/operation measurements with mapped identity fields. Sample dense historical exploration, preserve rare emitters, and confirm suspicious current values exactly. When no verified baseline exists, compare a throughput-aware sampled bucketed history across the available operating range (for example an hour initially, expanding if needed), not merely another recent window. Locate step changes and confirm the earlier/current candidate populations exactly. Select historical offsets that establish baseline provenance rather than assume the preceding window was healthy. Persist reusable measurements and useful native coverage. Do not invent a threshold or manufacture an incident. If fields/history are genuinely unavailable, demonstrate the scoped data/parse gap and retain an honest partial assessment.',
+            };
+        }
       }
       if (
         !this.stalledWork &&
@@ -609,6 +788,31 @@ export class ProblemToolSession {
         args.coverageComplete = false;
         args.remainingGaps.unshift(
           `Agent made no progress on repeated feedback for ${this.stalledWork}; remaining checks are unresolved. This is not a time/cost limit or evidence of health.`
+        );
+      }
+      const latencyDataGaps = [...this.unavailableLatency.entries()]
+        .filter(([, kinds]) => kinds.size)
+        .map(([key, kinds]) => `${key}: ${[...kinds].join(', ')}`);
+      if (latencyDataGaps.length) {
+        args.outcome = 'partial';
+        args.coverageComplete = false;
+        args.remainingGaps.unshift(
+          `Latency aggregate reads returned no usable numeric population for ${latencyDataGaps
+            .slice(0, 8)
+            .join(
+              '; '
+            )}. This remains an unavailable population or parsing gap, not proof of health. Revisit when request telemetry or parsing improves.`
+        );
+      }
+      if (
+        this.requestedCurrentRefresh &&
+        expiredCurrent.length &&
+        !this.pendingCurrentRefresh.size
+      ) {
+        args.outcome = 'partial';
+        args.coverageComplete = false;
+        args.remainingGaps.unshift(
+          'A bounded current-outcome refresh completed, but further learning aged some observations. Currentness is limited to their recorded collection times; a subsequent invocation must reassess newer changes. Repeating an endless sliding refresh would not establish continuous coverage.'
         );
       }
       this.run.outcome = args.outcome;
@@ -698,6 +902,7 @@ export class ProblemToolSession {
     if (args.action === 'index') {
       const result = await search.findLatestByCurrentStatePaginated({
         sourceIds: [...enabled],
+        status: args.includeInactive ? undefined : ['active', 'recovering'],
         page: Math.floor(args.offset / args.limit) + 1,
         perPage: args.limit,
       });
@@ -773,8 +978,20 @@ export class ProblemToolSession {
             !/\|\s*SAMPLE\s+(?:0|\.)/i.test(check.query)
         )
       ) {
+        const rejected = checks
+          .filter((check) => check.sourceId === sourceId)
+          .slice(0, 20)
+          .map((check) => ({
+            ref: check.ref,
+            lookbackMinutes: /NOW\(\)\s*-\s*(\d+)\s+minutes/i.exec(check.query)?.[1] ?? null,
+            endOffsetMinutes: /<\s*NOW\(\)\s*-\s*(\d+)\s+minutes/i.exec(check.query)?.[1] ?? 0,
+            readAgeSeconds: Math.max(0, Math.round((Date.now() - check.checkedAt) / 1000)),
+            sampled: /\|\s*SAMPLE\s+(?:0|\.)/i.test(check.query),
+          }));
         throw new Error(
-          'Check current outcomes for EVERY source with lookbackMinutes<=3, endOffsetMinutes=0, and cite those evidenceRefs. Old errors and missing traffic do not prove current failure or recovery.'
+          `Missing current outcomes for selected source ${sourceId}. Rejected references: ${JSON.stringify(
+            rejected
+          )}. Rerun the SAME scoped outcome query unsampled with lookbackMinutes<=3 and endOffsetMinutes=0, then cite its NEW rowRefs within three minutes of collection. A recent bucket inside a longer query is still historical evidence at this boundary. Keep older refs only as comparison context. Do not add unrelated sources to repair this error. Old errors and missing traffic do not prove current failure or recovery.`
         );
       }
     }
@@ -811,7 +1028,18 @@ export class ProblemToolSession {
     if (args.causalFeatureIds.some((featureId) => !args.featureIds.includes(featureId)))
       throw new Error('Causal feature IDs must be a subset of featureIds.');
     const references = [];
-    if (args.queryIds.length || args.ruleIds.length) {
+    const priorQueryIds = (prior?.signals ?? []).flatMap((signal) =>
+      'query_id' in signal.metadata && signal.metadata.query_id ? [signal.metadata.query_id] : []
+    );
+    const priorRuleIds = (prior?.signals ?? []).flatMap((signal) =>
+      signal.metadata.rule_uuid ? [signal.metadata.rule_uuid] : []
+    );
+    if (
+      args.queryIds.length ||
+      args.ruleIds.length ||
+      priorQueryIds.length ||
+      priorRuleIds.length
+    ) {
       const links = Object.values(await ki.getSourceToQueryLinksMap(sourceIds)).flat();
       for (const queryId of args.queryIds)
         if (!links.some((link) => link.query.id === queryId))
@@ -824,7 +1052,9 @@ export class ProblemToolSession {
           .filter(
             (link) =>
               args.queryIds.includes(link.query.id) ||
-              (link.rule_id && args.ruleIds.includes(link.rule_id))
+              priorQueryIds.includes(link.query.id) ||
+              (link.rule_id &&
+                (args.ruleIds.includes(link.rule_id) || priorRuleIds.includes(link.rule_id)))
           )
           .map((link) => ({
             sourceId: link.source_id,
@@ -834,6 +1064,10 @@ export class ProblemToolSession {
       );
     }
     if (!prior) {
+      await this.loadHistoricalIdentities(
+        sourceIds,
+        features.filter((feature) => feature.type === 'entity').map((feature) => feature.id)
+      );
       const related = [...this.knownEvents.values()].filter(
         (event) =>
           event.source_ids.some((sourceId) => sourceIds.includes(sourceId)) &&
@@ -904,14 +1138,26 @@ export class ProblemToolSession {
       checks,
       args.assessmentNote ?? prior?.assessment_note ?? '',
       status === 'inactive',
-      references
+      references,
+      features
     );
+    if (
+      sourceIds.some(
+        (sourceId) =>
+          !querySignals.some(
+            (signal) => signal.source_id === sourceId && signal.verdict !== 'inconclusive'
+          )
+      )
+    )
+      throw new Error(
+        'Cite current outcome rows for the selected affected services in every confirming source. Rows explicitly identifying other services are context, not proof of this problem.'
+      );
     const event: SignificantEvent = significantEventSchema.parse({
       ...(prior ?? {}),
       event_id: id,
       '@timestamp': new Date().toISOString(),
       source_ids: sourceIds,
-      title: prior?.title ?? args.title,
+      title: reviewing ? prior?.title : args.title,
       summary: reviewing ? prior?.summary : args.summary,
       status,
       severity: (reviewing || status === 'inactive') && prior ? prior.severity : args.severity,
@@ -981,7 +1227,7 @@ export class ProblemToolSession {
         .filter((feature) => feature.type === 'entity')
         .map((feature) => feature.id),
       monitoringNextAction:
-        status === 'active' && !args.ruleIds.length
+        status === 'active' && !references.some((reference) => reference.ruleId)
           ? 'Create or validate a reusable native rule for this confirmed problem using its measured failure condition. Update this event with actual ruleIds/queryIds. If coverage is blocked, give the concrete monitoringBlocker at finish; the current query signals remain inspectable.'
           : undefined,
       evidence: checks,

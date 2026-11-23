@@ -2148,6 +2148,16 @@ export class ExplorationToolSession {
       );
     if (
       args.template === 'custom' &&
+      /JSON_EXTRACT\([^,]+,\s*"[^"\[\]]*\.[^"\[\]]*"\s*\)/i.test(pipeline) &&
+      response.values.length > 0 &&
+      response.columns.some((column, index) => response.values.every((row) => row[index] === null))
+    ) {
+      warnings.push(
+        'A returned column is entirely null and this query uses dotted JSON paths. A literal dotted JSON key requires bracket notation, for example JSON_EXTRACT(message, "[\'error.message\']"); a dot path navigates nested objects. Inspect actual payloads before interpreting nulls as absent outcomes.'
+      );
+    }
+    if (
+      args.template === 'custom' &&
       sourceIdentityColumns(columns).length &&
       !response.columns.some((column) => sourceIdentityColumns(columns).includes(column.name))
     ) {

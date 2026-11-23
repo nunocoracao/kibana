@@ -179,14 +179,14 @@ describe('unified problem lifecycle', () => {
     expect(run.written).toBe(1);
   });
 
-  it.each(['historical-window', 'expired-read'])(
+  it.each(['historical-window', 'five-minute-window', 'expired-read'])(
     'refuses to close a problem using %s evidence',
     async (kind) => {
       const prior = addActive();
       mockEvidenceChecks.mockReturnValue([
         {
           query: `FROM $.telemetry | WHERE \`@timestamp\` >= NOW() - ${
-            kind === 'historical-window' ? 30 : 2
+            kind === 'historical-window' ? 30 : kind === 'five-minute-window' ? 5 : 2
           } minutes`,
           row: { successes: '100' },
           checkedAt: kind === 'expired-read' ? Date.now() - 4 * 60000 : Date.now(),
@@ -194,7 +194,9 @@ describe('unified problem lifecycle', () => {
       ]);
       await expect(
         session().execute('events', { ...input, eventId: prior.event_id, status: 'inactive' })
-      ).rejects.toThrow('current outcomes');
+      ).rejects.toThrow(
+        /Missing current outcomes for selected source source-a\. Rejected references:.*row-1/
+      );
       expect(events.get(prior.event_id)?.status).toBe('active');
     }
   );
@@ -224,7 +226,12 @@ describe('unified problem lifecycle', () => {
     const created = await session().execute('events', input);
     await session().execute('events', { ...input, eventId: created.eventId, status: 'inactive' });
     expect(events.get(String(created.eventId))?.status).toBe('inactive');
-    await session().execute('events', { ...input, eventId: created.eventId });
+    await session().execute('events', {
+      ...input,
+      eventId: created.eventId,
+      title: 'The same operation is failing again',
+    });
+    expect(events.get(String(created.eventId))?.title).toBe('The same operation is failing again');
     expect(events.size).toBe(1);
     expect(events.get(String(created.eventId))?.status).toBe('active');
   });
@@ -250,6 +257,14 @@ describe('unified problem lifecycle', () => {
       query_id: 'measurement',
       rule_uuid: 'monitor',
     });
+    const refreshed = await session().execute('events', { ...input, eventId: result.eventId });
+    expect(refreshed.monitoringNextAction).toBeUndefined();
+    expect(refreshed.signalReferences).toContainEqual(
+      expect.objectContaining({ query_id: 'measurement', rule_uuid: 'monitor' })
+    );
+    getSourceToQueryLinksMap.mockResolvedValue({ 'source-a': [] });
+    const removed = await session().execute('events', { ...input, eventId: result.eventId });
+    expect(removed.monitoringNextAction).toBeTruthy();
   });
 
   it('surfaces currently emitting services missed by narrow incident checks before finishing', async () => {
@@ -269,7 +284,7 @@ describe('unified problem lifecycle', () => {
     };
     expect(await agent.execute('finish_exploration', finish)).toMatchObject({
       finished: false,
-      unparsedLogEmitters: [{ name: 'worker', evidenceRef: 'row-2' }],
+      unassessedServices: [{ name: 'worker', evidenceRef: 'row-2' }],
     });
     expect(agent.finished).toBe(false);
   });
@@ -282,7 +297,16 @@ describe('unified problem lifecycle', () => {
       evidenceRef: 'row-2',
     });
     getFeatures.mockResolvedValue({ hits: [] });
+    mockEvidenceChecks.mockReturnValue([
+      {
+        query: 'FROM logs-* | WHERE `@timestamp` >= NOW() - 1 minutes',
+        checkedAt: Date.now(),
+        row: { 'service.name': 'worker', 'service.namespace': 'prod', count: '20' },
+      },
+    ]);
+    mockReadExecute.mockResolvedValue({ results: [{ sourceId: 'source-a', rowRefs: ['row-2'] }] });
     const agent = session();
+    await agent.execute('source_esql', { template: 'custom', lookbackMinutes: 1 });
     const result = await agent.execute('finish_exploration', {
       outcome: 'partial',
       summary: 'Only marker counts read',
@@ -322,20 +346,44 @@ describe('unified problem lifecycle', () => {
     expect(await agent.execute('finish_exploration', finish)).toMatchObject({ finished: true });
   });
 
-  it('requires identity review before creating another key for overlapping prior affected entities', async () => {
+  it.each(['active', 'inactive'] as const)(
+    'requires identity review before creating another key for overlapping %s entities',
+    async (status) => {
+      const prior = await session().execute('events', { ...input, status: 'active' });
+      const event = events.get(String(prior.eventId));
+      if (!event) throw new Error('Missing created event');
+      events.set(event.event_id, { ...event, status });
+      const agent = session();
+      await agent.execute('events', { action: 'index' });
+      const result = await agent.execute('events', { ...input, issueKey: 'same-path-new-label' });
+      expect(result).toMatchObject({
+        written: false,
+        requiresIdentityReview: true,
+        relatedEvents: [{ eventId: prior.eventId }],
+      });
+      expect(events.size).toBe(1);
+      const updated = await agent.execute('events', { ...input, eventId: prior.eventId });
+      expect(updated.eventId).toBe(prior.eventId);
+      expect(events.size).toBe(1);
+    }
+  );
+
+  it('keeps inactive history out of routine event checks while allowing explicit identity lookup', async () => {
     const prior = await session().execute('events', input);
+    await session().execute('events', { ...input, eventId: prior.eventId, status: 'inactive' });
     const agent = session();
-    await agent.execute('events', { action: 'index' });
-    const result = await agent.execute('events', { ...input, issueKey: 'same-path-new-label' });
-    expect(result).toMatchObject({
-      written: false,
-      requiresIdentityReview: true,
-      relatedEvents: [{ eventId: prior.eventId }],
+    expect(await agent.execute('events', { action: 'index' })).toMatchObject({
+      events: [],
+      total: 0,
+      activeProblemsToReview: [],
     });
-    expect(events.size).toBe(1);
-    const updated = await agent.execute('events', { ...input, eventId: prior.eventId });
-    expect(updated.eventId).toBe(prior.eventId);
-    expect(events.size).toBe(1);
+    expect(await agent.execute('events', { action: 'index', includeInactive: true })).toMatchObject(
+      {
+        events: [{ eventId: prior.eventId, status: 'inactive' }],
+        total: 1,
+        activeProblemsToReview: [],
+      }
+    );
   });
 
   it('permits a genuinely distinct mechanism after explicit overlap review', async () => {
@@ -353,6 +401,235 @@ describe('unified problem lifecycle', () => {
     expect(events.size).toBe(2);
   });
 
+  it('requires current latency and historical comparison for a known emitting duration contract', async () => {
+    mockEmittingServices.push({
+      sourceId: 'source-a',
+      name: 'api',
+      namespace: 'prod',
+      evidenceRef: 'inventory',
+    });
+    getFeatures.mockResolvedValue({
+      hits: [
+        {
+          id: 'api-format',
+          source_id: 'source-a',
+          type: 'schema',
+          description: 'Operation duration_ms and status',
+          properties: { kind: 'log_format', service_name: 'api', service_namespace: 'prod' },
+        },
+      ],
+    });
+    mockEvidenceChecks.mockReturnValue([
+      {
+        query: 'FROM logs-* | WHERE `@timestamp` >= NOW() - 1 minutes',
+        checkedAt: Date.now(),
+        row: { 'service.name': 'api', 'service.namespace': 'prod', p95: '250', n: '50' },
+      },
+    ]);
+    mockReadExecute.mockResolvedValue({
+      results: [
+        {
+          sourceId: 'source-a',
+          rows: [{ 'service.name': 'api' }],
+          rowRefs: ['row-1'],
+        },
+      ],
+    });
+    const agent = session();
+    const scope = {
+      sourceIds: ['source-a'],
+      template: 'custom',
+      lookbackMinutes: 1,
+      serviceNames: ['api'],
+      serviceNamespace: 'prod',
+    };
+    const finish = {
+      outcome: 'partial',
+      coverageComplete: false,
+      summary: 'Outcomes checked; latency not yet assessed.',
+      remainingGaps: [],
+      monitoringBlocker: 'Native rule validation is unavailable in this fixture.',
+    };
+    await agent.execute('source_esql', {
+      ...scope,
+      pipeline: '| STATS n=COUNT(*) BY service.name,service.namespace',
+    });
+    expect(await agent.execute('finish_exploration', finish)).toMatchObject({
+      finished: false,
+      unassessedLatency: [{ name: 'api', missing: ['current', 'historical'] }],
+    });
+    const latency = '| STATS p95=PERCENTILE(duration_ms,95) BY service.name,service.namespace';
+    await agent.execute('source_esql', { ...scope, pipeline: latency });
+    expect(await agent.execute('finish_exploration', finish)).toMatchObject({
+      finished: false,
+      unassessedLatency: [{ name: 'api', missing: ['historical'] }],
+    });
+    await agent.execute('source_esql', { ...scope, pipeline: latency, endOffsetMinutes: 30 });
+    expect(await agent.execute('finish_exploration', finish)).toMatchObject({ finished: true });
+  });
+
+  it.each([false, true])(
+    'finishes explicitly partial after scoped duration aggregates have no usable population (empty=%s)',
+    async (empty) => {
+      mockEmittingServices.push({
+        sourceId: 'source-a',
+        name: 'api',
+        namespace: 'prod',
+        evidenceRef: 'inventory',
+      });
+      getFeatures.mockResolvedValue({
+        hits: [
+          {
+            id: 'api-format',
+            source_id: 'source-a',
+            type: 'schema',
+            description: 'Request duration_ms',
+            properties: { service_name: 'api', service_namespace: 'prod' },
+          },
+        ],
+      });
+      mockEvidenceChecks.mockReturnValue([
+        {
+          query: 'FROM logs-* | WHERE `@timestamp` >= NOW() - 1 minutes',
+          checkedAt: Date.now(),
+          row: { 'service.name': 'api', 'service.namespace': 'prod', p95: '', n: '0' },
+        },
+      ]);
+      mockReadExecute.mockResolvedValue({
+        results: [
+          { sourceId: 'source-a', rows: empty ? [] : [[0, null]], rowRefs: empty ? [] : ['row-1'] },
+        ],
+      });
+      const agent = session();
+      const read = {
+        sourceIds: ['source-a'],
+        template: 'custom',
+        lookbackMinutes: 1,
+        serviceNames: ['api'],
+        serviceNamespace: 'prod',
+        pipeline:
+          '| STATS n=COUNT(duration_ms),p95=PERCENTILE(duration_ms,95) BY service.name,service.namespace',
+      };
+      await agent.execute('source_esql', read);
+      await agent.execute('source_esql', { ...read, endOffsetMinutes: 30 });
+      expect(
+        await agent.execute('finish_exploration', {
+          outcome: 'assessed',
+          coverageComplete: true,
+          summary: 'No request duration population.',
+          remainingGaps: [],
+          monitoringBlocker: 'No request population supports a monitor.',
+        })
+      ).toMatchObject({ finished: true, outcome: 'partial', coverageComplete: false });
+      expect(run.remainingGaps).toContainEqual(expect.stringContaining('not proof of health'));
+    }
+  );
+
+  it.each(['historical', 'stale', 'sampled'])(
+    'does not use %s reads as current emitter coverage',
+    async (kind) => {
+      mockEmittingServices.push({
+        sourceId: 'source-a',
+        name: 'api',
+        namespace: 'prod',
+        evidenceRef: 'inventory',
+      });
+      mockEvidenceChecks.mockReturnValue([
+        {
+          query: 'FROM logs-* | WHERE `@timestamp` >= NOW() - 1 minutes',
+          checkedAt: kind === 'stale' ? Date.now() - 4 * 60000 : Date.now(),
+          row: { 'service.name': 'api', 'service.namespace': 'prod', successes: '10' },
+        },
+      ]);
+      mockReadExecute.mockResolvedValue({
+        results: [{ sourceId: 'source-a', rows: [[10]], rowRefs: ['row-1'] }],
+      });
+      const agent = session();
+      await agent.execute('source_esql', {
+        sourceIds: ['source-a'],
+        template: 'custom',
+        lookbackMinutes: 1,
+        endOffsetMinutes: kind === 'historical' ? 30 : 0,
+        sampleProbability: kind === 'sampled' ? 0.02 : 1,
+        pipeline: '| STATS successes=COUNT(*) BY service.name,service.namespace',
+      });
+      expect(
+        await agent.execute('finish_exploration', {
+          outcome: 'assessed',
+          coverageComplete: true,
+          summary: 'A read occurred.',
+          remainingGaps: [],
+          monitoringBlocker: 'No monitor change in fixture.',
+        })
+      ).toMatchObject({
+        finished: false,
+        unassessedServices: [{ name: 'api', namespace: 'prod' }],
+      });
+      expect(agent.finished).toBe(false);
+    }
+  );
+
+  it('performs one bounded stale-outcome refresh instead of an endless sliding sweep', async () => {
+    getFeatures.mockResolvedValue({
+      hits: [
+        {
+          id: 'api-format',
+          source_id: 'source-a',
+          type: 'schema',
+          description: 'HTTP status contract',
+          properties: { service_name: 'api', service_namespace: 'prod' },
+        },
+      ],
+    });
+    let at = Date.now();
+    const clock = jest.spyOn(Date, 'now').mockImplementation(() => at);
+    try {
+      mockEmittingServices.push({
+        sourceId: 'source-a',
+        name: 'api',
+        namespace: 'prod',
+        evidenceRef: 'inventory',
+      });
+      mockEvidenceChecks.mockImplementation(() => [
+        {
+          query: 'FROM logs-* | WHERE `@timestamp` >= NOW() - 1 minutes',
+          checkedAt: at,
+          row: { 'service.name': 'api', 'service.namespace': 'prod', successes: '10' },
+        },
+      ]);
+      mockReadExecute.mockResolvedValue({
+        results: [{ sourceId: 'source-a', rows: [[10]], rowRefs: ['row-1'] }],
+      });
+      const agent = session();
+      const read = { template: 'custom', lookbackMinutes: 1 };
+      const finish = {
+        outcome: 'assessed',
+        coverageComplete: true,
+        summary: 'Current outcomes checked.',
+        remainingGaps: [],
+        monitoringBlocker: 'No monitoring change justified in this fixture.',
+      };
+      await agent.execute('source_esql', read);
+      at += 4 * 60000;
+      expect(await agent.execute('finish_exploration', finish)).toMatchObject({
+        finished: false,
+        unassessedServices: [{ name: 'api' }],
+      });
+      await agent.execute('source_esql', read);
+      at += 4 * 60000;
+      expect(await agent.execute('finish_exploration', finish)).toMatchObject({
+        finished: true,
+        outcome: 'partial',
+        coverageComplete: false,
+      });
+      expect(run.remainingGaps).toContainEqual(
+        expect.stringContaining('bounded current-outcome refresh completed')
+      );
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it('continues pending current service checks while budget and data remain', async () => {
     mockEmittingServices.push({
       sourceId: 'source-a',
@@ -368,6 +645,7 @@ describe('unified problem lifecycle', () => {
       remainingGaps: ['Worker not checked'],
     };
     for (let attempt = 0; attempt < 2; attempt++) {
+      mockEmittingServices[0].evidenceRef = `refreshed-inventory-${attempt}`;
       expect(await agent.execute('finish_exploration', finish)).toHaveProperty('finished', false);
       expect(agent.finished).toBe(false);
     }
@@ -396,34 +674,57 @@ describe('unified problem lifecycle', () => {
     expect(run.coverageComplete).toBe(false);
   });
 
-  it('finishes partial after a current scoped empty read without treating that service as healthy', async () => {
-    mockEmittingServices.push({
-      sourceId: 'source-a',
-      name: 'worker',
-      namespace: 'prod',
-      evidenceRef: 'row-2',
-    });
-    const agent = session();
-    mockReadExecute.mockResolvedValue({
-      results: [{ sourceId: 'source-a', rows: [], rowRefs: [] }],
-    });
-    await agent.execute('source_esql', {
-      template: 'samples',
-      lookbackMinutes: 3,
-      serviceNames: ['worker'],
-      serviceNamespace: 'prod',
-    });
-    const result = await agent.execute('finish_exploration', {
-      outcome: 'partial',
-      summary: 'Worker checked but no rows',
-      coverageComplete: true,
-      remainingGaps: [],
-      monitoringBlocker: 'No current outcome rows to validate a monitor',
-    });
-    expect(result).toHaveProperty('finished', true);
-    expect(run.coverageComplete).toBe(false);
-    expect(run.remainingGaps).toContainEqual(expect.stringContaining('not proof of health'));
-  });
+  it.each([false, true])(
+    'keeps a scoped current empty read unknown even after historical data (history=%s)',
+    async (history) => {
+      mockEmittingServices.push({
+        sourceId: 'source-a',
+        name: 'worker',
+        namespace: 'prod',
+        evidenceRef: 'row-2',
+      });
+      const agent = session();
+      mockReadExecute.mockResolvedValue({
+        results: [{ sourceId: 'source-a', rows: [], rowRefs: [] }],
+      });
+      await agent.execute('source_esql', {
+        template: 'samples',
+        lookbackMinutes: 3,
+        serviceNames: ['worker'],
+        serviceNamespace: 'prod',
+      });
+      if (history) {
+        mockReadExecute.mockResolvedValue({
+          results: [{ sourceId: 'source-a', rows: [[10]], rowRefs: ['old-row'] }],
+        });
+        mockEvidenceChecks.mockReturnValue([
+          {
+            query:
+              'FROM logs-* | WHERE `@timestamp` >= NOW() - 31 minutes AND `@timestamp` < NOW() - 30 minutes',
+            checkedAt: Date.now(),
+            row: { 'service.name': 'worker', 'service.namespace': 'prod', successes: '10' },
+          },
+        ]);
+        await agent.execute('source_esql', {
+          template: 'custom',
+          lookbackMinutes: 1,
+          endOffsetMinutes: 30,
+          serviceNames: ['worker'],
+          serviceNamespace: 'prod',
+        });
+      }
+      const result = await agent.execute('finish_exploration', {
+        outcome: 'partial',
+        summary: 'Worker checked but no rows',
+        coverageComplete: true,
+        remainingGaps: [],
+        monitoringBlocker: 'No current outcome rows to validate a monitor',
+      });
+      expect(result).toHaveProperty('finished', true);
+      expect(run.coverageComplete).toBe(false);
+      expect(run.remainingGaps).toContainEqual(expect.stringContaining('not proof of health'));
+    }
+  );
 
   it('recognizes a single-service scoped aggregate even when its projection omits identity columns', async () => {
     mockEmittingServices.push({
@@ -518,7 +819,7 @@ describe('unified problem lifecycle', () => {
     getFeatures.mockResolvedValue({ hits: [] });
     const agent = session();
     mockReadExecute.mockResolvedValue({ results: [{ sourceId: 'source-a', rowRefs: ['row-1'] }] });
-    await agent.execute('source_esql', { template: 'custom' });
+    await agent.execute('source_esql', { template: 'custom', lookbackMinutes: 1 });
     const finish = {
       outcome: 'partial',
       summary: 'No current incident',

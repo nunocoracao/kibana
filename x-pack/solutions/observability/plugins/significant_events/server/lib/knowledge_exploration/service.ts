@@ -937,7 +937,7 @@ export class KnowledgeExplorationService {
             now: run.startedAt,
             limits,
             instruction:
-              'Find current problems or verify recovery of existing problems. Read existing native knowledge/query and monitoring inventories, persist newly confirmed system knowledge and reusable measurements, and create or improve useful native monitoring coverage. Begin with source and existing-event inventories, then investigate current evidence. Call finish_exploration with honest coverage and unfinished work.',
+              'Find current problems and verify recovery promptly. Begin with sources, ACTIVE/RECOVERING events and fresh operation outcomes; inactive history is only for a fresh recurrence/identity check. Prior run summaries and unfinished gaps are hypotheses, not current truth. Count actual failed operations regardless of diagnostic cause/provenance labels. Write a confirmed current problem or recovery before background learning, exhaustive inventories or rule installation. Refresh cheap known measurements for terminal outcomes, latency and progress/correctness across current emitters; a zero-5xx aggregate does not assess successful-operation latency or invariants. Sample dense exploration deliberately and confirm candidates exactly. Then persist newly verified knowledge/measurements and improve useful monitoring. Call finish_exploration with honest current assessments and concrete unfinished work.',
           }),
         },
       ];

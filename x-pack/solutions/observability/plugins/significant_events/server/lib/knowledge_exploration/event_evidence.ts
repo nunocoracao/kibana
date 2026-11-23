@@ -20,11 +20,33 @@ export const buildEventQuerySignals = (
   checks: EventEvidenceCheck[],
   description: string,
   inactive: boolean,
-  references: Array<{ sourceId: string; queryId?: string; ruleId?: string }> = []
+  references: Array<{ sourceId: string; queryId?: string; ruleId?: string }> = [],
+  affectedFeatures: Feature[] = []
 ): SignalEntry[] => {
+  const entities = affectedFeatures.filter((feature) => feature.type === 'entity');
+  const outsideAffectedScope = (check: EventEvidenceCheck): boolean => {
+    const identity = rowIdentity(check.row);
+    return Boolean(
+      entities.length &&
+        identity.name &&
+        !entities.some(
+          (feature) =>
+            feature.source_id === check.sourceId &&
+            feature.properties.name === identity.name &&
+            (!identity.namespace ||
+              (feature.properties.service_namespace ?? feature.properties.namespace) ===
+                identity.namespace)
+        )
+    );
+  };
   const groups = new Map<string, EventEvidenceCheck[]>();
   for (const check of checks) {
-    const key = JSON.stringify([check.sourceId, check.query, check.checkedAt]);
+    const key = JSON.stringify([
+      check.sourceId,
+      check.query,
+      check.checkedAt,
+      outsideAffectedScope(check),
+    ]);
     groups.set(key, [...(groups.get(key) ?? []), check]);
   }
   return [...groups.values()].map((group) => {
@@ -33,6 +55,7 @@ export const buildEventQuerySignals = (
     const minutes = Number(/NOW\(\)\s*-\s*(\d+)\s+minutes/i.exec(check.query)?.[1] ?? 3);
     const offset = Number(/<\s*NOW\(\)\s*-\s*(\d+)\s+minutes/i.exec(check.query)?.[1] ?? 0);
     const historicalComparison = offset > 0 || minutes > 3;
+    const outsideScope = outsideAffectedScope(check);
     const query = check.query.replace(
       /"(?:\\.|""|[^"\\])*"|'(?:\\.|''|[^'\\])*'|`(?:``|[^`])*`|\bNOW\(\)/gi,
       (token) => (/^NOW\(\)$/i.test(token) ? `TO_DATETIME("${at}")` : token)
@@ -54,12 +77,16 @@ export const buildEventQuerySignals = (
         ...(ruleIds.length === 1 ? { rule_uuid: ruleIds[0] } : {}),
       },
       description: `${
-        historicalComparison ? 'Historical comparison; not a current-state confirmation. ' : ''
+        historicalComparison
+          ? 'Historical comparison; not a current-state confirmation. '
+          : outsideScope
+          ? 'Context from outside the affected service scope; not confirmation of this problem. '
+          : ''
       }${description}\nObserved rows: ${JSON.stringify(
         group.slice(0, 5).map((entry) => entry.row)
       ).slice(0, 4000)}`,
       verdict:
-        historicalComparison || /\|\s*SAMPLE\s+(?:0|\.)/i.test(check.query)
+        historicalComparison || outsideScope || /\|\s*SAMPLE\s+(?:0|\.)/i.test(check.query)
           ? 'inconclusive'
           : inactive
           ? 'refutes'
