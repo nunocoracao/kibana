@@ -10,7 +10,7 @@ import { SEVERITY_CONTRACT_RULE, CONFIDENCE_CONTRACT_RULE } from '@kbn/significa
 
 import type { KibanaRequest } from '@kbn/core/server';
 import type { ChatCompletionTokenCount, Message } from '@kbn/inference-common';
-import { MessageRole } from '@kbn/inference-common';
+import { MessageRole, defaultInferenceEndpoints } from '@kbn/inference-common';
 import { OBSERVABILITY_NIGHTSHIFT_CONTINUOUS_ONBOARDING_ENABLED } from '@kbn/management-settings-ids';
 import type { NightshiftSource } from '@kbn/nightshift-shared';
 import { randomUUID } from 'node:crypto';
@@ -184,15 +184,19 @@ export class KnowledgeExplorationService {
         );
       return { connectorId: connector.connectorId, model: connector.name };
     }
-    const lunaPro = connectors.find((connector) =>
-      /gpt[- .]?6[- .]?luna[- .]?pro/i.test(connector.connectorId + ' ' + connector.name)
-    );
-    if (!lunaPro)
+    const luna =
+      connectors.find(
+        (connector) => connector.connectorId === defaultInferenceEndpoints.OPENAI_GPT_6_LUNA
+      ) ??
+      connectors.find((connector) =>
+        /\bgpt[- .]?6[- .]?luna\b(?![- .]?pro\b)/i.test(connector.name)
+      );
+    if (!luna)
       throw new StatusError(
-        'Configure a Luna 6 Pro inference connector before running an agent',
+        'Configure a GPT-6 Luna inference connector before running an agent',
         409
       );
-    return { connectorId: lunaPro.connectorId, model: lunaPro.name };
+    return { connectorId: luna.connectorId, model: luna.name };
   }
 
   async intervalMinutes(request: KibanaRequest): Promise<number> {

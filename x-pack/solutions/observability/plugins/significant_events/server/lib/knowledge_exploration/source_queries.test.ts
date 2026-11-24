@@ -69,6 +69,20 @@ describe('source query planning and evidence', () => {
     expect(session.examined.size).toBe(0);
   });
 
+  it('returns a query-repair action without registering failed SQL as health evidence', async () => {
+    await session.execute('source_esql', args);
+    query.mockRejectedValueOnce(new Error('verification_exception: Unknown column [metric.name]'));
+    const result = await session.execute('source_esql', args);
+    expect(result).toMatchObject({
+      failed: true,
+      results: [
+        { coverageComplete: false, nextAction: expect.stringContaining('template=schema') },
+      ],
+    });
+    expect(session.examined.size).toBe(0);
+    expect(session.blocked).toBe(false);
+  });
+
   it('pages a custom aggregate beyond the first group without repeating it', async () => {
     await session.execute('source_esql', args);
     query.mockResolvedValue({

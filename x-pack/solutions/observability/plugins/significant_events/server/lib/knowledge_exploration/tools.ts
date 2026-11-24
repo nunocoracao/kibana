@@ -1420,6 +1420,8 @@ export class ExplorationToolSession {
             endOffsetMinutes: args.endOffsetMinutes,
             nextAction: timedOut
               ? 'Reduce the time interval or scope services/fields; try a short volume probe and separate older intervals. Do not repeat the same broad scan or treat timeout as absent data.'
+              : /verification_exception|parsing_exception|Unknown column/i.test(message)
+              ? 'Repair the query before retrying. For unknown columns, call source_esql template=schema in this source with fieldSearch and pagination, then profile the observed fields; JSON message keys are not mapped columns. Define computed aliases before use and retain needed columns across STATS/KEEP boundaries. For parsing errors call esql_guide topic=errors; quote reserved aliases and dotted column names. Keep the same bounded scope. Failed queries provide no incident or recovery evidence.'
               : undefined,
             coverageComplete: false,
           });

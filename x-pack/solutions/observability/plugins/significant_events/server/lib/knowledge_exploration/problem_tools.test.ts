@@ -236,6 +236,79 @@ describe('unified problem lifecycle', () => {
     expect(events.get(String(created.eventId))?.status).toBe('active');
   });
 
+  it.each([4 * 60 * 60 * 1000, 4 * 60 * 60 * 1000 + 1])(
+    'preserves inactive history and chooses the correct recurrence at age %i ms',
+    async (age) => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-11-24T10:00:00Z'));
+      try {
+        const created = await session().execute('events', input);
+        await session().execute('events', {
+          ...input,
+          eventId: created.eventId,
+          status: 'inactive',
+        });
+        const closed = { ...events.get(String(created.eventId))! };
+        jest.advanceTimersByTime(age);
+        const resumed = await session().execute('events', { ...input, eventId: created.eventId });
+        if (age === 4 * 60 * 60 * 1000) {
+          expect(resumed.eventId).toBe(created.eventId);
+          expect(events.size).toBe(1);
+        } else {
+          expect(resumed.eventId).not.toBe(created.eventId);
+          expect(resumed).toMatchObject({
+            issueKey: input.issueKey,
+            previousEventId: created.eventId,
+            createdNewOccurrence: true,
+          });
+          expect(events.get(String(created.eventId))).toEqual(closed);
+          expect(events.get(String(resumed.eventId))?.status).toBe('active');
+          const continued = await session().execute('events', {
+            ...input,
+            eventId: created.eventId,
+          });
+          expect(continued.eventId).toBe(resumed.eventId);
+          expect(events.size).toBe(2);
+          await session().execute('events', {
+            ...input,
+            eventId: resumed.eventId,
+            status: 'inactive',
+          });
+          const recentRecurrence = await session().execute('events', input);
+          expect(recentRecurrence.eventId).toBe(resumed.eventId);
+          expect(events.size).toBe(2);
+        }
+      } finally {
+        jest.useRealTimers();
+      }
+    }
+  );
+
+  it('leaves an inactive closing assessment untouched instead of refreshing its age', async () => {
+    const created = await session().execute('events', input);
+    await session().execute('events', { ...input, eventId: created.eventId, status: 'inactive' });
+    const closed = { ...events.get(String(created.eventId))! };
+    await session().execute('events', {
+      ...input,
+      eventId: created.eventId,
+      status: 'inactive',
+      summary: 'Redundant old assessment',
+    });
+    expect(events.get(String(created.eventId))).toEqual(closed);
+  });
+
+  it('uses a valid existing eventId when the model redundantly changes the issueKey', async () => {
+    const created = await session().execute('events', input);
+    const continued = await session().execute('events', {
+      ...input,
+      eventId: created.eventId,
+      issueKey: 'improved-description',
+      title: 'A clearer title',
+    });
+    expect(continued).toMatchObject({ eventId: created.eventId, issueKey: input.issueKey });
+    expect(events.get(String(created.eventId))?.title).toBe('A clearer title');
+    expect(events.size).toBe(1);
+  });
+
   it('retains real measurement/rule references while excluding an unbacked query generated rule ID', async () => {
     getSourceToQueryLinksMap.mockResolvedValue({
       'source-a': [

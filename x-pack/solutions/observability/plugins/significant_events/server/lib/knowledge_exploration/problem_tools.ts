@@ -4,6 +4,7 @@
  * 2.0; you may not use this file except in compliance with the Elastic License
  * 2.0.
  */
+import { randomUUID } from 'node:crypto';
 import type { KibanaRequest } from '@kbn/core/server';
 import type { ToolDefinition } from '@kbn/inference-common';
 import type { NightshiftSource } from '@kbn/nightshift-shared';
@@ -20,6 +21,12 @@ import { buildEventQuerySignals, resolveEventFeatures } from './event_evidence';
 import { rowIdentity } from './dependency_evidence';
 
 export const PROBLEM_EVENT_PREFIX = 'nightshift-problem-';
+const INACTIVE_EVENT_REUSE_MS = 4 * 60 * 60 * 1000;
+const problemIdentity = (id: string): string =>
+  id.replace(/--[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/, '');
+const expiredInactiveEvent = (event: SignificantEvent): boolean =>
+  event.status === 'inactive' &&
+  Date.now() - Date.parse(event['@timestamp']) > INACTIVE_EVENT_REUSE_MS;
 const text = lazySchema(() => z.string().min(1).max(255));
 const boundedText = (maxLength: number, minLength = 1) => ({
   type: 'string' as const,
@@ -78,7 +85,7 @@ export const problemTools: Record<string, ToolDefinition> = {
   events: {
     ...discoveryTools.events,
     description:
-      'Index/read/upsert this agent’s native significant events, or review an unchanged active event. Index defaults to active/recovering problems only. Use includeInactive=true only after current telemetry suggests a recurrence or identity lookup; inactive events do not need routine health checks. Direct source telemetry can establish a problem before a rule fires. Every write must have actual query signals and at least one affected entity reference. The server attaches executed query evidence automatically; pass actual featureIds for affected services/dependencies, queryIds for saved measurements and ruleIds for relevant native monitors. It can resolve cited emitting service rows to existing KIs when namespace is unambiguous. Save a missing verified entity first. Surface a confirmed problem immediately with its executed query signals; create useful problem-specific native monitoring afterward and attach its real ruleIds; never invent a firing or detection ID. Index existing problems before creating any. A new issueKey overlapping prior affected entities requires identity review: reuse the prior event for recurrence/narrowed attribution. Only a genuinely independent mechanism may use separateFromEventIds with an explicit distinctProblemReason. issueKey is a stable lowercase slug naming namespace, service/operation and failure mechanism, never a time or run ID. Reuse eventId and issueKey for continuation, recovery and recurrence. upsert requires sourceIds, evidenceRefs from THIS run, title, summary, assessmentNote and active/inactive status. Every selected source needs fresh evidence from source_esql lookbackMinutes<=3, endOffsetMinutes=0. Historical errors do not establish current failure. For recovery, verify positive healthy operation outcomes and clearance of all confirming mechanisms; missing data, a stopped container or a successful fault revert alone do not prove recovery. New healthy/false-alarm candidates create no events. Review means the existing operational problem remains supported; refuted or benign earlier findings must be updated inactive, not merely left active. Review an unchanged active event with action=review, eventId and current evidenceRefs; finish requires every prior active problem reviewed, or an honest partial outcome. assessmentNote must fit 900 characters. Confidence is 0 to 1. causalFeatureIds must also appear in featureIds. Use the canonical event severity and confidence contracts in the system instructions. Feature IDs are optional actual logical KI IDs in the selected sources. Operator deactivations are honored. Actual queries/results remain in the run trace; the native event links to the run in its assessment note.',
+      'Index/read/upsert this agent’s native significant events, or review an unchanged active event. Index defaults to active/recovering problems only. Use includeInactive=true only after current telemetry suggests a recurrence or identity lookup; inactive events do not need routine health checks. Direct source telemetry can establish a problem before a rule fires. Every write must have actual query signals and at least one affected entity reference. The server attaches executed query evidence automatically; pass actual featureIds for affected services/dependencies, queryIds for saved measurements and ruleIds for relevant native monitors. It can resolve cited emitting service rows to existing KIs when namespace is unambiguous. Save a missing verified entity first. Surface a confirmed problem immediately with its executed query signals; create useful problem-specific native monitoring afterward and attach its real ruleIds; never invent a firing or detection ID. Index existing problems before creating any. A new issueKey overlapping prior affected entities requires identity review: reuse the prior event for continuation, recent recurrence or narrowed attribution. Inactive events older than four hours are preserved: the tool automatically creates a new occurrence for a fresh active finding. Only a genuinely independent mechanism may use separateFromEventIds with an explicit distinctProblemReason. issueKey is a stable lowercase slug naming namespace, service/operation and failure mechanism, never a time or run ID. Reuse eventId and issueKey for continuation and recovery. For recurrence, pass the known identity; the server reopens only within four hours of the last inactive assessment, then creates a new event without modifying the old one. A valid eventId is authoritative if a redundant issueKey differs. upsert requires sourceIds, evidenceRefs from THIS run, title, summary, assessmentNote and active/inactive status. Every selected source needs fresh evidence from source_esql lookbackMinutes<=3, endOffsetMinutes=0. Historical errors do not establish current failure. For recovery, verify positive healthy operation outcomes and clearance of all confirming mechanisms; missing data, a stopped container or a successful fault revert alone do not prove recovery. New healthy/false-alarm candidates create no events. Review means the existing operational problem remains supported; refuted or benign earlier findings must be updated inactive, not merely left active. Review an unchanged active event with action=review, eventId and current evidenceRefs; finish requires every prior active problem reviewed, or an honest partial outcome. assessmentNote must fit 900 characters. Confidence is 0 to 1. causalFeatureIds must also appear in featureIds. Use the canonical event severity and confidence contracts in the system instructions. Feature IDs are optional actual logical KI IDs in the selected sources. Operator deactivations are honored. Actual queries/results remain in the run trace; the native event links to the run in its assessment note.',
     schema: {
       type: 'object',
       required: ['action'],
@@ -914,7 +921,7 @@ export class ProblemToolSession {
           .filter((event) => event.event_id.startsWith(PROBLEM_EVENT_PREFIX))
           .map((event) => ({
             eventId: event.event_id,
-            issueKey: event.event_id.slice(PROBLEM_EVENT_PREFIX.length),
+            issueKey: problemIdentity(event.event_id).slice(PROBLEM_EVENT_PREFIX.length),
             status: event.status,
             title: event.title,
             summary: event.summary,
@@ -939,21 +946,17 @@ export class ProblemToolSession {
         ),
       };
     }
-    const id = args.eventId ?? (args.issueKey ? PROBLEM_EVENT_PREFIX + args.issueKey : undefined);
+    let id = args.eventId ?? (args.issueKey ? PROBLEM_EVENT_PREFIX + args.issueKey : undefined);
     if (!id?.startsWith(PROBLEM_EVENT_PREFIX))
       throw new Error('Use an existing owned eventId or a stable issueKey.');
-    const prior = await search.findLatestByEventId(id);
+    let prior = await search.findLatestByEventId(id);
     if (args.eventId && !prior)
       throw new Error('eventId must identify an existing event in this space.');
-    if (args.issueKey && id !== PROBLEM_EVENT_PREFIX + args.issueKey)
-      throw new Error('Preserve the original issueKey on continuing problems.');
+    // A validated eventId is authoritative when a redundant issueKey differs.
+    const identity = problemIdentity(id);
     const sourceIds = args.sourceIds.length ? args.sourceIds : prior?.source_ids ?? [];
     if (!sourceIds.length || sourceIds.some((sourceId) => !enabled.has(sourceId)))
       throw new Error('Every source must be enabled in this space.');
-    if (prior && prior.source_ids.some((sourceId) => !sourceIds.includes(sourceId)))
-      throw new Error(
-        'Recheck every source already confirming this problem; do not drop unchecked sources.'
-      );
     const checks = sourceIds.flatMap((sourceId) =>
       args.evidenceRefs.flatMap((ref) => {
         try {
@@ -1001,6 +1004,41 @@ export class ProblemToolSession {
       throw new Error('upsert requires title, summary, assessmentNote, and status.');
     if (!prior && args.status === 'inactive')
       return { ignored: true, reason: 'Healthy or refuted candidates do not create events.' };
+    const ki = await this.clients.getKnowledgeIndicatorClient();
+    const known = (await ki.getFeatures(sourceIds, { limit: 10000 })).hits;
+    if (!prior || prior.status === 'inactive') {
+      const affectedIds = resolveEventFeatures(known, checks, args.featureIds)
+        .filter((feature) => feature.type === 'entity')
+        .map((feature) => feature.id);
+      if (affectedIds.length) await this.loadHistoricalIdentities(sourceIds, affectedIds);
+      const latest = [...this.knownEvents.values(), ...(prior ? [prior] : [])]
+        .filter((event) => problemIdentity(event.event_id) === identity)
+        .sort(
+          (a, b) =>
+            Number(b.status !== 'inactive') - Number(a.status !== 'inactive') ||
+            Date.parse(b['@timestamp']) - Date.parse(a['@timestamp'])
+        )[0];
+      if (latest) {
+        id = latest.event_id;
+        prior = await search.findLatestByEventId(id);
+      }
+    }
+    if (
+      prior &&
+      !expiredInactiveEvent(prior) &&
+      prior.source_ids.some((sourceId) => !sourceIds.includes(sourceId))
+    )
+      throw new Error(
+        'Recheck every source already confirming this problem; do not drop unchecked sources.'
+      );
+    let previousEventId: string | undefined;
+    if (prior?.status === 'inactive' && (reviewing || args.status === 'inactive'))
+      return { eventId: id, status: 'inactive', unchanged: true };
+    if (prior && expiredInactiveEvent(prior)) {
+      previousEventId = id;
+      id = identity + '--' + randomUUID();
+      prior = undefined;
+    }
     if (prior?.status === 'inactive') {
       const deactivations = await search.findEventDeactivations(id);
       if (deactivations.some((entry) => entry.episode_id === prior.episode_id)) {
@@ -1008,8 +1046,6 @@ export class ProblemToolSession {
         return { eventId: id, operatorDismissalHonored: true, status: 'inactive' };
       }
     }
-    const ki = await this.clients.getKnowledgeIndicatorClient();
-    const known = (await ki.getFeatures(sourceIds, { limit: 10000 })).hits;
     const priorEntityIds = (prior?.blast_radius ?? []).flatMap((entry) =>
       entry.type === 'entity' ? [entry.feature_id] : []
     );
@@ -1070,6 +1106,7 @@ export class ProblemToolSession {
       );
       const related = [...this.knownEvents.values()].filter(
         (event) =>
+          !expiredInactiveEvent(event) &&
           event.source_ids.some((sourceId) => sourceIds.includes(sourceId)) &&
           event.blast_radius?.some((entity) =>
             features.some((feature) => feature.id === entity.feature_id)
@@ -1089,7 +1126,7 @@ export class ProblemToolSession {
             summary: event.summary,
           })),
           nextAction:
-            'These prior problems overlap the affected entities. Reuse the matching eventId/issueKey for continuation or recurrence, including when new evidence narrows the affected path or improves causal attribution. Unknown earlier cause is not a new mechanism. If this is genuinely independent, explicitly acknowledge the related IDs in separateFromEventIds and explain the distinct failure mechanism in distinctProblemReason. Do not create a duplicate merely because the title or available evidence changed.',
+            'These prior problems overlap the affected entities. Reuse the matching eventId/issueKey for continuation or recent recurrence, including when new evidence narrows the affected path or improves causal attribution. Unknown earlier cause is not a new mechanism. If this is genuinely independent, explicitly acknowledge the related IDs in separateFromEventIds and explain the distinct failure mechanism in distinctProblemReason. Do not create a duplicate merely because the title or available evidence changed.',
         };
     }
     let priorSignals = prior?.signals ?? [];
@@ -1217,7 +1254,8 @@ export class ProblemToolSession {
     if (status === 'active' || status === 'inactive') this.run.discovery[status]++;
     return {
       eventId: id,
-      issueKey: id.slice(PROBLEM_EVENT_PREFIX.length),
+      issueKey: identity.slice(PROBLEM_EVENT_PREFIX.length),
+      ...(previousEventId ? { previousEventId, createdNewOccurrence: true } : {}),
       status,
       ...(reviewing ? { reviewed: true } : {}),
       storedAs: 'native_alert',
