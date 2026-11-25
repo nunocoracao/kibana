@@ -16,6 +16,7 @@ import {
 import { combineWhere, inPredicate, inSpace, IS_NOT_DELETED } from '../esql_helpers';
 import {
   esqlToObjects,
+  escapeEsqlLikePattern,
   executeCountQuery,
   executeAndDecodeSource,
   pickLatestPerGroup,
@@ -53,6 +54,128 @@ export class RevisionReader {
     private readonly logger: Logger,
     private readonly space: string
   ) {}
+
+  async catalog(options: {
+    sourceIds: string[];
+    asOf: string;
+    terms: string[];
+    kind?: 'feature' | 'query';
+    featureType?: string;
+    after?: LatestRevisionCursor;
+    size: number;
+    countOnly: boolean;
+  }) {
+    const { sourceIds, asOf, terms, kind, featureType, after, size, countOnly } = options;
+    type Entry = Record<string, unknown> & {
+      id: string;
+      type: string;
+      'source.id': string;
+      'feature.slug'?: string;
+      title: string;
+    };
+    type Group = { sourceId: string; kind: string; category: string; count: number };
+    if (!sourceIds.length)
+      return {
+        total: 0,
+        queryTotal: 0,
+        groups: [] as Group[],
+        groupsTruncated: false,
+        rows: [] as Entry[],
+        after: undefined,
+      };
+    const buildBase = () => {
+      let base = esql.from([KNOWLEDGE_INDICATORS_DATA_STREAM], ['_id']).where`${inSpace(
+        this.space
+      )}`.where`${esql.col(SOURCE_ID)} IN (${sourceIds.map((id) => esql.str(id))})`
+        .where`@timestamp <= TO_DATETIME(${esql.str(asOf)})`;
+      if (kind) base = base.where`type == ${esql.str(kind)}`;
+      base = pickLatestPerGroup(base, REVISION_GROUP_KEY).where`${IS_NOT_DELETED}`
+        .where`type == "query" OR expires_at IS NULL OR expires_at >= TO_DATETIME(${esql.str(
+        asOf
+      )})`;
+      if (featureType) base = base.where`\`feature.type\` == ${esql.str(featureType)}`;
+      let predicate: LatestSourceWhereCondition | undefined;
+      for (const term of terms) {
+        const literal = esql.str('*' + escapeEsqlLikePattern(term) + '*');
+        for (const column of [
+          'feature.slug',
+          'id',
+          'title',
+          'description',
+          'feature.type',
+          'feature.subtype',
+          'query.esql',
+        ]) {
+          const match = esql.exp`TO_LOWER(TO_STRING(${esql.col(column)})) LIKE ${literal}`;
+          predicate = predicate ? esql.exp`${predicate} OR ${match}` : match;
+        }
+      }
+      base = withWhere(base, predicate);
+      return base;
+    };
+    const read = async <T extends Record<string, unknown>>(query: ReturnType<typeof buildBase>) => {
+      const response = await runEsqlQuery(this.esClient, query.print('basic'));
+      if (response && 'is_partial' in response && response.is_partial)
+        throw new Error('Partial KI inventory. Retry before using the counts or cursor.');
+      return response ? esqlToObjects<T>(response) : [];
+    };
+    const totals = await read<{ kind: string; count: number }>(
+      buildBase().pipe`STATS count=COUNT(*) BY kind=type`.limit(2)
+    );
+    const total = totals.find((row) => row.kind === 'feature')?.count ?? 0;
+    const queryTotal = totals.find((row) => row.kind === 'query')?.count ?? 0;
+    if (countOnly) {
+      const groups = await read<Group>(
+        buildBase().pipe`EVAL category=COALESCE(\`feature.type\`, \`query.query_type\`, type)`
+          .pipe`STATS count=COUNT(*) BY sourceId=\`source.id\`,kind=type,category`
+          .sort(['sourceId', 'ASC'], ['kind', 'ASC'], ['category', 'ASC'])
+          .limit(501)
+      );
+      return {
+        total,
+        queryTotal,
+        groups: groups.slice(0, 500),
+        groupsTruncated: groups.length > 500,
+        rows: [] as Entry[],
+        after: undefined,
+      };
+    }
+    let base = buildBase();
+    if (after)
+      base = base.where`\`source.id\` > ${esql.str(after.sourceId)} OR (\`source.id\` == ${esql.str(
+        after.sourceId
+      )} AND (type > ${esql.str(after.type)} OR (type == ${esql.str(
+        after.type
+      )} AND id > ${esql.str(after.id)})))`;
+    const hits = await read<Entry>(
+      base
+        .sort([SOURCE_ID, 'ASC'], [TYPE, 'ASC'], [ID, 'ASC'])
+        .keep(
+          SOURCE_ID,
+          TYPE,
+          ID,
+          'title',
+          'feature.slug',
+          'feature.type',
+          'feature.subtype',
+          'feature.confidence',
+          'excluded',
+          'query.query_type',
+          'query.rule_backed'
+        )
+        .limit(size + 1)
+    );
+    const last = hits[size - 1];
+    return {
+      total,
+      queryTotal,
+      rows: hits.slice(0, size),
+      after:
+        hits.length > size
+          ? { sourceId: last['source.id'], type: last.type, id: last.id }
+          : undefined,
+    };
+  }
 
   /** Counts latest revisions, or the distinct values of `distinctColumn` among them. */
   async countLatestRevisions(

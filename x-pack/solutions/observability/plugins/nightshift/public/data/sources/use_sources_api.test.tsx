@@ -84,7 +84,7 @@ describe('useSourcesApi requests', () => {
     });
   });
 
-  it('says onboarding is paused only when a source is created in a paused space', async () => {
+  it('explains how to resume detection only when a source is created in a paused space', async () => {
     const created = async (isPaused: boolean) => {
       mockIsPaused = isPaused;
       const { result, addSuccess } = setup();
@@ -99,7 +99,7 @@ describe('useSourcesApi requests', () => {
     });
     expect(await created(true)).toHaveBeenCalledWith({
       title: 'Source "Nginx errors" created',
-      text: expect.stringContaining('Onboarding is paused'),
+      text: expect.stringContaining('Resume detection activity'),
     });
   });
 

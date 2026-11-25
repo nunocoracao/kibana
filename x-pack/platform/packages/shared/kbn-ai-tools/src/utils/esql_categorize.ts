@@ -96,6 +96,8 @@ export function buildCategorizeWithSampleQuery({
 export function parseCategorizeWithSampleRows(
   response: ESQLSearchResponse
 ): CategorizeWithSampleRow[] {
+  if ('is_partial' in response && response.is_partial)
+    throw new Error('ES|QL returned partial results. Narrow the scope and retry.');
   const countIndex = response.columns.findIndex((column) => column.name === 'count');
   const sampleIndex = response.columns.findIndex((column) => column.name === 'sample');
   const patternIndex = response.columns.findIndex((column) => column.name === 'pattern');

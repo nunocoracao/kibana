@@ -15,7 +15,7 @@ const call = (endpoint: string, handler: jest.Mock, spaceId: string) =>
     options: { access: 'internal' },
     security: SECURITY,
     handler,
-  } as never)[endpoint].handler({ request: { spaceId } } as never);
+  } as never)[endpoint].handler({ server: {}, request: { spaceId } } as never);
 
 describe('createServerRoute space gate', () => {
   it('refuses a write outside the default space before the handler runs', async () => {

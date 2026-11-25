@@ -12,15 +12,12 @@ import {
   EuiBasicTable,
   EuiButton,
   EuiButtonEmpty,
-  EuiCodeBlock,
+  EuiCheckbox,
   EuiConfirmModal,
   EuiEmptyPrompt,
   EuiFieldNumber,
   EuiFlexGroup,
   EuiFlexItem,
-  EuiFlyout,
-  EuiFlyoutBody,
-  EuiFlyoutHeader,
   EuiLoadingSpinner,
   EuiPanel,
   EuiSelect,
@@ -40,15 +37,15 @@ import type {
   ExplorationStatus,
   ExplorationStep,
 } from '@kbn/significant-events-plugin/common';
-import { KbnDangerCallout, KbnWarningCallout } from '@kbn/ui-callout';
+import { KbnDangerCallout } from '@kbn/ui-callout';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  PROBLEM_AGENT_ANATOMY_QUERY_KEY,
   PROBLEM_AGENT_RUN_QUERY_KEY,
   PROBLEM_AGENT_STATUS_QUERY_KEY,
 } from '../../../data/query_keys';
 import { useKibana } from '../../../hooks/use_kibana';
 import { RunStep } from './run_step';
+import { groupActivity, specialistName, SpecialistActivity } from './specialist_activity';
 
 const copy = {
   title: i18n.translate('xpack.nightshift.problemAgent.title', {
@@ -114,14 +111,9 @@ const copy = {
 };
 const money = (amount: number) => '$' + amount.toFixed(4);
 const duration = (ms: number) => Math.round(ms / 1000) + 's';
-interface Anatomy {
-  name: string;
-  systemPrompt: string;
-  tools: Array<{ name: string; description?: string; schema: object }>;
-  limits: object;
-  persistence: string[];
-  costEstimate: string;
-}
+const AgentAnatomy = React.lazy(async () => ({
+  default: (await import('./agent_anatomy')).AgentAnatomy,
+}));
 
 export const AgentExplorer = (): React.ReactElement => {
   const { http } = useKibana().services;
@@ -133,7 +125,7 @@ export const AgentExplorer = (): React.ReactElement => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [showAnatomy, setShowAnatomy] = useState(false);
-  const [inspect, setInspect] = useState<ExplorationStep>();
+  const [selectedOutputs, setSelectedOutputs] = useState<string[]>([]);
   const [reset, setReset] = useState<'runs' | 'totals' | 'outputs'>();
   const [showModels, setShowModels] = useState(true);
   const [followLive, setFollowLive] = useState(true);
@@ -157,12 +149,6 @@ export const AgentExplorer = (): React.ReactElement => {
       ),
     enabled: Boolean(activeId),
     refetchInterval: 2000,
-  });
-  const anatomy = useQuery({
-    queryKey: PROBLEM_AGENT_ANATOMY_QUERY_KEY,
-    queryFn: ({ signal }) =>
-      http.get<Anatomy>('/internal/significant_events/problem_agent/anatomy', { signal }),
-    enabled: showAnatomy,
   });
   const run = detail.data;
   const running = Boolean(data?.runningRunId);
@@ -206,7 +192,12 @@ export const AgentExplorer = (): React.ReactElement => {
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
   `;
-  const steps = (run?.steps ?? []).filter((step) => showModels || step.kind === 'tool');
+  const groups = groupActivity(run?.steps ?? []);
+  const waiting =
+    run?.status === 'running' &&
+    groups.find(({ step }) => step.name === 'delegate_specialist' && step.status === 'running')
+      ?.step;
+  const pauseFollowing = () => setFollowLive(false);
   let previousTool: ExplorationStep | undefined;
   return (
     <div
@@ -237,20 +228,6 @@ export const AgentExplorer = (): React.ReactElement => {
                 error ??
                 (status.error instanceof Error ? status.error.message : String(status.error))
               }
-            />
-            <EuiSpacer />
-          </>
-        )}
-        {data?.costEstimateComplete === false && (
-          <>
-            <KbnWarningCallout
-              title={i18n.translate('xpack.nightshift.problemAgent.incompleteEstimate', {
-                defaultMessage: 'Total cost estimate incomplete',
-              })}
-              text={i18n.translate('xpack.nightshift.problemAgent.incompleteEstimateDescription', {
-                defaultMessage:
-                  'The cumulative total includes runs with missing usage or pricing. Timed-out or interrupted model requests can be billed without returning usage. Affected runs are marked *; later runs can still have complete estimates.',
-              })}
             />
             <EuiSpacer />
           </>
@@ -512,7 +489,10 @@ export const AgentExplorer = (): React.ReactElement => {
               data-test-subj="nightshiftAgentExplorerButton"
               size="xs"
               color="danger"
-              onClick={() => setReset('outputs')}
+              onClick={() => {
+                setSelectedOutputs([]);
+                setReset('outputs');
+              }}
               disabled={busy}
             >
               {copy.resetOutputs}
@@ -535,6 +515,7 @@ export const AgentExplorer = (): React.ReactElement => {
             <EuiFlexItem grow={false}>
               <EuiSwitch
                 compressed
+                data-test-subj="nightshiftAgentExplorerShowModels"
                 label={copy.models}
                 checked={showModels}
                 onChange={(event) => setShowModels(event.target.checked)}
@@ -551,6 +532,16 @@ export const AgentExplorer = (): React.ReactElement => {
             </EuiFlexItem>
           </EuiFlexGroup>
           <EuiSpacer size="m" />
+          {waiting && (
+            <EuiText size="s" role="status">
+              <strong>
+                {i18n.translate('xpack.nightshift.specialist.waiting', {
+                  defaultMessage: 'Detection Agent is waiting for {name}',
+                  values: { name: specialistName(waiting) },
+                })}
+              </strong>
+            </EuiText>
+          )}
           <div
             ref={activity}
             role="region"
@@ -590,7 +581,20 @@ export const AgentExplorer = (): React.ReactElement => {
                 </EuiFlexGroup>
               </>
             )}
-            {steps.map((step) => {
+            {groups.map(({ step, children }) => {
+              if (step.kind === 'model' && !showModels) return null;
+              if (step.name === 'delegate_specialist') {
+                previousTool = step;
+                return (
+                  <SpecialistActivity
+                    key={step.id}
+                    step={step}
+                    childrenSteps={children}
+                    showModels={showModels}
+                    onInspect={pauseFollowing}
+                  />
+                );
+              }
               const preceding = previousTool;
               if (step.kind === 'tool') previousTool = step;
               return (
@@ -598,14 +602,11 @@ export const AgentExplorer = (): React.ReactElement => {
                   key={step.id}
                   step={step}
                   previousTool={preceding}
-                  onInspect={() => {
-                    setFollowLive(false);
-                    setInspect(step);
-                  }}
+                  onInspect={pauseFollowing}
                 />
               );
             })}
-            {running && <EuiLoadingSpinner />}
+            {run?.status === 'running' && <EuiLoadingSpinner />}
             {run?.remainingGaps?.length ? (
               <>
                 <EuiSpacer />
@@ -622,55 +623,9 @@ export const AgentExplorer = (): React.ReactElement => {
         </EuiPanel>
       </div>
       {showAnatomy && (
-        <EuiFlyout onClose={() => setShowAnatomy(false)} size="l" aria-label={copy.anatomy}>
-          <EuiFlyoutHeader>
-            <EuiTitle>
-              <h2>{copy.anatomy}</h2>
-            </EuiTitle>
-          </EuiFlyoutHeader>
-          <EuiFlyoutBody>
-            {anatomy.data ? (
-              <>
-                <EuiCodeBlock language="text" isCopyable>
-                  {anatomy.data.systemPrompt}
-                </EuiCodeBlock>
-                <EuiSpacer />
-                <EuiCodeBlock language="json" isCopyable>
-                  {JSON.stringify(
-                    {
-                      tools: anatomy.data.tools,
-                      limits: anatomy.data.limits,
-                      persistence: anatomy.data.persistence,
-                      costEstimate: anatomy.data.costEstimate,
-                    },
-                    null,
-                    2
-                  )}
-                </EuiCodeBlock>
-              </>
-            ) : (
-              <EuiLoadingSpinner />
-            )}
-          </EuiFlyoutBody>
-        </EuiFlyout>
-      )}
-      {inspect && (
-        <EuiFlyout onClose={() => setInspect(undefined)} size="l" aria-label={inspect.name}>
-          <EuiFlyoutHeader>
-            <EuiTitle>
-              <h2>{inspect.name}</h2>
-            </EuiTitle>
-          </EuiFlyoutHeader>
-          <EuiFlyoutBody>
-            <EuiCodeBlock language="json" isCopyable>
-              {inspect.input}
-            </EuiCodeBlock>
-            <EuiSpacer />
-            <EuiCodeBlock language="json" isCopyable>
-              {inspect.output}
-            </EuiCodeBlock>
-          </EuiFlyoutBody>
-        </EuiFlyout>
+        <React.Suspense fallback={<EuiLoadingSpinner />}>
+          <AgentAnatomy onClose={() => setShowAnatomy(false)} />
+        </React.Suspense>
       )}
       {reset && (
         <EuiConfirmModal
@@ -690,7 +645,14 @@ export const AgentExplorer = (): React.ReactElement => {
           }
           onCancel={() => setReset(undefined)}
           cancelButtonText={copy.cancel}
-          confirmButtonText={copy.confirm}
+          confirmButtonDisabled={reset === 'outputs' && !selectedOutputs.length}
+          confirmButtonText={
+            reset === 'outputs'
+              ? i18n.translate('xpack.nightshift.problemAgent.deleteSelected', {
+                  defaultMessage: 'Delete selected outputs',
+                })
+              : copy.confirm
+          }
           buttonColor="danger"
           onConfirm={() => {
             const mode = reset;
@@ -704,6 +666,7 @@ export const AgentExplorer = (): React.ReactElement => {
                   : '/internal/significant_events/problem_agent/_reset_outputs',
                 {
                   body: JSON.stringify({
+                    ...(mode === 'outputs' ? { outputs: selectedOutputs } : {}),
                     confirmation:
                       mode === 'runs'
                         ? 'RESET RUN HISTORY'
@@ -720,17 +683,48 @@ export const AgentExplorer = (): React.ReactElement => {
           <EuiText size="s">
             <p>{modeResetDescription(reset)}</p>
           </EuiText>
+          {reset === 'outputs' && (
+            <>
+              <EuiSpacer size="s" />
+              {Object.entries(outputLabels).map(([value, label]) => (
+                <EuiCheckbox
+                  key={value}
+                  id={'nightshift-reset-' + value}
+                  label={label}
+                  checked={selectedOutputs.includes(value)}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setSelectedOutputs((previous) =>
+                      checked ? [...previous, value] : previous.filter((item) => item !== value)
+                    );
+                  }}
+                />
+              ))}
+            </>
+          )}
         </EuiConfirmModal>
       )}
     </div>
   );
 };
 
+const outputLabels = {
+  knowledge: i18n.translate('xpack.nightshift.problemAgent.deleteKnowledge', {
+    defaultMessage: 'Knowledge indicators (features and standalone queries)',
+  }),
+  rules: i18n.translate('xpack.nightshift.problemAgent.deleteRules', {
+    defaultMessage: 'Monitoring rules and their backing queries',
+  }),
+  events: i18n.translate('xpack.nightshift.problemAgent.deleteEvents', {
+    defaultMessage: 'Significant events and their history',
+  }),
+};
+
 const modeResetDescription = (mode: 'runs' | 'totals' | 'outputs'): string =>
   mode === 'outputs'
     ? i18n.translate('xpack.nightshift.problemAgent.resetOutputsDescription', {
         defaultMessage:
-          'Stops the agent and removes its knowledge, owned monitors and problem assessments in this space. Sources and user-created rules are preserved.',
+          'Choose which agent outputs to delete in this space. Deletion stops the active run. Scheduled runs can create new outputs.',
       })
     : mode === 'runs'
     ? i18n.translate('xpack.nightshift.problemAgent.resetRunsDescription', {

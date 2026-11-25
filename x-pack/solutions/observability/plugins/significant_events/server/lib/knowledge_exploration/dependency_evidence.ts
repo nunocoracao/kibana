@@ -32,6 +32,7 @@ export const rowIdentity = (row: Record<string, string>): ObservedEntity => {
     namespace:
       row['resource.attributes.service.namespace'] ||
       row['service.namespace'] ||
+      row.service_namespace ||
       row.namespace ||
       '',
   };

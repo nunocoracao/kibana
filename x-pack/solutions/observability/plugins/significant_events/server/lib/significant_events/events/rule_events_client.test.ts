@@ -736,6 +736,22 @@ describe('RuleEventsClient', () => {
   });
 
   describe('findLatestByCurrentStatePaginated', () => {
+    it('filters owned events in both the count and data query before applying the exact offset', async () => {
+      const { client, query } = createClient(async (request) =>
+        request.query.includes('STATS total') ? countResponse(0) : sourceResponse([])
+      );
+      await client.findLatestByCurrentStatePaginated({
+        eventIdPrefix: 'nightshift-problem-',
+        offset: 3,
+        perPage: 2,
+      });
+      for (const counting of [true, false]) {
+        const q = lastQuery(query, (q_) => q_.includes('STATS total') === counting);
+        expect(q).toContain('STARTS_WITH(FIELD_EXTRACT(data, "event_id"), "nightshift-problem-")');
+        if (!counting) expect(q).toContain('LIMIT 5');
+      }
+    });
+
     it('filters status on alert.status (not top-level alert_status), translated from SIGNIFICANT_EVENTS_STATUS_MAP', async () => {
       const { client, query } = createClient(async (request) =>
         request.query.includes('STATS total') ? countResponse(0) : sourceResponse([])
@@ -1879,6 +1895,20 @@ describe('RuleEventsClient', () => {
       expect(hits[0].event_id).toBe('agent-event-1');
       expect(hits[0].created_at).toBe('2026-01-01T00:00:00.000Z');
     });
+  });
+
+  it('looks up the opening revision of each selected episode in one query', async () => {
+    const row: MockRow = {
+      source: ruleEventSource({ alert: { id: 'episode-1', status: 'active' } }),
+      dataJson: JSON.stringify(dataDoc),
+    };
+    const { client, query } = createClient(async () => sourceResponse([row]));
+    expect((await client.findEpisodeOpenings([])).size).toBe(0);
+    expect(query).not.toHaveBeenCalled();
+    const openings = await client.findEpisodeOpenings(['episode-1', 'episode-2']);
+    expect(openings.get('episode-1')?.summary).toBe('Checkout is failing');
+    expect(lastQuery(query)).toContain('MIN(@timestamp) BY `alert.id`');
+    expect(lastQuery(query)).toContain('`alert.id` IN ("episode-1", "episode-2")');
   });
 
   describe('findLatestByEventIds', () => {

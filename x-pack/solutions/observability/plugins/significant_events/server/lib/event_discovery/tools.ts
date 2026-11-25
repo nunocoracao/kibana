@@ -111,6 +111,7 @@ interface SignalPoint {
   timestamp: string;
   value: number | null;
   alertId: string;
+  index?: string;
 }
 interface FiredSignal {
   signalRef: string;
@@ -226,6 +227,45 @@ export class EventDiscoveryToolSession {
     return [...new Set(matches.map((feature) => feature.source_id))];
   }
 
+  resolveFiring(ref: string, sourceIds: string[], affected: Feature[]) {
+    const signal = this.signals.get(ref);
+    const point = signal?.points.at(-1);
+    const scoped = signal?.sourceIds.filter((id) => sourceIds.includes(id)) ?? [];
+    if (!signal || !point?.alertId || !point.index || scoped.length !== 1) {
+      throw new Error(
+        'Cite an actual fired_rules reference from this run with one matching event source.'
+      );
+    }
+    const dims = signal.dimensions;
+    const service =
+      dims['resource.attributes.service.name'] ?? dims['service.name'] ?? dims.service_name;
+    const namespace =
+      dims['resource.attributes.service.namespace'] ??
+      dims['service.namespace'] ??
+      dims.service_namespace;
+    if (
+      (service || namespace) &&
+      !affected.some(
+        (f) =>
+          f.type === 'entity' &&
+          f.source_id === scoped[0] &&
+          (!service || service === f.properties.name) &&
+          (!namespace || namespace === (f.properties.service_namespace ?? f.properties.namespace))
+      )
+    ) {
+      throw new Error('The selected firing belongs to a different service or namespace.');
+    }
+    return {
+      sourceId: scoped[0],
+      ruleId: signal.ruleId,
+      ruleName: signal.ruleName,
+      kind: signal.kind,
+      index: point.index,
+      documentId: point.alertId,
+      timestamp: point.timestamp,
+    };
+  }
+
   private async loadSignals(): Promise<void> {
     if (this.loaded) return;
     const enabled = this.sources.filter((source) => source.enabled);
@@ -310,14 +350,17 @@ export class EventDiscoveryToolSession {
             excluded++;
             continue;
           }
+          const kind = doc.type === 'alert' ? 'alert' : 'signal';
           const key = JSON.stringify([
             ruleId,
+            kind,
             Object.entries(dimensions).sort(([a], [b]) => a.localeCompare(b)),
           ]);
           let entry = [...this.signals.values()].find(
             (item) =>
               JSON.stringify([
                 item.ruleId,
+                item.kind,
                 Object.entries(item.dimensions).sort(([a], [b]) => a.localeCompare(b)),
               ]) === key
           );
@@ -330,7 +373,7 @@ export class EventDiscoveryToolSession {
               origin: (rule.metadata.tags ?? []).includes(MONITORING_OWNER_TAG)
                 ? 'managed'
                 : 'user',
-              kind: doc.type === 'alert' ? 'alert' : 'signal',
+              kind,
               sourceIds: scoped,
               dimensions,
               points: [],
@@ -349,6 +392,7 @@ export class EventDiscoveryToolSession {
             timestamp,
             value: Number.isFinite(value) ? value : null,
             alertId: hit._id ?? '',
+            index: hit._index,
           };
           const previous = entry.points.findIndex((item) => item.timestamp === timestamp);
           if (previous >= 0) entry.points[previous] = point;
@@ -403,7 +447,14 @@ export class EventDiscoveryToolSession {
           kind: 'alert',
           sourceIds: scoped,
           dimensions,
-          points: [{ timestamp: doc['@timestamp'], value: null, alertId: hit._id ?? '' }],
+          points: [
+            {
+              timestamp: doc['@timestamp'],
+              value: null,
+              alertId: hit._id ?? '',
+              index: hit._index,
+            },
+          ],
           query: '',
           latestStatus: doc['kibana.alert.status'],
         });
@@ -443,7 +494,8 @@ export class EventDiscoveryToolSession {
         this.request,
         this.sources,
         parameters,
-        this.signal
+        this.signal,
+        (ref) => this.signals.get(ref)
       );
     if (name === 'fired_rules') {
       const args = z

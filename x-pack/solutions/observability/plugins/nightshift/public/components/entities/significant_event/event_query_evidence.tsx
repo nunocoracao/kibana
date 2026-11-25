@@ -6,10 +6,13 @@
  */
 
 import React, { useState } from 'react';
-import { EuiBadge, EuiFlexGroup, EuiFlexItem, EuiSpacer, EuiText } from '@elastic/eui';
+import { EuiBadge, EuiLink, EuiFlexGroup, EuiFlexItem, EuiSpacer, EuiText } from '@elastic/eui';
 import { i18n } from '@kbn/i18n';
 import type { SignificantEvent } from '@kbn/significant-events-schema';
 import type { Feature } from '@kbn/significant-events-schema';
+import { DISCOVER_APP_LOCATOR } from '@kbn/deeplinks-analytics';
+import type { DiscoverAppLocatorParams } from '@kbn/discover-plugin/common';
+import { buildDiscoverParams } from '../../../common/discover_helpers';
 import { useKibana } from '../../../hooks/use_kibana';
 import { useImpactedServices } from '../../../data/significant_events/use_impacted_services';
 import { EntityChip } from '../entity/entity_chip';
@@ -81,6 +84,52 @@ export const EventQueryEvidence = ({ event }: { event: SignificantEvent }) => {
           </EuiFlexItem>
         ))}
       </EuiFlexGroup>
+      {!!event.monitoring_references?.length && (
+        <EuiText size="s">
+          <h4>
+            {i18n.translate('xpack.nightshift.eventEvidence.monitors', {
+              defaultMessage: 'Monitoring references',
+            })}
+          </h4>
+          <ul>
+            {event.monitoring_references.map((ref) => (
+              <li key={JSON.stringify(ref)}>
+                {ref.sourceId} · {ref.queryId}
+                {ref.ruleId && ref.ruleId !== ref.queryId && ` · ${ref.ruleId}`}
+              </li>
+            ))}
+          </ul>
+        </EuiText>
+      )}
+      {!!event.firing_references?.length && (
+        <EuiText size="s">
+          <h4>
+            {i18n.translate('xpack.nightshift.eventEvidence.firings', {
+              defaultMessage: 'Observed rule signals and alerts',
+            })}
+          </h4>
+          <ul>
+            {event.firing_references.map((ref) => (
+              <li key={JSON.stringify([ref.index, ref.documentId])}>
+                <EuiLink
+                  href={share.url.locators
+                    .get<DiscoverAppLocatorParams>(DISCOVER_APP_LOCATOR)
+                    ?.getRedirectUrl(
+                      buildDiscoverParams(
+                        `FROM ${JSON.stringify(
+                          ref.index
+                        )} METADATA _id | WHERE _id == ${JSON.stringify(ref.documentId)}`,
+                        { from: ref.timestamp, to: 'now' }
+                      )
+                    )}
+                >
+                  {ref.ruleName} · {ref.timestamp}
+                </EuiLink>
+              </li>
+            ))}
+          </ul>
+        </EuiText>
+      )}
       {selected && <EntityFlyout feature={selected} onClose={() => setSelected(undefined)} />}
     </>
   );

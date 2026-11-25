@@ -6,6 +6,8 @@
  */
 import type { Feature, QueryLink } from '@kbn/significant-events-schema';
 
+import { entityName } from '../knowledge_exploration/source_scope';
+
 export const MAX_MANAGED_RULES_PER_SERVICE = 7;
 const SERVICE_TAG_PREFIX = 'nightshift:monitoring-service:';
 const property = (feature: Feature, name: string): string => {
@@ -23,7 +25,7 @@ export const monitoredServices = (features: Feature[]): string[] => {
       selected.flatMap((feature) => {
         const name =
           feature.type === 'entity'
-            ? property(feature, 'name')
+            ? entityName(feature)
             : feature.type === 'dependency'
             ? property(feature, 'source')
             : property(feature, 'service_name');

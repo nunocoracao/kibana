@@ -72,7 +72,10 @@ export const getStepDescription = (step: ExplorationStep) => {
   const rejected = array(output.rejected);
   const saved = array(output.saved);
   const status =
-    rejected.length || errors.length || output.failed
+    step.name === 'kibana_information' &&
+    (output.status === 'failed' || output.status === 'partial')
+      ? output.status
+      : rejected.length || errors.length || output.failed
       ? saved.length || results.some((result) => !result.error)
         ? 'partial'
         : 'failed'
@@ -98,6 +101,16 @@ export const getStepDescription = (step: ExplorationStep) => {
     title = `${step.status === 'running' ? 'Thinking' : 'Model response'}${
       turn ? ` · turn ${turn}` : ''
     }`;
+    if (step.name === 'Knowledge Extractor' || step.name === 'Rule Setter') title = step.name;
+  } else if (step.name === 'load_skill') {
+    title = 'Read agent skill';
+    result = text(input.name);
+  } else if (step.name === 'delegate_specialist') {
+    title =
+      input.specialist === 'knowledge_extractor'
+        ? 'Consult Knowledge Extractor'
+        : 'Consult Rule Setter';
+    note = text(output.report) || text(input.task);
   } else if (step.name === 'detection_sources') {
     title = 'Discover configured sources';
     result = `${count(output.total ?? output.sources)} sources`;
@@ -153,7 +166,20 @@ export const getStepDescription = (step: ExplorationStep) => {
         1
       )}${capped ? '+' : ''} docs/s`;
     } else result = `${sum('rows')} rows`;
-    if (results.some((entry) => entry.truncated || entry.hasMore)) result += ' · more available';
+    if (results.some((entry) => entry.hasMore || (entry.truncated && entry.hasMore !== false)))
+      result += ' · more available';
+    else if (results.some((entry) => entry.truncated)) result += ' · truncated';
+    const pending = results.filter(
+      (entry) => entry.requiresPlanning || entry.status === 'requires_planning'
+    );
+    if (pending.length === results.length && pending.length) {
+      title = 'Measure source volume';
+      result = 'Volume probe completed · requested query pending';
+      scope.length = 0;
+      scope.push('1m of data');
+      queryPreview = '';
+    } else if (pending.length)
+      result += ` · ${pending.length} volume probe(s) completed, requested queries pending`;
     if (template === 'schema') {
       itemLabel = 'Fields';
       items = results
@@ -188,6 +214,8 @@ export const getStepDescription = (step: ExplorationStep) => {
         ? 'Save learned knowledge'
         : action === 'read'
         ? 'Inspect selected KIs'
+        : input.countOnly
+        ? 'Count knowledge indicators'
         : 'Read the knowledge index';
     if (action === 'upsert') {
       result = `${saved.length} saved · ${array(output.unchanged).length} unchanged · ${
@@ -208,9 +236,11 @@ export const getStepDescription = (step: ExplorationStep) => {
       items.push(...array(output.savedQueries).map((entry) => text(object(entry).title)));
     } else {
       result = `${count(output.total ?? output.features ?? output.records)} KIs${
-        output.hasMore ? ' · more available' : ''
-      }`;
-      items = array(output.features ?? output.records).map((entry) => text(object(entry).title));
+        typeof output.queryTotal === 'number' ? ' · ' + output.queryTotal + ' queries' : ''
+      }${output.hasMore ? ' · more available' : ''}`;
+      items = [...array(output.features ?? output.records), ...array(output.queryRecords)].map(
+        (entry) => text(object(entry).title)
+      );
     }
   } else if (step.name === 'kibana_information') {
     title =
@@ -220,9 +250,13 @@ export const getStepDescription = (step: ExplorationStep) => {
         ? 'Inspect a Kibana tool'
         : 'Query Kibana context';
     scope.push(text(input.toolId).replaceAll('_', ' '), text(input.query));
-    if (action === 'catalog') result = `${array(output.tools).length} available tools`;
+    if (output.error) result = text(output.error);
+    else if (action === 'catalog')
+      result = `${array(output.tools).length} of ${
+        output.total ?? array(output.tools).length
+      } tools`;
     else if (action === 'describe') result = 'Input schema available';
-    else result = `${results.length} result groups`;
+    else result = `${results.length} result groups${output.truncated ? ' · truncated' : ''}`;
     if (action === 'catalog') {
       itemLabel = 'Tools';
       items = array(output.tools).map(
@@ -265,7 +299,29 @@ export const getStepDescription = (step: ExplorationStep) => {
     );
   } else if (step.name === 'rule_change_points') {
     title = 'Investigate changes in a metric';
-    result = 'Change-point analysis available';
+    const history = object(output.history);
+    result =
+      output.status === 'change_detected'
+        ? [
+            text(output.changeType).replaceAll('_', ' '),
+            text(output.direction),
+            text(output.changedAt),
+          ]
+            .filter(Boolean)
+            .join(' · ')
+        : output.status === 'no_change_detected'
+        ? 'No change detected in observed measurements'
+        : output.status === 'indeterminable'
+        ? 'Indeterminable'
+        : step.output && !output.error
+        ? 'Change-point analysis available'
+        : '';
+    note = text(output.reason);
+    if (typeof history.observedBuckets === 'number')
+      items = [
+        `${history.observedBuckets} measured · ${history.missingBuckets} missing minutes`,
+        ...(history.lastMeasurementAt ? [`Last measurement ${history.lastMeasurementAt}`] : []),
+      ];
   } else if (step.name === 'events') {
     title =
       action === 'upsert'
@@ -280,7 +336,14 @@ export const getStepDescription = (step: ExplorationStep) => {
           ? 'Assessment unchanged'
           : `Assessment saved · ${text(output.status) || text(input.status)}`
         : `${count(output.total ?? output.events)} assessments`;
-    if (action === 'upsert') {
+    if (output.written === false || output.ignored || output.operatorDismissalHonored) {
+      result =
+        output.assessment === 'inconclusive' ? 'Evidence inconclusive' : 'Assessment unchanged';
+      note = text(output.nextAction ?? output.reason);
+    } else if (output.reviewed) {
+      result = 'Active problem reviewed';
+      note = text(input.assessmentNote);
+    } else if (action === 'upsert') {
       items = [
         text(input.severity) ? `${text(input.severity)} severity` : '',
         typeof input.confidence === 'number'
@@ -290,10 +353,15 @@ export const getStepDescription = (step: ExplorationStep) => {
       note = text(input.assessmentNote) || text(input.summary);
     } else items = array(output.events).map((event) => text(object(event).title));
   } else if (step.name === 'finish_exploration') {
-    title = 'Complete the run';
-    result = text(output.outcome ?? input.outcome).replaceAll('_', ' ');
-    scope.push(text(input.summary));
-    items = array(input.remainingGaps).map(text);
+    const continuing = output.finished === false || output.status === 'continue';
+    title = continuing ? 'Continue exploration' : 'Complete the run';
+    if (continuing) {
+      result = text(output.nextAction);
+    } else if (output.finished === true) {
+      result = text(output.outcome ?? input.outcome).replaceAll('_', ' ');
+      scope.push(text(output.summary ?? input.summary));
+      items = array(output.remainingGaps ?? input.remainingGaps).map(text);
+    }
   }
   if (output.truncated) result = 'Result truncated · inspect tool call';
   if (step.status === 'running') result = '';

@@ -97,6 +97,37 @@ export const significantEventSchema = lazySchema(() =>
   significantEventBaseSchema.extend({
     '@timestamp': isoDateTime({ offset: true }),
     status: significantEventStatusSchema,
+    outcome_checks: z
+      .array(
+        z.object({
+          sourceId: z.string(),
+          entityId: z.string(),
+          operation: z.string(),
+          condition: z.string(),
+          observedAt: z.number().optional(),
+          failedField: z.string(),
+          healthyField: z.string(),
+          failed: z.number(),
+          healthy: z.number(),
+        })
+      )
+      .optional(),
+    monitoring_references: z
+      .array(z.object({ sourceId: z.string(), queryId: z.string(), ruleId: z.string().optional() }))
+      .optional(),
+    firing_references: z
+      .array(
+        z.object({
+          sourceId: z.string(),
+          ruleId: z.string(),
+          ruleName: z.string(),
+          documentId: z.string(),
+          index: z.string(),
+          timestamp: z.string(),
+          kind: z.enum(['signal', 'alert']),
+        })
+      )
+      .optional(),
     assessment_note: z
       .string()
       .max(MAX_DEACTIVATION_REASON_LENGTH)

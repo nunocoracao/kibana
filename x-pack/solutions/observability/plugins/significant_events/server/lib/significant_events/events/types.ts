@@ -20,6 +20,7 @@ export interface EventsFilterOptions {
   sourceIds?: string[];
   search?: string;
   eventIds?: string[];
+  eventIdPrefix?: string;
   ruleUuids?: string[];
   topologyFeatureIds?: string[];
   unassignedEntityIds?: string[];
@@ -37,6 +38,7 @@ export interface InvestigationEpisodes {
 
 export type EventsPaginatedSearchOptions = PaginatedSearchOptions &
   EventsFilterOptions & {
+    offset?: number;
     /** Defaults to the latest revision time, newest first. */
     sortField?: SignificantEventsSortField;
     sortOrder?: SignificantEventsSortOrder;

@@ -59,6 +59,8 @@ export async function getEsqlColumnSchema({
         signal,
       })) as unknown as ESQLSearchResponse);
 
+  if ('is_partial' in response && response.is_partial)
+    throw new Error('ES|QL returned partial results. Narrow the scope and retry.');
   return parseColumns(response);
 }
 

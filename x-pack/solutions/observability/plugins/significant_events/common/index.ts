@@ -152,3 +152,5 @@ export type {
   ExplorationTokens,
   ExplorerAgent,
 } from './knowledge_exploration';
+
+export type { ExplorationAgentAnatomy } from './agent_anatomy';

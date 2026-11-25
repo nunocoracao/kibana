@@ -524,11 +524,23 @@ export class RuleEventsClient {
     if (options.sourceIds?.length) {
       query = query.where`${sourceIdsIntersects(options.sourceIds)}`;
     }
+    if (options.eventIdPrefix) {
+      query = query.where`STARTS_WITH(FIELD_EXTRACT(${esql.col('data')}, ${esql.str(
+        'event_id'
+      )}), ${esql.str(options.eventIdPrefix)})`;
+    }
     if (options.eventIds?.length) {
       query = query.where`${eventIdIn(options.eventIds)}`;
     }
     if (options.ruleUuids?.length) {
-      query = query.where`${ruleUuidsIntersects(options.ruleUuids)}`;
+      const ids = options.ruleUuids.map((id) => esql.str(id));
+      query = query.where`(${ruleUuidsIntersects(
+        options.ruleUuids
+      )} OR MV_INTERSECTS(FIELD_EXTRACT(${esql.col('data')}, ${esql.str(
+        'monitoring_references.ruleId'
+      )}), [${ids}]) OR MV_INTERSECTS(FIELD_EXTRACT(${esql.col('data')}, ${esql.str(
+        'firing_references.ruleId'
+      )}), [${ids}]))`;
     }
     const selectedEntities = options.topologyFeatureIds?.length
       ? topologyFeatureIdsIntersects(options.topologyFeatureIds)
@@ -587,7 +599,7 @@ export class RuleEventsClient {
       options.sortField,
       options.sortOrder
     )
-      .limit(page * perPage)
+      .limit((options.offset ?? (page - 1) * perPage) + perPage)
       .keep('_source', 'data_json', 'created_at');
     const countQuery = this.buildLatestByCurrentStateQuery(options)
       .pipe`STATS total = COUNT(*)`.keep('total');
@@ -601,7 +613,7 @@ export class RuleEventsClient {
       }),
     ]);
 
-    const start = (page - 1) * perPage;
+    const start = options.offset ?? (page - 1) * perPage;
     const paginatedHits = start >= hits.length ? [] : hits.slice(start, start + perPage);
 
     return {
@@ -1094,6 +1106,26 @@ export class RuleEventsClient {
       }
     }
     return map;
+  }
+
+  /** The evidence that opened each requested episode, even when later assessments change its title. */
+  async findEpisodeOpenings(episodeIds: string[]): Promise<Map<string, SignificantEvent>> {
+    const openings = new Map<string, SignificantEvent>();
+    if (!episodeIds.length) return openings;
+    const episode = esql.col('alert.id');
+    const query = buildBaseQuery(this.clients.space).where`${episode} IN (${episodeIds.map((id) =>
+      esql.str(id)
+    )})`.pipe`INLINE STATS first_ts = MIN(@timestamp) BY ${episode}`.where`@timestamp == first_ts`
+      .pipe`INLINE STATS first_id = MIN(_id) BY ${episode}`.where`_id == first_id`;
+    const rows = await executeEsqlQuery<RuleEventSourceRow>({
+      esClient: this.clients.esClient,
+      query: withDataJsonProjection(query).keep('_source', 'data_json').limit(episodeIds.length),
+      fields: ['data_json'],
+    });
+    for (const row of rows) {
+      if (row.alert?.id) openings.set(row.alert.id, decodeSignificantEvent(row));
+    }
+    return openings;
   }
 
   /** The event ids that have carried each episode (`alert.id`). Unknown episodes are absent. */

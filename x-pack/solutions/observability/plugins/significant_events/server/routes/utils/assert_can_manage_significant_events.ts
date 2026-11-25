@@ -13,7 +13,7 @@ import {
 } from '@kbn/nightshift-shared';
 import type { SignificantEventsServer } from '../../types';
 
-interface PrivilegeCheckParams {
+export interface PrivilegeCheckParams {
   request: KibanaRequest;
   server: Pick<SignificantEventsServer, 'security'>;
 }

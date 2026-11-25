@@ -5,7 +5,9 @@
  * 2.0.
  */
 
+import type { Feature } from '@kbn/significant-events-schema';
 import {
+  monitoredServices,
   observedMonitoredServices,
   serviceOwnershipTags,
   servicesFromOwnershipTags,
@@ -30,6 +32,23 @@ describe('observed monitor ownership', () => {
     expect(services).toEqual(['["checkout-java","shop"]']);
     expect(servicesFromOwnershipTags(serviceOwnershipTags(services))).toEqual(services);
     expect(() => assertServiceRuleCapacity(services, new Map(), 'candidate')).not.toThrow();
+  });
+
+  it('uses the observing service alias from existing service KIs for count-rule ownership', () => {
+    const feature: Feature = {
+      id: 'gateway',
+      source_id: 'traces',
+      uuid: 'gateway-uuid',
+      confidence: 90,
+      description: 'Observed gateway service.',
+      type: 'entity',
+      subtype: 'service',
+      properties: { service_name: 'gateway', service_namespace: 'warren' },
+    };
+    expect(monitoredServices([feature])).toEqual(['["gateway","warren"]']);
+    expect(
+      monitoredServices([{ ...feature, properties: { ...feature.properties, name: 'canonical' } }])
+    ).toEqual(['["canonical","warren"]']);
   });
 
   it('keeps the seven-rule cap for observed emitters across source references', () => {

@@ -15,6 +15,7 @@ export interface ExplorationTokens {
 
 export interface ExplorationStep {
   id: string;
+  parentStepId?: string;
   kind: 'model' | 'tool';
   name: string;
   startedAt: string;

@@ -57,7 +57,17 @@ describe('agent-controlled source exploration', () => {
   });
 
   it('provides focused, bounded recipes and rejects unknown topics', () => {
-    for (const topic of ['volume', 'schema', 'patterns', 'relationships', 'metrics', 'errors']) {
+    for (const topic of [
+      'volume',
+      'schema',
+      'patterns',
+      'relationships',
+      'metrics',
+      'counting',
+      'time_windows',
+      'cardinality',
+      'errors',
+    ]) {
       const guide = readEsqlGuide({ topic });
       expect(guide.topic).toBe(topic);
       expect(guide.guidance.length).toBeLessThan(1500);

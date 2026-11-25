@@ -28,6 +28,31 @@ const step: ExplorationStep = {
 };
 
 describe('Agent Explorer run activity', () => {
+  it('shows the finish decision returned by the server', () => {
+    const finish = {
+      ...step,
+      name: 'finish_exploration',
+      input: JSON.stringify({ outcome: 'assessed', summary: 'Done', remainingGaps: [] }),
+    };
+    expect(
+      getStepDescription({
+        ...finish,
+        output: JSON.stringify({ finished: false, status: 'continue', nextAction: 'Check logs' }),
+      })
+    ).toMatchObject({ title: 'Continue exploration', result: 'Check logs', status: 'completed' });
+    expect(
+      getStepDescription({
+        ...finish,
+        output: JSON.stringify({
+          finished: true,
+          outcome: 'partial',
+          summary: 'Checked traces',
+          remainingGaps: ['Logs unavailable'],
+        }),
+      })
+    ).toMatchObject({ result: 'partial', scope: 'Checked traces', items: ['Logs unavailable'] });
+  });
+
   it('keeps raw tool calls inspectable and pauses following when opened', () => {
     const onInspect = jest.fn();
     const { container } = render(<RunStep step={step} onInspect={onInspect} />);
@@ -68,6 +93,37 @@ describe('Agent Explorer run activity', () => {
     expect(description.status).toBe('completed');
   });
 
+  it('shows the executed volume probe and its window when a requested query is pending', () => {
+    expect(
+      getStepDescription({
+        ...step,
+        output: JSON.stringify({ results: [{ requiresPlanning: true }] }),
+      })
+    ).toMatchObject({
+      title: 'Measure source volume',
+      result: 'Volume probe completed · requested query pending',
+      scope: '1m of data',
+      queryPreview: '',
+    });
+  });
+
+  it('shows the actual change-point finding and gaps', () => {
+    expect(
+      getStepDescription({
+        ...step,
+        name: 'rule_change_points',
+        output: JSON.stringify({
+          status: 'indeterminable',
+          reason: 'Internal gaps',
+          history: { observedBuckets: 25, missingBuckets: 35 },
+        }),
+      })
+    ).toMatchObject({
+      result: 'Indeterminable',
+      note: 'Internal gaps',
+      items: ['25 measured · 35 missing minutes'],
+    });
+  });
   it('surfaces partial query failures when another source succeeded', () => {
     const description = getStepDescription({
       ...step,
@@ -144,8 +200,10 @@ describe('Agent Explorer run activity', () => {
         onInspect={jest.fn()}
       />
     );
-    expect(screen.getByText('12 resource groups · 1 shown · more available')).toBeInTheDocument();
-    expect(container.textContent).toContain('host.name=worker-01');
+    expect(
+      screen.queryByText('12 resource groups · 1 shown · more available')
+    ).not.toBeInTheDocument();
+    expect(container.textContent).not.toContain('host.name=worker-01');
     expect(screen.getByRole('button', { name: 'Inspect tool call' })).toHaveAttribute(
       'aria-expanded',
       'false'
@@ -165,12 +223,14 @@ describe('Agent Explorer run activity', () => {
         onInspect={jest.fn()}
       />
     );
-    expect(screen.getByText(pipeline)).toBeInTheDocument();
-    expect(screen.getByText('requests=42')).toBeInTheDocument();
+    expect(screen.queryByText(pipeline)).not.toBeInTheDocument();
+    expect(screen.queryByText('requests=42')).not.toBeInTheDocument();
     expect(screen.queryByText('Input')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Inspect tool call' }));
     expect(screen.getByText('Input')).toBeInTheDocument();
     expect(screen.getByText('Result')).toBeInTheDocument();
+    expect(screen.getByText(pipeline)).toBeVisible();
+    expect(screen.getByText('requests=42')).toBeVisible();
   });
 
   it('distinguishes shared-trace results and summary-only resource responses from zero rows', () => {

@@ -17,7 +17,11 @@ import {
   changePointToolDefinition,
   inspectRuleChangePoints,
 } from '../event_discovery/rule_change_points';
-import { explorationTools, ExplorationToolSession } from '../knowledge_exploration/tools';
+import {
+  explorationTools,
+  ExplorationToolSession,
+  PROBLEM_AGENT_KNOWLEDGE_MARKER,
+} from '../knowledge_exploration/tools';
 import {
   sourceIdFromOwnershipTag,
   toSourceTag,
@@ -34,6 +38,7 @@ import {
   serviceRuleUsage,
   servicesFromOwnershipTags,
 } from './guardrails';
+import { entityName } from '../knowledge_exploration/source_scope';
 import { hasForbiddenMonitoringOperations } from './source_pipeline';
 
 export const MONITORING_OWNER_TAG = 'nightshift:agent:problem-agent';
@@ -42,6 +47,17 @@ const canonicalQuery = (query: string): string => {
   const parsed = Parser.parse(query);
   return parsed.errors.length ? query : BasicPrettyPrinter.query(parsed.root);
 };
+const evidenceCasts = new Map([
+  ['date', 'TO_DATETIME'],
+  ['date_nanos', 'TO_DATE_NANOS'],
+  ['ip', 'TO_IP'],
+  ['version', 'TO_VERSION'],
+  ['long', 'TO_LONG'],
+  ['integer', 'TO_INTEGER'],
+  ['unsigned_long', 'TO_UNSIGNED_LONG'],
+  ['double', 'TO_DOUBLE'],
+  ['float', 'TO_DOUBLE'],
+]);
 const metricDimensions = (query: string): string[] => {
   const parsed = Parser.parse(query);
   const stats = parsed.root.commands.find((command) => command.name === 'stats');
@@ -67,10 +83,13 @@ const ruleSchema = lazySchema(() =>
     title: z.string().min(1).max(200).optional(),
     description: z.string().min(1).max(2000).optional(),
     reason: z.string().min(1).max(1000),
-    mode: z.enum(['count', 'metric']).default('count'),
+    mode: z.enum(['count', 'metric']).optional(),
     pipeline: z.string().min(1).max(10000).optional(),
     featureIds: z.array(text).max(25).optional(),
-    positiveEvidenceRefs: z.array(text).max(5).default([]),
+    positiveEvidenceRefs: z
+      .array(text)
+      .default([])
+      .transform((refs) => [...new Set(refs)].slice(0, 5)),
     preventiveReason: z.string().max(1000).optional(),
     groupBy: z.array(text).max(5).default([]),
     everyMinutes: z.number().int().min(1).max(1440).default(5),
@@ -112,7 +131,7 @@ export const monitoringTools: Record<string, ToolDefinition> = {
   esql_guide: explorationTools.esql_guide,
   kibana_information: explorationTools.kibana_information,
   knowledge_indicators: definition(
-    'Read compact feature and source-scoped stats query KI index/details only. action=index/read; writes are forbidden. index returns queryRecords paged by queryOffset/queryLimit; read fetches selected feature or query IDs (max 25), including source, ES|QL, ruleBacked state and feature links. Inspect useful query KIs as evidence-backed measurement recipes, then baseline/validate and adapt them; they do not themselves count as enabled monitor coverage. Source IDs are opaque. Keep includeProvenance=false for ordinary reads.',
+    'Read compact feature and source-scoped stats query KI index/details only. action=index/read; writes are forbidden. index returns compact records and queryRecords with one nextCursor; use countOnly for totals by source and category; read fetches selected feature or query IDs (max 25), including source, ES|QL, ruleBacked state and feature links. Inspect useful query KIs as evidence-backed measurement recipes, then baseline/validate and adapt them; they do not themselves count as enabled monitor coverage. Source IDs are opaque. Keep includeProvenance=false for ordinary reads.',
     {
       action: { type: 'string', enum: ['index', 'read'] },
       sourceId: string,
@@ -121,8 +140,10 @@ export const monitoringTools: Record<string, ToolDefinition> = {
       includeProvenance: { type: 'boolean' },
       offset: number(0, 10000),
       limit: number(1, 100),
-      queryOffset: number(0, 10000),
-      queryLimit: number(1, 100),
+      cursor: string,
+      countOnly: { type: 'boolean' },
+      featureType: string,
+      kind: { type: 'string', enum: ['feature', 'query'] },
     },
     ['action']
   ),
@@ -137,7 +158,7 @@ export const monitoringTools: Record<string, ToolDefinition> = {
     []
   ),
   monitoring_rules: definition(
-    'Validate or maintain a native managed Kibana signal rule for one configured source. Actions baseline/validate/upsert/enable/disable/delete. baseline is read-only and requires no featureIds (source-local KI references are enforced for validate/upsert). It describes complete-minute candidate history before installing: per-group median, p95, spread, older/newer mean, sample count and gaps; no thresholds are inferred. Start with a small lookbackMinutes; baseline caps at 24 hours and returns at most 20 groups. Missing count buckets remain unknown, not zero. reason required. upsert requires slug,title,description,pipeline,featureIds. count mode: WHERE-only pipeline, source-wide aggregation grouped ONLY by bucket (groupBy cannot add service dimensions). Use metric mode with CASE/SUM and explicit service/namespace STATS BY for grouped counts, healthy zeroes or ratios. metric mode: STATS metric_value=SUM(CASE(condition,1,0)) BY bucket=BUCKET(@timestamp,1 minute), <observed service/namespace fields>. The datetime bucket assignment belongs AFTER BY; never among the aggregate expressions. Retain bucket and numeric metric_value for baseline/validate/upsert, plus optional groupBy columns. No FROM/JOIN/ENRICH/FORK/comments; server supplies source view and time filter. Count mode uses native 5m cadence and 7m lookback; metric mode accepts everyMinutes. LookbackMinutes bounds validation. At most seven active managed rules per service and namespace across sources; grouped rules consume one slot for each service they cover. Inventory guardrails include zero-link services. Prioritize investigating namespaces with no useful managed or verified external coverage before adding redundant intents elsewhere. Inspect inventory guardrails and existing user coverage; a limit is not a target. Reuse or disable lower-priority owned rules when at capacity. Native metadata allows 20 tags including four reserved ownership tags and emitting-service tags: partition broad intents into bounded namespace/cohort rules (prefer at most 15 services each) after a tag-limit failure. Keep a compact rule set; consolidate equivalent intents. Every featureId must belong to this source. Observed service/namespace output dimensions establish emitting-service ownership and the seven-rule cap; relevant local schema/dependency KIs can ground the query even before an entity anchor exists; read the source-filtered KI index. Do not SUM/AVG cumulative counter types as counts/rates; use available gauges or log/span outcomes when source views cannot support TS. Metric upserts require at least one observed non-null numeric value; an empty/null series is not validated coverage. ES|QL LIKE uses * and ? wildcards, not SQL %. Count rules test positiveEvidenceRefs against the predicate. If no recent rows match, supply positiveEvidenceRefs or a justified preventiveReason. Do not use preventiveReason to bypass a failed observed example. JSON key order is not stable: prefer independent predicates or JSON_EXTRACT. Preventive zero-match monitors need KI grounding. Only exact agent-owned rules can be changed. Stable slug identifies an intent; reuse it to update. An equivalent parsed query for the same source reuses the existing rule even if the requested slug differs. Native grouping includes the emitted metric dimensions. Empty featureIds are allowed for enable/disable/delete; validate/upsert require KI grounding. Native Kibana executes rules; never creates SLOs, anomaly jobs, KIs or notifications.',
+    'Validate or maintain a native managed Kibana signal rule for one configured source. Actions baseline/validate/upsert/enable/disable/delete. baseline requires a source-scoped ES|QL pipeline to measure; it is read-only and requires no featureIds (source-local KI references are enforced for validate/upsert). It describes complete-minute candidate history before installing: per-group median, p95, spread, older/newer mean, sample count and gaps; no thresholds are inferred. Start with a small lookbackMinutes; baseline caps at 24 hours and returns at most 20 groups. Missing count buckets remain unknown, not zero. reason required. To validate an installed owned rule as configured, supply ruleId and omit pipeline. The tool loads its saved pipeline, cadence and source-local KIs. To validate a proposed pipeline, supply pipeline and featureIds. upsert requires slug,title,description,pipeline,featureIds. count mode: WHERE-only pipeline, source-wide aggregation grouped ONLY by bucket (groupBy cannot add service dimensions). Use metric mode with CASE/SUM and explicit service/namespace STATS BY for grouped counts, healthy zeroes or ratios. metric mode: STATS metric_value=SUM(CASE(condition,1,0)) BY bucket=BUCKET(@timestamp,1 minute), <observed service/namespace fields>. The datetime bucket assignment belongs AFTER BY; never among the aggregate expressions. Retain bucket and numeric metric_value for baseline/validate/upsert, plus optional groupBy columns. No FROM/JOIN/ENRICH/FORK/comments; server supplies source view and time filter. Count mode uses native 5m cadence and 7m lookback; metric mode accepts everyMinutes. LookbackMinutes bounds validation. At most seven active managed rules per service and namespace across sources; grouped rules consume one slot for each service they cover. Inventory guardrails include zero-link services. Prioritize investigating namespaces with no useful managed or verified external coverage before adding redundant intents elsewhere. Inspect inventory guardrails and existing user coverage; a limit is not a target. Reuse or disable lower-priority owned rules when at capacity. Native metadata allows 20 tags including four reserved ownership tags and emitting-service tags: partition broad intents into bounded namespace/cohort rules (prefer at most 15 services each) after a tag-limit failure. Keep a compact rule set; consolidate equivalent intents. Every featureId must belong to this source. Observed service/namespace output dimensions establish emitting-service ownership and the seven-rule cap; relevant local schema/dependency KIs can ground the query even before an entity anchor exists; read the source-filtered KI index. Do not SUM/AVG cumulative counter types as counts/rates; use available gauges or log/span outcomes when source views cannot support TS. Metric upserts require at least one observed non-null numeric value; an empty/null series is not validated coverage. ES|QL LIKE uses * and ? wildcards, not SQL %. Count rules test positiveEvidenceRefs against the predicate. If no recent rows match, supply positiveEvidenceRefs or a justified preventiveReason. Do not use preventiveReason to bypass a failed observed example. JSON key order is not stable: prefer independent predicates or JSON_EXTRACT. Preventive zero-match monitors need KI grounding. Only exact agent-owned rules can be changed. Stable slug identifies an intent; reuse it to update. An equivalent parsed query for the same source reuses the existing rule even if the requested slug differs. Native grouping includes the emitted metric dimensions. Empty featureIds are allowed for enable/disable/delete; validate/upsert require KI grounding. Native Kibana executes rules; never creates SLOs, anomaly jobs, KIs or notifications.',
     {
       action: {
         type: 'string',
@@ -157,15 +178,24 @@ export const monitoringTools: Record<string, ToolDefinition> = {
         type: 'string',
         enum: ['count', 'metric'],
         description:
-          'count for WHERE-only filters; metric for an aggregation emitting date bucket and numeric metric_value. Filter-only pipelines are normalized to count.',
+          'count for WHERE-only native filters (a read-only baseline also accepts EVAL then WHERE); metric for an aggregation emitting date bucket and numeric metric_value. Filter-only pipelines are normalized to count.',
       },
-      pipeline: string,
-      featureIds: { type: 'array', items: string },
+      pipeline: {
+        type: 'string',
+        description:
+          'Required for baseline, candidate validate and upsert. Supply the pipeline after FROM from the measured operation. For counts, use its WHERE predicates. For metric mode, emit bucket and metric_value, such as STATS metric_value=COUNT(*) BY bucket=BUCKET(@timestamp, 1 minute). Scope the data and add the observed outcome condition before installing a rule.',
+      },
+      featureIds: {
+        type: 'array',
+        items: string,
+        description:
+          'Logical KI IDs from this source. Required for candidate validate and upsert. Include the event lesson for post-recovery monitoring.',
+      },
       positiveEvidenceRefs: {
         type: 'array',
         items: string,
         description:
-          'Run-local source_esql positive raw/sample log rows with every field used by the predicate; up to five. Schema rows and count/level-only aggregates cannot validate a message predicate. An unknown column in a ROW witness may mean the selected evidence omitted it, not a missing source field.',
+          'Run-local source_esql positive raw/sample log rows with every field used by the predicate. The first five distinct references are checked. Schema rows and count/level-only aggregates cannot validate a message predicate. An unknown column in a ROW witness may mean the selected evidence omitted it, not a missing source field.',
       },
       preventiveReason: {
         type: 'string',
@@ -487,6 +517,10 @@ export class MonitoringToolSession {
       { query },
       { signal: this.signal, requestTimeout: 30000 }
     );
+    if (response.is_partial)
+      throw new Error(
+        'Baseline returned partial data. Shorten lookbackMinutes before using the series.'
+      );
     const result = {
       checkedAt: new Date().toISOString(),
       query,
@@ -558,8 +592,31 @@ export class MonitoringToolSession {
       this.run.written++;
       return { ruleId: id, action: args.action, reason: args.reason };
     }
-    if (!args.pipeline || (args.action !== 'baseline' && !args.featureIds?.length))
-      throw new Error('pipeline is required; validate/upsert also require source-local featureIds');
+    const installed =
+      args.action === 'validate' && args.ruleId && !args.pipeline
+        ? await rules.getRule({ id: args.ruleId })
+        : undefined;
+    if (installed) {
+      const tags = installed.metadata.tags ?? [];
+      if (!tags.includes(MONITORING_OWNER_TAG) || !tags.includes(toSourceTag(source.id)))
+        throw new Error('Select an agent-owned rule for this source');
+      const links = await ki.bulkGetQueriesByIds(source.id, [installed.id]);
+      const link = links.find((item) => item.rule_id === installed.id);
+      const query = link?.query.esql.query;
+      const separator = query?.indexOf('|') ?? -1;
+      if (!query || separator < 0 || !link)
+        throw new Error('Missing saved rule pipeline. Supply a candidate pipeline and featureIds.');
+      args.pipeline = query.slice(separator);
+      args.featureIds ??= link.query.features?.map((feature) => feature.id);
+      args.mode = tags.includes('nightshift:monitor:count') ? 'count' : 'metric';
+      args.everyMinutes = Number.parseInt(installed.schedule.every, 10);
+    }
+    if (!args.pipeline)
+      throw new Error(
+        `Retry ${args.action} with pipeline. Reuse the service, operation and outcome expressions from your successful source_esql query, dropping FROM, the time filter and output LIMIT. For counts, supply WHERE predicates. For a rate or grouped metric, use STATS metric_value=<measured expression> BY bucket=BUCKET(@timestamp, 1 minute) and the relevant cohort. The tool supplies the source and lookback window.`
+      );
+    if (args.action !== 'baseline' && !args.featureIds?.length)
+      throw new Error('Retry with featureIds from the source-local knowledge_indicators index.');
     if (hasForbiddenMonitoringOperations(args.pipeline))
       throw new Error(
         'Use only a source-scoped pipeline; FROM, joins, comments and external operations are forbidden'
@@ -568,6 +625,7 @@ export class MonitoringToolSession {
     const pipeline = args.pipeline.replace(/^\s*\|/, '').trim();
     const base = `${prefix} | ${pipeline}`;
     if (canCompileMatchMetric(base)) args.mode = 'count';
+    else if (!args.mode) args.mode = metricDimensions(base).includes('bucket') ? 'metric' : 'count';
     if (args.mode === 'metric') {
       const parsed = Parser.parse(base);
       const stats = parsed.root.commands.filter((command) => command.name === 'stats').at(-1);
@@ -582,6 +640,21 @@ export class MonitoringToolSession {
           'Metric pipelines must group by a datetime bucket. Use STATS metric_value=SUM(CASE(condition, 1, 0)) BY bucket=BUCKET(@timestamp, 1 minute), <observed service/namespace fields>. Put bucket=BUCKET(...) after BY, not among the aggregate expressions. Keep bucket in the final output; the server filters complete minutes for baseline, validate and upsert.'
         );
     }
+    if (args.mode === 'count' && !canCompileMatchMetric(base)) {
+      const { errors, root } = Parser.parse(base);
+      const transforms = root.commands.slice(1);
+      if (
+        args.action === 'baseline' &&
+        !errors.length &&
+        transforms.at(-1)?.name === 'where' &&
+        transforms.every(({ name }) => name === 'where' || name === 'eval')
+      ) {
+        return this.baseline(source, pipeline, args.mode, args.lookbackMinutes);
+      }
+      throw new Error(
+        'Native count rules need WHERE-only predicates. Inline derived expressions in WHERE, e.g. WHERE JSON_EXTRACT(message, "outcome") == "failed". For EVAL or grouped counts use metric mode with STATS metric_value=COUNT(*) BY bucket=BUCKET(@timestamp, 1 minute).'
+      );
+    }
     const nativeQuery =
       args.mode === 'count'
         ? compileMatchCountBreachQuery(base, '@timestamp')
@@ -590,6 +663,10 @@ export class MonitoringToolSession {
           } minutes | ${pipeline} | WHERE bucket < DATE_TRUNC(1 minute, NOW()) AND bucket >= DATE_TRUNC(1 minute, NOW()) - ${
             args.everyMinutes + 1
           } minutes`;
+    if (installed && canonicalQuery(installed.query.base) !== canonicalQuery(nativeQuery))
+      throw new Error(
+        'The native rule and its saved pipeline differ. Inspect monitoring_inventory and supply the intended pipeline.'
+      );
     if (args.action === 'baseline')
       return this.baseline(source, pipeline, args.mode, args.lookbackMinutes);
     const allFeatures = (await ki.getFeatures(source.id, { limit: 10000 })).hits;
@@ -618,32 +695,50 @@ export class MonitoringToolSession {
       { query: probe },
       { signal: this.signal, requestTimeout: 30000 }
     );
+    if (response.is_partial)
+      throw new Error(
+        'Rule validation returned partial data. Narrow the source window before validating.'
+      );
     let sampleMatches =
       args.mode === 'count' ? Number(response.values[0]?.[0] ?? 0) : response.values.length;
     let positiveExamplesMatched = 0;
     if (args.mode === 'count') {
       for (const observed of this.reads.getEvidenceRows(source.id, args.positiveEvidenceRefs)) {
-        const row = { ...observed };
-        if (!row.message && row.sample) row.message = row.sample;
-        const assignments = Object.entries(row)
-          .filter(([name]) => name === '@timestamp' || /^[a-zA-Z0-9_.]+$/.test(name))
-          .map(
-            ([name, value]) =>
-              `\`${name}\`=${
-                name === '@timestamp'
-                  ? `TO_DATETIME(${JSON.stringify(value)})`
-                  : JSON.stringify(value)
-              }`
-          );
+        const cells = [...observed];
+        const sample = cells.find(({ name }) => name === 'sample');
+        if (sample && !cells.some(({ name }) => name === 'message'))
+          cells.push({ ...sample, name: 'message' });
+        const assignments = cells.map(({ name, type }, index) => {
+          const parameter = `?p${index}`;
+          const cast = evidenceCasts.get(type);
+          return `\`${name.replaceAll('`', '``')}\`=${cast ? `${cast}(${parameter})` : parameter}`;
+        });
         if (!assignments.length)
-          throw new Error('Choose a positive raw log row with service fields and message');
-        const result = await this.clients.streamDataEsClient.esql.query(
-          { query: `ROW ${assignments.join(', ')} | ${pipeline} | STATS matched=COUNT(*)` },
-          { signal: this.signal, requestTimeout: 10000 }
-        );
+          throw new Error('Choose a positive raw evidence row with the predicate columns.');
+        const result = await this.clients.streamDataEsClient.esql
+          .query(
+            {
+              query: `ROW ${assignments.join(', ')} | ${pipeline} | STATS matched=COUNT(*)`,
+              params: cells.map(({ value }, index) => ({ [`p${index}`]: value })),
+            },
+            { signal: this.signal, requestTimeout: 10000 }
+          )
+          .catch((error: unknown) => {
+            if (error instanceof Error && error.message.includes('Unknown column'))
+              throw new Error(
+                `Positive evidence row is missing a predicate column. Repeat the raw source_esql read and KEEP every field used by WHERE. Use only the observed identity columns, or KEEP all inputs to COALESCE. Evidence fields and types: ${cells
+                  .map(({ name, type }) => `${name} (${type})`)
+                  .join(', ')}. ${error.message}`
+              );
+            throw error;
+          });
+        if (result.is_partial)
+          throw new Error(
+            'Positive evidence replay was partial. Validate again with a complete row.'
+          );
         if (!Number(result.values[0]?.[0]))
           throw new Error(
-            'Predicate does not match its positive evidence row. Check JSON key order, field names and boolean/value matching. Use independent conditions or JSON_EXTRACT; do not relabel an observed failure as preventive.'
+            `Predicate does not match its positive evidence row. Inspect the raw message and check extracted values with EVAL. A literal dotted JSON key needs bracket notation, for example JSON_EXTRACT(message, "['error.code']"). A plain dotted path traverses nested objects. Check value types and keep each predicate column. Do not relabel an observed failure as preventive.`
           );
         positiveExamplesMatched++;
       }
@@ -705,7 +800,7 @@ export class MonitoringToolSession {
         );
         for (const feature of allFeatures) {
           if (feature.type !== 'entity') continue;
-          const name = feature.properties.name;
+          const name = entityName(feature);
           const namespace = feature.properties.service_namespace ?? feature.properties.namespace;
           if (
             observed.has(JSON.stringify([name, namespace])) &&
@@ -717,7 +812,8 @@ export class MonitoringToolSession {
     }
     this.examined.add(source.id);
     if (id && args.action === 'validate') {
-      const existing = (await ownedMonitoringRules(this.clients)).find((rule) => rule.id === id);
+      const existing =
+        installed ?? (await ownedMonitoringRules(this.clients)).find((rule) => rule.id === id);
       if (
         existing?.query.base === nativeQuery &&
         (sampleMatches > 0 || positiveExamplesMatched > 0 || args.preventiveReason?.trim())
@@ -761,6 +857,10 @@ export class MonitoringToolSession {
       throw new Error('An existing monitor cannot be moved to another source');
     const observedServices = observedMonitoredServices(response.columns, response.values);
     const services = observedServices.length ? observedServices : monitoredServices(features);
+    if ((!existing || existing.enabled) && args.mode === 'count' && !services.length)
+      throw new Error(
+        'Count rules require a source-local emitting service KI. Use knowledge_indicators to select or save an entity/service with properties.name and service_namespace, then pass its featureId. Keep the count pipeline WHERE-only.'
+      );
     if (!existing || existing.enabled) assertServiceRuleCapacity(services, await this.usage(), id);
     const serviceTags = serviceOwnershipTags(services);
     const data = {
@@ -856,7 +956,11 @@ export class MonitoringToolSession {
               description: args.description,
               type: args.mode === 'count' ? 'match' : 'stats',
               esql: { query: base },
-              evidence: [args.reason, ...(baselineEvidence ? [baselineEvidence] : [])],
+              evidence: [
+                args.reason,
+                ...(baselineEvidence ? [baselineEvidence] : []),
+                PROBLEM_AGENT_KNOWLEDGE_MARKER,
+              ],
               features: features.map((feature) => ({
                 id: feature.id,
                 run_id:

@@ -203,13 +203,22 @@ const resetOutputs = createServerRoute({
   options: { access: 'internal' },
   security,
   params: lazySchema(() =>
-    z.object({ body: z.object({ confirmation: z.literal('RESET AGENT OUTPUTS') }) })
+    z.object({
+      body: z.strictObject({
+        confirmation: z.literal('RESET AGENT OUTPUTS'),
+        outputs: z
+          .array(z.enum(['knowledge', 'rules', 'events']))
+          .min(1)
+          .max(3)
+          .optional(),
+      }),
+    })
   ),
-  handler: async ({ request, server, getScopedClients, maintenanceService }) => {
+  handler: async ({ request, params, server, getScopedClients, maintenanceService }) => {
     const { licensing } = await getScopedClients({ request });
     await assertSignificantEventsAccess({ server, licensing });
     await assertNotPaused({ maintenanceService, request });
-    return server.problemAgent.resetOutputs(request);
+    return server.problemAgent.resetOutputs(request, params.body.outputs);
   },
 });
 

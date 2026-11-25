@@ -10,7 +10,7 @@ import { signalEntrySchema } from '@kbn/significant-events-schema';
 import { buildEventQuerySignals, resolveEventFeatures } from './event_evidence';
 
 it('stores executable query signals, frozen windows and actual result rows without a fabricated firing', () => {
-  const checkedAt = Date.parse('2026-11-20T16:09:00Z');
+  const checkedAt = Date.now();
   const check = {
     sourceId: 'logs',
     checkedAt,
@@ -20,26 +20,27 @@ it('stores executable query signals, frozen windows and actual result rows witho
   };
   const signals = buildEventQuerySignals(
     [check, { ...check, row: { failures: '8' } }],
-    'Observed failed operations',
-    false
+    'Observed failed operations'
   );
   expect(signals).toHaveLength(1);
   expect(signalEntrySchema.parse(signals[0])).toMatchObject({
     type: 'query',
-    verdict: 'confirms',
+    verdict: 'inconclusive',
     evidence: {
       result: 'found',
-      time_range: { from: '2026-11-20T16:06:00.000Z', to: '2026-11-20T16:09:00.000Z' },
+      time_range: {
+        from: new Date(checkedAt - 180000).toISOString(),
+        to: new Date(checkedAt).toISOString(),
+      },
     },
   });
-  expect(signals[0].evidence?.esql_query).toContain('TO_DATETIME("2026-11-20T16:09:00.000Z")');
+  expect(signals[0].evidence?.esql_query).toContain(
+    `TO_DATETIME("${new Date(checkedAt).toISOString()}")`
+  );
   expect(signals[0].evidence?.esql_query).toContain('literal="NOW()"');
   expect(signals[0].description).toContain('"failures":"7"');
   expect(signals[0].metadata).not.toHaveProperty('detection_id');
   expect(signals[0].metadata.rule_uuid).toBeUndefined();
-  expect(buildEventQuerySignals([check], 'Verified recovered operations', true)[0].verdict).toBe(
-    'refutes'
-  );
 });
 
 it('requires unambiguous source and namespace when resolving affected entities and respects explicit scope', () => {
@@ -82,50 +83,21 @@ it('requires unambiguous source and namespace when resolving affected entities a
   ).toEqual(['two']);
 });
 
-it('retains an explicit standalone measurement and its distinct native rule link independently', () => {
-  const check = {
-    sourceId: 'logs',
-    checkedAt: Date.now(),
-    query: 'FROM $.logs | WHERE `@timestamp` >= NOW() - 2 minutes | STATS failures=COUNT(*)',
-    row: { failures: '20' },
-  };
-  const signals = buildEventQuerySignals([check], 'Observed failures', false, [
-    { sourceId: 'logs', queryId: 'operation-outcomes' },
-    { sourceId: 'logs', queryId: 'native-monitor', ruleId: 'native-monitor' },
-    { sourceId: 'metrics', queryId: 'unrelated', ruleId: 'unrelated' },
-  ]);
-  expect(signals[0].metadata).toMatchObject({
-    query_id: 'operation-outcomes',
-    rule_uuid: 'native-monitor',
-  });
-  const ambiguous = buildEventQuerySignals([check], 'Observed failures', false, [
-    { sourceId: 'logs', queryId: 'one', ruleId: 'one' },
-    { sourceId: 'logs', queryId: 'two', ruleId: 'two' },
-  ]);
-  expect(ambiguous[0].metadata.rule_uuid).toBeUndefined();
-  expect(ambiguous[0].metadata).not.toHaveProperty('detection_id');
+it('keeps an older comparison window contextual', () => {
+  const signal = buildEventQuerySignals(
+    [
+      {
+        sourceId: 'logs',
+        checkedAt: Date.now(),
+        query: 'FROM logs | WHERE `@timestamp` >= NOW() - 13 minutes',
+        row: { failures: '2' },
+      },
+    ],
+    'Comparison baseline'
+  )[0];
+  expect(signal.verdict).toBe('inconclusive');
+  expect(signal.description).toContain('Historical comparison');
 });
-
-it.each([true, false])(
-  'keeps an older comparison window contextual for inactive=%s',
-  (inactive) => {
-    const signal = buildEventQuerySignals(
-      [
-        {
-          sourceId: 'logs',
-          checkedAt: Date.now(),
-          query:
-            'FROM $.logs | WHERE `@timestamp` >= NOW() - 13 minutes AND `@timestamp` < NOW() - 3 minutes | STATS failures=COUNT(*)',
-          row: { failures: '0' },
-        },
-      ],
-      'Comparison baseline',
-      inactive
-    )[0];
-    expect(signal.verdict).toBe('inconclusive');
-    expect(signal.description).toContain('Historical comparison');
-  }
-);
 
 it('keeps rows from other services contextual instead of confirming the selected affected service', () => {
   const check = {
@@ -133,6 +105,16 @@ it('keeps rows from other services contextual instead of confirming the selected
     checkedAt: Date.now(),
     query:
       'FROM $.logs | WHERE `@timestamp` >= NOW() - 2 minutes | STATS failures=COUNT(*) BY service.name',
+    outcome: {
+      sourceId: 'logs',
+      entityId: 'api',
+      operation: 'serve',
+      condition: 'failure',
+      failedField: 'failures',
+      healthyField: 'healthy',
+      failed: 3,
+      healthy: 12,
+    },
     row: { 'service.name': 'api', 'service.namespace': 'production', failures: '3' },
   };
   const affected: Feature = {
@@ -148,8 +130,6 @@ it('keeps rows from other services contextual instead of confirming the selected
   const signals = buildEventQuerySignals(
     [check, { ...check, row: { ...check.row, 'service.name': 'worker', failures: '8' } }],
     'API failures',
-    false,
-    [],
     [affected]
   );
   expect(signals).toHaveLength(2);

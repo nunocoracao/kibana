@@ -504,6 +504,8 @@ async function runEsqlCountQuery({
     query: buildCountQuery({ index: samplingSource, start, end, kql }),
     drop_null_columns: true,
   })) as unknown as ESQLSearchResponse;
+  if ('is_partial' in response && response.is_partial)
+    throw new Error('ES|QL returned partial results. Narrow the scope and retry.');
   const total = response.values[0]?.[0];
 
   return typeof total === 'number' ? total : 0;

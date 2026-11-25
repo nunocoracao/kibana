@@ -22,7 +22,8 @@ import {
   type KnowledgeIndicatorDataStreamClient,
   type RuleUnbackedFilter,
 } from './types';
-import { RevisionReader } from './revision_reader';
+import { IS_NOT_DELETED } from '../esql_helpers';
+import { type LatestRevisionCursor, RevisionReader } from './revision_reader';
 import { IndicatorWriter } from './indicator_writer';
 import { IndicatorReader, type TopologyFeaturePageCursor } from './indicator_reader';
 import { IndicatorSearcher } from './indicator_searcher';
@@ -48,6 +49,7 @@ export type {
  * stamped with it; callers never see documents from another space.
  */
 export class KnowledgeIndicatorClient {
+  private readonly revisions: RevisionReader;
   private readonly writer: IndicatorWriter;
   private readonly reader: IndicatorReader;
   private readonly searcher: IndicatorSearcher;
@@ -66,6 +68,7 @@ export class KnowledgeIndicatorClient {
   ) {
     this.withSourceWrite = deps.withSourceWrite ?? ((_sourceId, run) => run());
     const revisionReader = new RevisionReader(deps.esClient, deps.logger, deps.space);
+    this.revisions = revisionReader;
     this.ttlDays = config.feature_ttl_days;
     this.writer = new IndicatorWriter(
       deps.dataStreamClient,
@@ -91,6 +94,22 @@ export class KnowledgeIndicatorClient {
       this.reader,
       deps.space
     );
+  }
+
+  /** Includes expired and excluded indicators so output cleanup also reaches dormant sources. */
+  async *liveRevisionPages() {
+    const asOf = new Date().toISOString();
+    let after: LatestRevisionCursor | undefined;
+    do {
+      const page = await this.revisions.fetchLatestRevisionsPage({
+        asOf,
+        after,
+        size: 500,
+        postGroupingWhere: IS_NOT_DELETED,
+      });
+      yield page.hits;
+      after = page.nextCursor;
+    } while (after);
   }
 
   bulk(sourceId: string, operations: KIBulkOperation[]) {
@@ -141,6 +160,10 @@ export class KnowledgeIndicatorClient {
 
   deleteIndicators(sourceId: string) {
     return this.writer.deleteIndicators(sourceId);
+  }
+
+  getAgentCatalog(options: Parameters<RevisionReader['catalog']>[0]) {
+    return this.revisions.catalog(options);
   }
 
   getFeatures(

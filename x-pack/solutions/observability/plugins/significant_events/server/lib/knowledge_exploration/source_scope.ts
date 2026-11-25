@@ -5,6 +5,19 @@
  * 2.0.
  */
 
+import type { BaseFeature } from '@kbn/significant-events-schema';
+
+/** Reads the canonical entity name and the service-name alias in earlier agent KIs. */
+export const entityName = ({
+  properties,
+  subtype,
+}: Pick<BaseFeature, 'properties' | 'subtype'>): string | undefined => {
+  const name = properties?.name;
+  if (typeof name === 'string' && name.trim()) return name;
+  const alias = properties?.service_name;
+  return subtype === 'service' && typeof alias === 'string' && alias.trim() ? alias : undefined;
+};
+
 /** Builds service filters before a source-scoped pipeline can aggregate or drop identity fields. */
 export const buildServiceScopeFilter = (
   columns: readonly string[],

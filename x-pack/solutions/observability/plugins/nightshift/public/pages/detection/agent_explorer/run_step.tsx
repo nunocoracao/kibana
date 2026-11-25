@@ -64,7 +64,7 @@ export function RunStep({
         display: grid;
         grid-template-columns: 24px minmax(0, 1fr);
         gap: ${euiTheme.size.s};
-        padding: ${euiTheme.size.m} 0;
+        padding: ${model || expanded ? euiTheme.size.m : euiTheme.size.xs} 0;
         border-bottom: ${euiTheme.border.thin};
       `}
     >
@@ -200,106 +200,108 @@ export function RunStep({
             aria-hidden={true}
           />
         </button>
-        {(description.scope || (model && previousTool)) && (
-          <EuiText
-            size="xs"
-            color="subdued"
-            css={css`
-              margin-top: ${euiTheme.size.xs};
-              overflow: hidden;
-              text-overflow: ellipsis;
-              white-space: nowrap;
-            `}
-            title={description.scope}
-          >
-            {model && previousTool
-              ? `After: ${getStepDescription(previousTool).title}`
-              : description.scope}
-          </EuiText>
-        )}
-        {!model && description.result && (
-          <EuiText
-            size="xs"
-            color={
-              description.status === 'failed'
-                ? 'danger'
-                : description.status === 'partial'
-                ? 'warning'
-                : 'default'
-            }
-            css={css`
-              margin-top: ${euiTheme.size.xs};
-            `}
-          >
-            {description.result}
-          </EuiText>
-        )}
-        {!expanded && description.queryPreview && (
-          <code
-            css={css`
-              display: -webkit-box;
-              -webkit-line-clamp: 2;
-              -webkit-box-orient: vertical;
-              overflow: hidden;
-              overflow-wrap: anywhere;
-              white-space: pre-wrap;
-              margin-top: ${euiTheme.size.s};
-              padding: ${euiTheme.size.s};
-              border-radius: ${euiTheme.border.radius.small};
-              background: ${euiTheme.colors.backgroundBaseSubdued};
-              color: ${euiTheme.colors.textSubdued};
-              font-family: ${euiTheme.font.familyCode};
-              font-size: ${euiTheme.font.scale.xs}rem;
-              line-height: 1.5;
-            `}
-            title={description.queryPreview}
-          >
-            {description.queryPreview}
-          </code>
-        )}
-        {description.items.length > 0 && (
-          <EuiText
-            size="xs"
-            css={css`
-              margin-top: ${euiTheme.size.xs};
-              overflow-wrap: anywhere;
-              ${!expanded &&
-              'display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;'}
-            `}
-            title={description.items.join(' · ')}
-          >
-            {description.itemLabel && <strong>{description.itemLabel}: </strong>}
-            {description.items.join(' · ')}
-          </EuiText>
-        )}
-        {description.note && (
-          <EuiText
-            size="xs"
-            color="subdued"
-            css={css`
-              margin-top: ${euiTheme.size.xs};
-              overflow-wrap: anywhere;
-              ${!expanded &&
-              'display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;'}
-            `}
-            title={description.note}
-          >
-            {description.note}
-          </EuiText>
-        )}
-        {description.error && (
-          <EuiText
-            size="xs"
-            color="danger"
-            css={css`
-              margin-top: ${euiTheme.size.xs};
-              overflow-wrap: anywhere;
-              ${!expanded &&
-              'display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;'}
-            `}
-          >
-            {description.error}
-          </EuiText>
+        {(expanded || model) && (
+          <>
+            {(description.scope || (model && previousTool)) && (
+              <EuiText
+                size="xs"
+                color="subdued"
+                css={css`
+                  margin-top: ${euiTheme.size.xs};
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                  white-space: nowrap;
+                `}
+                title={description.scope}
+              >
+                {model && previousTool
+                  ? `After: ${getStepDescription(previousTool).title}`
+                  : description.scope}
+              </EuiText>
+            )}
+            {!model && description.result && (
+              <EuiText
+                size="xs"
+                color={
+                  description.status === 'failed'
+                    ? 'danger'
+                    : description.status === 'partial'
+                    ? 'warning'
+                    : 'default'
+                }
+                css={css`
+                  margin-top: ${euiTheme.size.xs};
+                `}
+              >
+                {description.result}
+              </EuiText>
+            )}
+            {description.queryPreview && (
+              <code
+                css={css`
+                  display: block;
+                  overflow: hidden;
+                  overflow-wrap: anywhere;
+                  white-space: pre-wrap;
+                  margin-top: ${euiTheme.size.s};
+                  padding: ${euiTheme.size.s};
+                  border-radius: ${euiTheme.border.radius.small};
+                  background: ${euiTheme.colors.backgroundBaseSubdued};
+                  color: ${euiTheme.colors.textSubdued};
+                  font-family: ${euiTheme.font.familyCode};
+                  font-size: ${euiTheme.font.scale.xs}rem;
+                  line-height: 1.5;
+                `}
+                title={description.queryPreview}
+              >
+                {description.queryPreview}
+              </code>
+            )}
+            {description.items.length > 0 && (
+              <EuiText
+                size="xs"
+                css={css`
+                  margin-top: ${euiTheme.size.xs};
+                  overflow-wrap: anywhere;
+                  ${!expanded &&
+                  'display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;'}
+                `}
+                title={description.items.join(' · ')}
+              >
+                {description.itemLabel && <strong>{description.itemLabel}: </strong>}
+                {description.items.join(' · ')}
+              </EuiText>
+            )}
+            {description.note && (
+              <EuiText
+                size="xs"
+                color="subdued"
+                css={css`
+                  margin-top: ${euiTheme.size.xs};
+                  overflow-wrap: anywhere;
+                  ${!expanded &&
+                  'display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;'}
+                `}
+                title={description.note}
+              >
+                {description.note}
+              </EuiText>
+            )}
+            {description.error && (
+              <EuiText
+                size="xs"
+                color="danger"
+                css={css`
+                  margin-top: ${euiTheme.size.xs};
+                  overflow-wrap: anywhere;
+                  ${!expanded &&
+                  'display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;'}
+                `}
+              >
+                {description.error}
+              </EuiText>
+            )}
+          </>
         )}
         {commentary && (
           <EuiText

@@ -424,3 +424,45 @@ describe('IndicatorReader.getPromotableUnbackedQueries', () => {
     expect(capturedQueryString(runEsql)).toContain(IS_NOT_EXPIRED_FRAGMENT);
   });
 });
+
+describe('agent catalog', () => {
+  it('counts before paging and resumes on the stored identity after latest revision filtering', async () => {
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce({
+        columns: [{ name: 'kind' }, { name: 'count' }],
+        values: [['feature', 25001]],
+      })
+      .mockResolvedValueOnce({
+        columns: [{ name: 'id' }, { name: 'source.id' }, { name: 'type' }],
+        values: [
+          ['10001', SOURCE, 'feature'],
+          ['10002', SOURCE, 'feature'],
+        ],
+      });
+    const reader = new RevisionReader(
+      { esql: { query } } as unknown as ElasticsearchClient,
+      loggerMock.create(),
+      SPACE
+    );
+    const result = await reader.catalog({
+      sourceIds: [SOURCE],
+      asOf: '2026-11-24T00:00:00.000Z',
+      terms: ['worker'],
+      after: { sourceId: SOURCE, type: 'feature', id: '10000' },
+      size: 1,
+      countOnly: false,
+    });
+    expect(result.total).toBe(25001);
+    expect(result.after).toEqual({ sourceId: SOURCE, type: 'feature', id: '10001' });
+    const [count, page] = query.mock.calls.map(([params]) => params.query as string);
+    expect(count).not.toContain('"10000"');
+    expect(page).not.toContain('BY kind = type');
+    expect(page).toContain('"10000"');
+    expect(page).not.toContain('_source');
+    for (const statement of [count, page]) {
+      expect(statement.indexOf('*worker*')).toBeGreaterThan(statement.lastIndexOf('INLINE STATS'));
+      expect(statement).toContain(SPACE);
+    }
+  });
+});

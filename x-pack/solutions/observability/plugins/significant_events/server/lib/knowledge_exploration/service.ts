@@ -6,7 +6,6 @@
  */
 
 import { timeoutSignal } from '@kbn/std';
-import { SEVERITY_CONTRACT_RULE, CONFIDENCE_CONTRACT_RULE } from '@kbn/significant-events-schema';
 
 import type { KibanaRequest } from '@kbn/core/server';
 import type { ChatCompletionTokenCount, Message } from '@kbn/inference-common';
@@ -28,17 +27,28 @@ import {
   initialExplorationLimits,
   selectExplorationLimits,
 } from '../../../common/knowledge_exploration';
+import type { ExplorationAgentAnatomy } from '../../../common/agent_anatomy';
 import type { GetScopedClients } from '../../routes/types';
 import type { SignificantEventsServer } from '../../types';
 import type { PriceService } from '../cost/price_service';
 import { StatusError } from '../errors/status_error';
 import type { EventDiscoveryToolSession } from '../event_discovery/tools';
 import { countDiscoveryEvents, resetDiscoveryEvents } from '../event_discovery/tools';
+import {
+  isStoredFeatureKnowledgeIndicator,
+  isStoredQueryKnowledgeIndicator,
+} from '../knowledge_indicators/data_stream';
+import type { KIBulkOperation } from '../knowledge_indicators/knowledge_indicator_client/knowledge_indicator_client';
 import { SOURCE_KNOWLEDGE_STATE_TYPE } from '../knowledge_indicators/source_knowledge_state';
 import { MAX_MANAGED_RULES_PER_SERVICE } from '../monitoring_setup/guardrails';
 import type { MonitoringToolSession } from '../monitoring_setup/tools';
-import { countMonitoringRules, resetMonitoringRules } from '../monitoring_setup/tools';
+import {
+  countMonitoringRules,
+  MONITORING_RULE_PREFIX,
+  resetMonitoringRules,
+} from '../monitoring_setup/tools';
 import prompt from './problem_prompt.text';
+import { detectionSkills } from './detection_skills';
 import { problemTools, ProblemToolSession } from './problem_tools';
 import { mergeSamplingAttempts, summarizeSamplingAttempts } from './sampling_strategy';
 import { collectModelResponse } from './model_response';
@@ -135,20 +145,6 @@ export class KnowledgeExplorationService {
     private getPriceService: () => PriceService,
     private agent: ExplorerAgent = 'problems'
   ) {}
-  private get tools() {
-    return problemTools;
-  }
-  private get systemPrompt() {
-    return (
-      prompt +
-      '\nEVENT SEVERITY CONTRACT\n' +
-      SEVERITY_CONTRACT_RULE +
-      '\nEVENT CONFIDENCE CONTRACT\n' +
-      CONFIDENCE_CONTRACT_RULE +
-      '\nBefore tool calls, give a short progress summary of the next action and its purpose. Report evidence and uncertainty without exposing private chain-of-thought.'
-    );
-  }
-
   private server(): SignificantEventsServer {
     const server = this.getServer();
     if (!server?.core) throw new Error('Knowledge Explorer is starting');
@@ -186,14 +182,12 @@ export class KnowledgeExplorationService {
     }
     const luna =
       connectors.find(
-        (connector) => connector.connectorId === defaultInferenceEndpoints.OPENAI_GPT_6_LUNA
+        (connector) => connector.connectorId === defaultInferenceEndpoints.OPENAI_GPT_6_LUNA_PRO
       ) ??
-      connectors.find((connector) =>
-        /\bgpt[- .]?6[- .]?luna\b(?![- .]?pro\b)/i.test(connector.name)
-      );
+      connectors.find((connector) => /\bgpt[- .]?6[- .]?luna[- .]?pro\b/i.test(connector.name));
     if (!luna)
       throw new StatusError(
-        'Configure a GPT-6 Luna inference connector before running an agent',
+        'Configure a GPT-6 Luna Pro inference connector before running an agent',
         409
       );
     return { connectorId: luna.connectorId, model: luna.name };
@@ -519,14 +513,28 @@ export class KnowledgeExplorationService {
     return { removed };
   }
 
-  async anatomy(request: KibanaRequest) {
+  async anatomy(request: KibanaRequest): Promise<ExplorationAgentAnatomy> {
+    const model = await this.model(request);
+    const defaultModel = {
+      connectorId: defaultInferenceEndpoints.OPENAI_GPT_6_LUNA_PRO,
+      model: 'GPT-6 Luna Pro',
+    };
     return {
-      name: 'Nightshift Detection Agent',
-      ...(await this.model(request)),
-      systemPrompt: this.systemPrompt,
-      tools: Object.entries(this.tools).map(([name, definition]) => ({ name, ...definition })),
+      id: 'nightshift-detection-agent',
+      name: 'Detection Agent',
+      description:
+        'Find current problems, verify recovery, and improve system knowledge and monitoring.',
+      defaultModel,
+      ...model,
+      subAgents: [],
+      systemPrompt: prompt,
+      tools: Object.entries(problemTools).map(([name, definition]) => ({ name, ...definition })),
       thinking: { enabled: true, effort: 'low' },
-      skills: [],
+      skills: detectionSkills.map(({ name, description, content }) => ({
+        name,
+        description,
+        content,
+      })),
       scope: {
         spaceId: request.spaceId,
         sources: 'Enabled configured sources only',
@@ -539,6 +547,26 @@ export class KnowledgeExplorationService {
         hardEstimatedCostCeilingUsd: MAX_AGENT_RUN_COST_USD,
         maxActiveManagedRulesPerService: MAX_MANAGED_RULES_PER_SERVICE,
       },
+      memory: [
+        {
+          name: 'System knowledge and detection lessons',
+          scope: 'Kibana space and source',
+          storage: 'Native knowledge indicators',
+          lifetime: 'Across runs, subject to knowledge expiry and output resets',
+        },
+        {
+          name: 'Recent feedback and unfinished work',
+          scope: 'Kibana space',
+          storage: 'Detection Agent state',
+          lifetime: 'Across runs; cleared with run-history reset',
+        },
+        {
+          name: 'Query evidence references',
+          scope: 'Individual run',
+          storage: 'Run session and retained run trace',
+          lifetime: 'References are valid only inside their originating run',
+        },
+      ],
       persistence: [
         'Evidence-backed knowledge',
         'Owned native monitoring rules',
@@ -792,41 +820,26 @@ export class KnowledgeExplorationService {
       throw new StatusError('Stop the running exploration before resetting knowledge', 409);
     const clients = await this.getScopedClients({ request });
     const client = await clients.getKnowledgeIndicatorClient();
-    const sources = await this.sources(request);
-    const ids = new Set([
-      ...sources.map((source) => source.id),
-      ...(await client.getSourceIdsWithKnowledgeIndicators()),
-    ]);
     let features = 0;
-    for (const id of ids) {
-      const result = await client.getFeatures(id, {
-        includeExcluded: true,
-        includeExpired: true,
-        limit: 10000,
-      });
-      const owned = result.hits.filter(
-        (feature) => feature.meta?.problem_agent_owner === 'problem-agent'
-      );
-      if (owned.length) {
-        const deleted = await client.bulk(
-          id,
-          owned.map((feature) => ({ delete: { type: 'feature' as const, id: feature.uuid } }))
-        );
-        features += deleted.applied;
+    for await (const page of client.liveRevisionPages()) {
+      const batches = new Map<string, KIBulkOperation[]>();
+      for (const doc of page) {
+        const owned = isStoredFeatureKnowledgeIndicator(doc)
+          ? doc.feature.meta?.problem_agent_owner === 'problem-agent'
+          : isStoredQueryKnowledgeIndicator(doc) &&
+            !doc.query.rule_backed &&
+            (doc.evidence?.includes(PROBLEM_AGENT_KNOWLEDGE_MARKER) ||
+              // Older monitors retain their generated rule ID when demoted to standalone queries.
+              (doc.query.rule_id === doc.id &&
+                doc.id.startsWith(MONITORING_RULE_PREFIX) &&
+                /^[0-9a-f]{24}$/.test(doc.id.slice(MONITORING_RULE_PREFIX.length))));
+        if (!owned) continue;
+        const source = doc['source.id'];
+        const batch = batches.get(source) ?? [];
+        batch.push({ delete: { type: doc.type, id: doc.id } });
+        batches.set(source, batch);
       }
-    }
-    const queries = await client.getSourceToQueryLinksMap([...ids], { includeExpired: true });
-    for (const [sourceId, links] of Object.entries(queries)) {
-      const owned = links.filter(({ query }) =>
-        query.evidence?.includes(PROBLEM_AGENT_KNOWLEDGE_MARKER)
-      );
-      if (owned.length) {
-        const deleted = await client.bulk(
-          sourceId,
-          owned.map(({ query }) => ({ delete: { type: 'query' as const, id: query.id } }))
-        );
-        features += deleted.applied;
-      }
+      for (const [source, batch] of batches) features += (await client.bulk(source, batch)).applied;
     }
     const latest = await store.getState();
     latest.state.checkpoints = {};
@@ -838,7 +851,8 @@ export class KnowledgeExplorationService {
   }
 
   async resetOutputs(
-    request: KibanaRequest
+    request: KibanaRequest,
+    outputs: Array<'knowledge' | 'rules' | 'events'> = ['knowledge', 'rules', 'events']
   ): Promise<{ knowledge: number; monitors: number; events: number }> {
     const active = this.active.get(request.spaceId);
     if (active) {
@@ -848,10 +862,12 @@ export class KnowledgeExplorationService {
     const current = await this.recoverInterrupted(request, this.store(request));
     if (current.state.activeRunId) throw new StatusError('Wait for the active worker to stop', 409);
     const clients = await this.getScopedClients({ request });
-    const monitors = await resetMonitoringRules(clients);
-    const events = await resetDiscoveryEvents(clients);
-    const knowledge = await this.resetFeatures(request);
-    return { knowledge: knowledge.features, monitors: monitors.features, events: events.features };
+    const monitors = outputs.includes('rules') ? (await resetMonitoringRules(clients)).features : 0;
+    const events = outputs.includes('events') ? (await resetDiscoveryEvents(clients)).features : 0;
+    const knowledge = outputs.includes('knowledge')
+      ? (await this.resetFeatures(request)).features
+      : 0;
+    return { knowledge, monitors, events };
   }
 
   private async execute(
@@ -934,14 +950,17 @@ export class KnowledgeExplorationService {
                 : 'Agent-selected bounded windows; start small and widen with evidence',
             unfinishedExploration: progress.remainingGaps ?? [],
             learningFocus: run.learningFocus,
-            learnedDetectionContext,
-            recentRunFeedback: progress.recentRunFeedback ?? [],
+            priorLessons:
+              'lessons' in learnedDetectionContext
+                ? { available: learnedDetectionContext.lessons.length }
+                : learnedDetectionContext,
+            recentToolFailures: progress.recentRunFeedback
+              ?.flatMap((run) => run.toolFailures)
+              .slice(0, 4),
             previousSamplingAttempts: progress.samplingAttempts ?? [],
             samplingPlan,
             now: run.startedAt,
             limits,
-            instruction:
-              'Find current problems and verify recovery promptly. Begin with sources, ACTIVE/RECOVERING events and fresh operation outcomes; inactive history is only for a fresh recurrence/identity check. Prior run summaries and unfinished gaps are hypotheses, not current truth. Count actual failed operations regardless of diagnostic cause/provenance labels. Write a confirmed current problem or recovery before background learning, exhaustive inventories or rule installation. Refresh cheap known measurements for terminal outcomes, latency and progress/correctness across current emitters; a zero-5xx aggregate does not assess successful-operation latency or invariants. Sample dense exploration deliberately and confirm candidates exactly. Then persist newly verified knowledge/measurements and improve useful monitoring. Call finish_exploration with honest current assessments and concrete unfinished work.',
           }),
         },
       ];
@@ -989,9 +1008,9 @@ export class KnowledgeExplorationService {
             collectModelResponse(
               clients.inferenceClient.chatComplete({
                 connectorId: run.connectorId,
-                system: this.systemPrompt,
+                system: prompt,
                 messages,
-                tools: this.tools,
+                tools: problemTools,
                 reasoning: { enabled: true, effort: 'low' },
                 temperature: 1,
                 stream: true,
@@ -1116,11 +1135,13 @@ export class KnowledgeExplorationService {
           run.steps.push(toolStep);
           await store.saveRun(run);
           const toolStarted = Date.now();
-          let result;
+          let result: Record<string, unknown>;
           try {
             result = await session.execute(call.function.name, call.function.arguments);
             toolStep.status =
-              result.failed || result.error
+              call.function.name === 'kibana_information' && result.status === 'partial'
+                ? 'partial'
+                : result.failed || result.error
                 ? 'failed'
                 : Array.isArray(result.rejected) && result.rejected.length > 0
                 ? (Array.isArray(result.saved) && result.saved.length > 0) ||
