@@ -1333,6 +1333,30 @@ describe('unified problem lifecycle', () => {
       'Monitoring: No parsed operation-failure field was validated; broad keyword counts match benign JSON keys.'
     );
   });
+  it('learns a namespace-less service from the source census before any outcome is measured', async () => {
+    run.learningFocus = { mode: 'initial_learning', sources: [], note: 'Cold source' };
+    mockEmittingServices.push({
+      sourceId: 'source-a',
+      name: 'worker',
+      namespace: '',
+      evidenceRef: 'census-ref',
+    });
+    getFeatures.mockResolvedValue({ hits: [] });
+    const agent = session();
+    const finish = {
+      outcome: 'partial',
+      summary: 'Examined inventory',
+      coverageComplete: false,
+      remainingGaps: [],
+    };
+    expect(await agent.execute('finish_exploration', finish)).toMatchObject({
+      learningGaps: [{ name: 'worker', evidenceRef: 'census-ref' }],
+    });
+    getFeatures.mockResolvedValue({
+      hits: [{ source_id: 'source-a', subtype: 'service', properties: { name: 'worker' } }],
+    });
+    expect(await agent.execute('finish_exploration', finish)).not.toHaveProperty('learningGaps');
+  });
   it.each(['name', 'service_name'])(
     'recognizes persisted source-local emitters with %s before finishing',
     async (key) => {

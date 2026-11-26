@@ -76,3 +76,25 @@ export const sourceIdentityColumns = (columns: readonly string[]): string[] =>
     'service.namespace',
     'namespace',
   ].filter((name) => columns.includes(name));
+
+/** Group on the exact keyword variant when a Kubernetes resource is dynamically mapped. */
+export const mappedKubernetesFields = (
+  columns: readonly string[],
+  names: readonly string[]
+): string[] =>
+  names.flatMap((name) =>
+    [`resource.attributes.${name}`, name].flatMap((path) =>
+      columns.includes(`${path}.keyword`)
+        ? [`${path}.keyword`]
+        : columns.includes(path)
+        ? [path]
+        : []
+    )
+  );
+
+export const mappedWorkloadFields = (columns: readonly string[]): string[] =>
+  mappedKubernetesFields(columns, [
+    'k8s.deployment.name',
+    'k8s.statefulset.name',
+    'k8s.daemonset.name',
+  ]);

@@ -66,6 +66,49 @@ describe('source query planning and evidence', () => {
     );
   });
 
+  it('categorizes log bodies with workload-only identity without inventing a service', async () => {
+    jest
+      .mocked(getEsqlColumnSchema)
+      .mockResolvedValue([
+        columns[0],
+        { name: 'body.text', type: 'text' },
+        { name: 'resource.attributes.k8s.deployment.name.keyword', type: 'keyword' },
+      ]);
+    const sample = {
+      sourceIds: [source.id],
+      template: 'samples',
+      sampleKind: 'errors',
+      lookbackMinutes: 3,
+    };
+    await session.execute('source_esql', { ...sample, template: 'volume' });
+    query.mockResolvedValue({
+      columns: [
+        { name: 'sample' },
+        { name: 'count' },
+        { name: 'resource.attributes.k8s.deployment.name.keyword' },
+      ],
+      values: [['Upstream query failed', 2, 'worker']],
+    });
+    const result = await session.execute('source_esql', sample);
+    expect(result.results).toMatchObject([
+      {
+        status: 'completed',
+        rows: [
+          {
+            workload: { 'resource.attributes.k8s.deployment.name.keyword': 'worker' },
+            service: { name: '' },
+          },
+        ],
+        query: expect.stringContaining(
+          'CATEGORIZE(log), `resource.attributes.k8s.deployment.name.keyword`'
+        ),
+      },
+    ]);
+    expect(session.emittingServices).toEqual([]);
+    const next = await session.execute('source_esql', sample);
+    expect(next.firstLook).toBeUndefined();
+  });
+
   it('pairs scoped measurements after volume planning and labels the disjoint evidence windows', async () => {
     const pair = { ...args, serviceNames: ['checkout'], compareEndOffsetMinutes: 8 };
     const first = await session.execute('source_esql', pair);

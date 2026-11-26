@@ -34,6 +34,8 @@ import {
   buildServiceScopeFilter,
   entityName,
   sourceIdentityColumns,
+  mappedKubernetesFields,
+  mappedWorkloadFields,
   sourceLogExpression,
 } from './source_scope';
 import {
@@ -1199,28 +1201,21 @@ export class ExplorationToolSession {
       if (key.startsWith(`${source.id}:`)) for (const column of schema) columns.add(column.name);
     const services = SERVICE_NAME_COLUMNS.filter((name) => columns.has(name));
     if (!services.length) {
-      const workloadFields = [
-        'k8s.deployment.name',
-        'k8s.statefulset.name',
-        'k8s.daemonset.name',
-        'k8s.namespace.name',
-      ].flatMap((name) =>
-        [`resource.attributes.${name}`, name].flatMap((path) =>
-          columns.has(`${path}.keyword`) ? [`${path}.keyword`] : columns.has(path) ? [path] : []
-        )
-      );
-      if (!workloadFields.some((name) => !name.includes('namespace')))
+      const workloadFields = mappedWorkloadFields([...columns]);
+      if (!workloadFields.length)
         return { services: [], note: 'No service or workload identity in the loaded schema.' };
       const guidance =
-        'These are observed Kubernetes workloads. Use their actual mapped fields in a scoped custom outcome query and in workload KI filters. A deployment name alone does not establish a service identity or dependency.';
-      return {
-        services: [],
-        workloads: await this.groupedFieldInventory(source, [...columns], workloadFields, args, {
-          noFields: guidance,
-          found: guidance,
-          empty: 'No emitting workloads in this interval.',
-        }),
-      };
+        'Save observed workloads as infrastructure/kubernetes_workload KIs with the actual workload name, namespace when known, and the evidenceRef from its group. The original field identifies the resource kind. A service identity or a directed call requires separate evidence.';
+      const workloads = await this.groupedFieldInventory(
+        source,
+        [...columns],
+        [...workloadFields, ...mappedKubernetesFields([...columns], ['k8s.namespace.name'])],
+        args,
+        { noFields: guidance, found: guidance, empty: 'No emitting workloads in this interval.' }
+      );
+      if (!args.endOffsetMinutes && args.lookbackMinutes <= 3)
+        this.emissionInventories.add(source.id);
+      return { services: [], workloads };
     }
     const namespaces = NAMESPACE_COLUMNS.filter((name) => columns.has(name));
     const expression = (names: string[]) =>
@@ -2330,7 +2325,7 @@ export class ExplorationToolSession {
         'service.name',
         'service_name',
       ].find((name) => columns.includes(name));
-      if (!messageExpression || !serviceField)
+      if (!messageExpression)
         return {
           sourceId: source.id,
           rows: [],
@@ -2338,6 +2333,7 @@ export class ExplorationToolSession {
           unavailable:
             'This template requires log-message fields; use template=custom with KEEP of observed schema fields and LIMIT to read metrics or traces. This is not evidence that the source is empty.',
         };
+      const grouping = serviceField ? [serviceField] : mappedWorkloadFields(columns);
       const namespaceField = [
         'resource.attributes.service.namespace',
         'service.namespace',
@@ -2348,10 +2344,12 @@ export class ExplorationToolSession {
         args.serviceNames,
         args.serviceNamespace
       );
-      const identityProof = ['attributes.fluent.tag', 'fluent.tag', 'data_stream.dataset']
-        .filter((name) => columns.includes(name))
-        .map(field);
-      const proofGrouping = identityProof.length ? `, ${identityProof.join(', ')}` : '';
+      if (namespaceField) grouping.push(namespaceField);
+      grouping.push(
+        ...['attributes.fluent.tag', 'fluent.tag', 'data_stream.dataset'].filter((name) =>
+          columns.includes(name)
+        )
+      );
       const expressions = {
         representative: '',
         outcomes: '',
@@ -2379,11 +2377,9 @@ export class ExplorationToolSession {
       const pattern = outcomes ? 'CASE(outcome_label IS NULL, log, "structured event")' : 'log';
       pipeline = `${scopedFilter}EVAL log=${messageExpression} | ${classify}${
         expression ? `WHERE TO_LOWER(log) RLIKE ".*(${expression}).*" | ` : ''
-      }STATS count=COUNT(*)${observedTimes}${recentCount}, sample=TOP(log, 1, "desc"), sample_low=TOP(log, 1, "asc"), sample_any=SAMPLE(log, 1) BY pattern=CATEGORIZE(${pattern}), ${
-        outcomes ? 'outcome_label, ' : ''
-      }${field(serviceField)}${
-        namespaceField ? `, ${field(namespaceField)}` : ''
-      }${proofGrouping} | SORT count DESC`;
+      }STATS count=COUNT(*)${observedTimes}${recentCount}, sample=TOP(log, 1, "desc"), sample_low=TOP(log, 1, "asc"), sample_any=SAMPLE(log, 1) BY pattern=CATEGORIZE(${pattern})${
+        outcomes ? ', outcome_label' : ''
+      }${grouping.map((name) => `, ${field(name)}`).join('')} | SORT count DESC`;
     }
     if (args.template === 'custom') {
       if (!args.pipeline) throw new Error('Custom queries require an ES|QL pipeline');
@@ -2578,6 +2574,7 @@ export class ExplorationToolSession {
         .map((command) => command.trim())
         .filter((command) => /^SAMPLE\s/i.test(command));
       const page = rows.slice(offset, offset + args.maxRows);
+      const workloadColumns = mappedWorkloadFields(columns);
       const candidates = page.flatMap((row, index) =>
         dependencyCandidates(row, this.observedEntities()).map((candidate) => ({
           ...candidate,
@@ -2616,6 +2613,13 @@ export class ExplorationToolSession {
             ? response.values.slice(offset, offset + args.maxRows)
             : page.map((row, index) => ({
                 service: rowIdentity(row),
+                ...(workloadColumns.some((column) => row[column]) && {
+                  workload: Object.fromEntries(
+                    workloadColumns
+                      .filter((column) => row[column])
+                      .map((column) => [column, row[column]])
+                  ),
+                }),
                 count: row.count,
                 ...(row.newest_minute_count !== undefined
                   ? { newestMinuteCount: Number(row.newest_minute_count) }
@@ -2644,7 +2648,12 @@ export class ExplorationToolSession {
                 })(),
                 evidenceRef: rowRefs[offset + index],
                 ...(row.sample.length > 2000 ? { sampleTruncated: true } : {}),
-                ...(rowIdentity(row).name !== row['resource.attributes.service.name']
+                ...((row['attributes.fluent.tag'] || row['fluent.tag']) &&
+                rowIdentity(row).name &&
+                rowIdentity(row).name !==
+                  (row['resource.attributes.service.name'] ||
+                    row['service.name'] ||
+                    row.service_name)
                   ? {
                       identityNote: 'Caller resolved from agreeing per-log Fluent tag and dataset.',
                       resourceServiceName: row['resource.attributes.service.name'],

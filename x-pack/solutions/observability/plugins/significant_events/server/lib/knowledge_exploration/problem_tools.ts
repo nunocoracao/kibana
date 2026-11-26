@@ -712,20 +712,24 @@ export class ProblemToolSession {
       }
       if (
         this.run.learningFocus?.mode === 'initial_learning' &&
-        this.observedEmitters.size &&
+        (this.reads.emittingServices.length || this.observedEmitters.size) &&
         !this.knowledgeWriteBlocked
       ) {
-        const sourceIds = [
-          ...new Set([...this.observedEmitters.values()].map((entity) => entity.sourceId)),
-        ];
+        const emitters = [...this.reads.emittingServices, ...this.observedEmitters.values()];
+        const sourceIds = [...new Set(emitters.map((entity) => entity.sourceId))];
         try {
-          const pending = new Map(this.observedEmitters);
+          const pending = new Map(
+            emitters.map(
+              (entity) =>
+                [JSON.stringify([entity.sourceId, entity.name, entity.namespace]), entity] as const
+            )
+          );
           for await (const feature of this.currentFeatures(sourceIds, 'entity')) {
             pending.delete(
               JSON.stringify([
                 feature.source_id,
                 entityName(feature),
-                feature.properties.service_namespace ?? feature.properties.namespace,
+                feature.properties.service_namespace ?? feature.properties.namespace ?? '',
               ])
             );
             if (!pending.size) break;
