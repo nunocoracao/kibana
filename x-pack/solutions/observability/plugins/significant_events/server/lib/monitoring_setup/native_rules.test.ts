@@ -108,17 +108,36 @@ it.each([
       {},
       new AbortController().signal
     );
-    const result = session.execute('monitoring_rules', {
-      action: 'upsert',
+    const candidate = {
       sourceId: 'source',
-      slug: 'checkout-errors',
       everyMinutes: 2,
-      title: 'Checkout failures',
-      description: 'Failed checkout operations per minute',
       reason: 'Observed failed checkout operations',
       ...(failReference ? { mode: 'metric' } : {}),
       pipeline,
       featureIds: ['checkout'],
+    };
+    const validated = await session.execute('monitoring_rules', {
+      ...candidate,
+      action: 'validate',
+    });
+    expect(validated.validationRef).toEqual(expect.any(String));
+    expect(nativeRules.size).toBe(0);
+    await expect(
+      session.execute('monitoring_rules', {
+        action: 'upsert',
+        sourceId: 'source',
+        reason: candidate.reason,
+        validationRef: 'unknown',
+      })
+    ).rejects.toThrow('latest validationRef');
+    const result = session.execute('monitoring_rules', {
+      action: 'upsert',
+      sourceId: 'source',
+      reason: candidate.reason,
+      validationRef: validated.validationRef,
+      slug: 'checkout-errors',
+      title: 'Checkout failures',
+      description: 'Failed checkout operations per minute',
     });
     if (failReference) {
       await expect(result).rejects.toThrow('Knowledge reference could not be persisted');

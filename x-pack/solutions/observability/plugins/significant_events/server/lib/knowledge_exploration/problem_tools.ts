@@ -133,7 +133,7 @@ export const problemTools: Record<string, ToolDefinition> = {
   monitoring_rules: {
     ...monitoringTools.monitoring_rules,
     description:
-      'Baseline, validate or maintain a native owned rule on one source. Baseline takes a pipeline. Installed count predicates use only WHERE; inline JSON_EXTRACT in WHERE or use metric mode for derived fields. Candidate validate needs both pipeline and source-local featureIds. Validate an installed rule by ruleId. Upsert requires slug, title, description, pipeline, reason and source-local featureIds. Inspect returned values and rule ID. Use maintain-coverage for predicate construction, positive examples and rule linking.',
+      'Baseline, validate or maintain a native owned rule on one source. Baseline takes a pipeline. Installed count predicates use only WHERE; inline JSON_EXTRACT in WHERE or use metric mode for derived fields. Candidate validate needs both pipeline and source-local featureIds. Validate an installed rule by ruleId. For a validated new candidate, upsert with its validationRef, sourceId, slug, title, description and reason. Otherwise supply the pipeline and source-local featureIds. Inspect returned values and rule ID. Use maintain-coverage for predicate construction, positive examples and rule linking.',
   },
   fired_rules: {
     ...discoveryTools.fired_rules,
@@ -1544,7 +1544,7 @@ export class ProblemToolSession {
         type: 'entity',
         feature_id: feature.id,
         subtype: feature.subtype,
-        name: feature.title || feature.id,
+        name: entityName(feature) || feature.title || feature.id,
         source_id: feature.source_id,
       })),
       causal_features:
@@ -1554,7 +1554,8 @@ export class ProblemToolSession {
               feature_id: feature.id,
               type: feature.type,
               subtype: feature.subtype,
-              name: feature.title || feature.id,
+              name:
+                (feature.type === 'entity' && entityName(feature)) || feature.title || feature.id,
               source_id: feature.source_id,
             })),
     });

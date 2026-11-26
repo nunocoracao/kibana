@@ -1182,6 +1182,7 @@ export class ExplorationToolSession {
     return [...this.currentEmitters.values()];
   }
   private volumeProbedSources = new Set<string>();
+  private exceptionWindowMinutes = new Map<string, number>();
   /** Per source: service name (lower case) to the language its own telemetry reports. */
   private reportedLanguages = new Map<string, Map<string, string>>();
 
@@ -1197,17 +1198,66 @@ export class ExplorationToolSession {
     for (const [key, schema] of this.sourceSchemas.entries())
       if (key.startsWith(`${source.id}:`)) for (const column of schema) columns.add(column.name);
     const services = SERVICE_NAME_COLUMNS.filter((name) => columns.has(name));
-    if (!services.length)
-      return { services: [], note: 'No service name column in the loaded schema.' };
+    if (!services.length) {
+      const workloadFields = [
+        'k8s.deployment.name',
+        'k8s.statefulset.name',
+        'k8s.daemonset.name',
+        'k8s.namespace.name',
+      ].flatMap((name) =>
+        [`resource.attributes.${name}`, name].flatMap((path) =>
+          columns.has(`${path}.keyword`) ? [`${path}.keyword`] : columns.has(path) ? [path] : []
+        )
+      );
+      if (!workloadFields.some((name) => !name.includes('namespace')))
+        return { services: [], note: 'No service or workload identity in the loaded schema.' };
+      const guidance =
+        'These are observed Kubernetes workloads. Use their actual mapped fields in a scoped custom outcome query and in workload KI filters. A deployment name alone does not establish a service identity or dependency.';
+      return {
+        services: [],
+        workloads: await this.groupedFieldInventory(source, [...columns], workloadFields, args, {
+          noFields: guidance,
+          found: guidance,
+          empty: 'No emitting workloads in this interval.',
+        }),
+      };
+    }
     const namespaces = NAMESPACE_COLUMNS.filter((name) => columns.has(name));
     const expression = (names: string[]) =>
       names.length === 1 ? field(names[0]) : `COALESCE(${names.map(field).join(', ')})`;
-    const query = `FROM ${source.view_name} | ${sourceTimeWindow(
-      args.lookbackMinutes,
-      args.endOffsetMinutes
-    )} | STATS count=COUNT(*) BY service_name=${expression(services)}${
+    // Keep the emitter census exact while surfacing sparse warnings lost in sampled log text.
+    const levels = ['log.level', 'severity_text', 'log.severity_text'].filter((name) =>
+      columns.has(name)
+    );
+    const log = sourceLogExpression([...columns]);
+    const triage =
+      levels.length > 0 && Boolean(log) && !args.endOffsetMinutes && args.lookbackMinutes <= 3;
+    const censusWindow = sourceTimeWindow(args.lookbackMinutes, args.endOffsetMinutes);
+    const lookback = triage
+      ? Math.max(args.lookbackMinutes, this.exceptionWindowMinutes.get(source.id) ?? 0)
+      : args.lookbackMinutes;
+    const recent = triage ? ` WHERE @timestamp >= NOW() - ${args.lookbackMinutes} minutes` : '';
+    const exceptionStats = triage
+      ? [
+          ['warning', '"warn", "warning"'],
+          ['error', '"error", "critical", "fatal", "severe", "alert", "emerg", "panic"'],
+        ].flatMap(([name, values]) => {
+          const predicate = ` WHERE level IN (${values})`;
+          return [
+            `${name}_records=COUNT(*)${predicate}`,
+            `latest_${name}=MAX(@timestamp)${predicate}`,
+            `${name}_example=LAST(LEFT(${log}, 300), @timestamp)${predicate}`,
+          ];
+        })
+      : [];
+    const query = `FROM ${source.view_name} | ${
+      triage ? sourceTimeWindow(lookback, 0) : censusWindow
+    } ${triage ? `| EVAL level=TO_LOWER(TO_STRING(${expression(levels)})) ` : ''}| STATS ${[
+      `count=COUNT(*)${recent}`,
+      ...exceptionStats,
+    ].join(', ')} BY service_name=${expression(services)}${
       namespaces.length ? `, namespace=${expression(namespaces)}` : ''
-    } | WHERE service_name IS NOT NULL | SORT count ASC, service_name ASC | LIMIT 201`;
+    } | WHERE service_name IS NOT NULL AND count > 0 | SORT count ASC, service_name ASC | LIMIT 201`;
     const response = await this.clients.streamDataEsClient.esql.query(
       { query },
       { signal: this.signal, requestTimeout: 30000 }
@@ -1244,6 +1294,11 @@ export class ExplorationToolSession {
     return {
       window: { lookbackMinutes: args.lookbackMinutes, endOffsetMinutes: args.endOffsetMinutes },
       query,
+      ...(triage && {
+        exceptionLookbackMinutes: lookback,
+        interpretation:
+          'Warning/error counts are unsampled log records over this interval. Inspect the examples, including sparse services; measure the affected operation and compare a normal window before declaring impact. The count column covers the shorter emitter census.',
+      }),
       services: rows.slice(0, 200).map((row, index) => ({ ...row, ref: refs[index] })),
       truncated: rows.length > 200,
     };
@@ -1446,15 +1501,19 @@ export class ExplorationToolSession {
           'This live result cannot resume by offset. Narrow the time, service or operation and query from offset zero.'
         );
       const comparisonOffset = args.compareEndOffsetMinutes;
+      const hasComparisonScope =
+        args.serviceNames?.length ||
+        args.serviceNamespace ||
+        (args.template === 'custom' && /^\s*\|?\s*WHERE\s+/i.test(args.pipeline ?? ''));
       if (
         comparisonOffset !== undefined &&
         (args.sourceIds.length !== 1 ||
           !['custom', 'samples'].includes(args.template) ||
-          (!args.serviceNames?.length && !args.serviceNamespace) ||
+          !hasComparisonScope ||
           comparisonOffset < args.endOffsetMinutes + args.lookbackMinutes)
       ) {
         throw new Error(
-          'For a paired comparison, select one source and scope the samples/custom query by service or namespace. Set compareEndOffsetMinutes before the entire current window.'
+          'For paired windows select one source. Use samples with serviceNames/serviceNamespace, or custom with a leading WHERE filter or service scope. Set compareEndOffsetMinutes before the entire current window.'
         );
       }
       const results = [];
@@ -1981,6 +2040,14 @@ export class ExplorationToolSession {
         throw new Error(
           'Volume probe did not return a valid count; do not assume this source is empty.'
         );
+      const volume = summarizeVolume(count, minutes, Date.now() - started);
+      if (!endOffsetMinutes) {
+        const boundedMinutes =
+          volume.countRelation === 'eq' && volume.elapsedMs < 1000 && volume.documentsPerSecond > 0
+            ? Math.min(10, Math.floor(10000 / (60 * volume.documentsPerSecond)))
+            : 0;
+        this.exceptionWindowMinutes.set(source.id, boundedMinutes);
+      }
       return {
         sourceId: source.id,
         query: volumeQuery(source.view_name, minutes, endOffsetMinutes),
@@ -1992,7 +2059,7 @@ export class ExplorationToolSession {
             }
           : {}),
         endOffsetMinutes,
-        ...summarizeVolume(count, minutes, Date.now() - started),
+        ...volume,
       };
     }
     const inventoryKey = `${source.id}:${lookbackMinutes}:${endOffsetMinutes}`;

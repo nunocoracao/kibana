@@ -79,6 +79,7 @@ const ruleSchema = lazySchema(() =>
     action: z.enum(['baseline', 'validate', 'upsert', 'enable', 'disable', 'delete']),
     sourceId: text,
     ruleId: text.optional(),
+    validationRef: text.optional(),
     slug: text.optional(),
     title: z.string().min(1).max(200).optional(),
     description: z.string().min(1).max(2000).optional(),
@@ -169,6 +170,11 @@ export const monitoringTools: Record<string, ToolDefinition> = {
         type: 'string',
         description:
           'Existing owned native rule ID only. Omit or empty for new rules. Never invent an ID.',
+      },
+      validationRef: {
+        type: 'string',
+        description:
+          'For upsert, reuse the latest candidate validated on this source in this run. Supply slug, title, description and reason. Installation rechecks the evidence and ownership.',
       },
       slug: string,
       title: string,
@@ -288,6 +294,7 @@ export const resetMonitoringRules = async (
 export class MonitoringToolSession {
   private reads: ExplorationToolSession;
   private validatedRules = new Set<string>();
+  private latestCandidates = new Map<string, { ref: string; args: z.infer<typeof ruleSchema> }>();
   private baselines = new Map<
     string,
     { checkedAt: string; query: string; summary: ReturnType<typeof summarizeBaseline> }
@@ -532,12 +539,17 @@ export class MonitoringToolSession {
   }
 
   private async rule(parameters: object): Promise<Record<string, unknown>> {
-    const args = ruleSchema.parse(
-      Object.fromEntries(
-        Object.entries(parameters).filter(([, value]) => value !== '' && value !== null)
-      )
+    const input = Object.fromEntries(
+      Object.entries(parameters).filter(([, value]) => value !== '' && value !== null)
     );
+    let args = ruleSchema.parse(input);
     const source = this.source(args.sourceId);
+    if (args.validationRef) {
+      const candidate = this.latestCandidates.get(source.id);
+      if (args.action !== 'upsert' || !candidate || candidate.ref !== args.validationRef)
+        throw new Error('Use the latest validationRef from validate for this source in this run.');
+      args = ruleSchema.parse({ ...candidate.args, ...input });
+    }
     const { alertingV2RulesClient: rules } =
       await this.clients.getSignificantEventsAlertingContext();
     const ki = await this.clients.getKnowledgeIndicatorClient(source);
@@ -820,9 +832,19 @@ export class MonitoringToolSession {
       )
         this.validatedRules.add(id);
     }
-    if (args.action === 'validate')
+    if (args.action === 'validate') {
+      const validationRef = createHash('sha256')
+        .update(JSON.stringify([this.run.id, source.id, args]))
+        .digest('hex')
+        .slice(0, 24);
+      if (!args.ruleId) this.latestCandidates.set(source.id, { ref: validationRef, args });
       return {
         valid: true,
+        ...(!args.ruleId && {
+          validationRef,
+          nextAction:
+            'If the measured condition distinguishes a useful operational failure from ordinary outcomes, call upsert with this validationRef, sourceId, slug, title, description and reason. Link its returned ruleId to the event. This validation has not installed a rule.',
+        }),
         mode: args.mode,
         query: nativeQuery,
         columns: response.columns,
@@ -839,6 +861,7 @@ export class MonitoringToolSession {
         lookbackMinutes: args.lookbackMinutes,
         preventive: sampleMatches === 0,
       };
+    }
     const ownedRules = await ownedMonitoringRules(this.clients);
     if (!args.ruleId) {
       const equivalent = ownedRules.find(

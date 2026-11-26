@@ -85,6 +85,13 @@ describe('source query planning and evidence', () => {
         },
       ],
     });
+    const scoped = await session.execute('source_esql', {
+      ...pair,
+      template: 'custom',
+      serviceNames: undefined,
+      pipeline: '| WHERE `service.name` == "checkout" | STATS records=COUNT(*)',
+    });
+    expect(scoped).toHaveProperty('baselineComparison');
     await expect(
       session.execute('source_esql', { ...pair, compareEndOffsetMinutes: 1 })
     ).rejects.toThrow('before the entire current window');
