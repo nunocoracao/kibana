@@ -278,6 +278,7 @@ export class ProblemToolSession {
     { sourceId: string; name: string; namespace: string; evidenceRef: string; checkedAt: number }
   >();
   private knowledgeWriteBlocked = false;
+  private offeredPeerReview = false;
   private requestedCurrentRefresh = false;
   private pendingCurrentRefresh = new Set<string>();
   private planningFeedbackSent = false;
@@ -754,6 +755,43 @@ export class ProblemToolSession {
         }
       }
       const monitoredLessons = new Set<string>();
+      if (
+        this.run.learningFocus?.mode === 'initial_learning' &&
+        !this.knowledgeWriteBlocked &&
+        !this.offeredPeerReview &&
+        this.reads.observedPeerLinks.size
+      ) {
+        this.offeredPeerReview = true;
+        const pending = new Map(this.reads.observedPeerLinks);
+        const sources = [...new Set([...pending.values()].map((peer) => peer.sourceId))];
+        try {
+          for await (const feature of this.currentFeatures(sources, 'dependency')) {
+            const p = feature.properties;
+            pending.delete(
+              JSON.stringify([
+                feature.source_id,
+                p.source,
+                p.source_namespace ?? '',
+                p.target,
+                p.target_namespace ?? '',
+              ])
+            );
+          }
+        } catch {
+          pending.clear();
+          args.remainingGaps.push(
+            'Existing directed knowledge could not be checked against the observed outgoing peers.'
+          );
+        }
+        if (pending.size)
+          return {
+            status: 'continue',
+            finished: false,
+            observedPeers: [...pending.values()].slice(0, 20),
+            nextAction:
+              'Review these observed outbound links. Each contains a source-local evidenceRef, an explicitly named target and an independently observed emitter. Save verified caller-to-target dependency KIs in a batch per source, with properties.source, target and their observed namespaces. Omit an ambiguous alias or a configuration-only address without evidence of use; explain its uncertainty. These links do not prove a cause of an incident.',
+          };
+      }
       if (this.eventLearningCandidates.size && !this.knowledgeWriteBlocked) {
         const pending = new Map(this.eventLearningCandidates);
         const sources = [

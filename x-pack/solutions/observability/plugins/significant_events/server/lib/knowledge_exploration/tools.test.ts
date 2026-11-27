@@ -96,6 +96,26 @@ describe('document ID lookup', () => {
     );
   });
 
+  it('resolves inventory aliases with their observed namespace, fixed time and source filter', () => {
+    const stamp = '2026-11-26T10:04:00.000Z';
+    const actual = documentIdQuery(
+      'FROM logs-a | WHERE env == "prod"',
+      reference,
+      { service_name: 'jobs', count: '5' },
+      columns,
+      {
+        window: 'WHERE `@timestamp` >= NOW() - 3 minutes',
+        predicate: '`service.name` == "jobs" AND `service.namespace` IS NULL',
+        checkedAt: Date.parse(stamp),
+      }
+    );
+    expect(actual).toContain('FROM logs-a METADATA _id | WHERE env == "prod"');
+    expect(actual).toContain(`TO_DATETIME("${stamp}") - 3 minutes`);
+    expect(actual).toContain(
+      'WHERE `service.name` == "jobs" AND `service.namespace` IS NULL | KEEP _id | LIMIT 3'
+    );
+    expect(actual).not.toContain('NOW()');
+  });
   it('keeps the source pipeline and an existing METADATA clause', () => {
     expect(
       documentIdQuery(

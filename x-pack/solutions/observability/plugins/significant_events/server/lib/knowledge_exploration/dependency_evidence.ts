@@ -154,3 +154,72 @@ export const dependencyCandidates = (
   }
   return candidates;
 };
+
+export interface DirectedPeer {
+  sourceId: string;
+  source: string;
+  sourceNamespace: string;
+  target: string;
+  targetNamespace: string;
+  observedField: string;
+  evidenceRef: string;
+}
+
+/** Resolve explicitly outbound resource fields to emitters independently seen on this source. */
+export function directedPeers(
+  row: Record<string, string>,
+  emitters: ObservedEntity[],
+  sourceId: string,
+  evidenceRef: string
+): DirectedPeer[] {
+  const actor = rowIdentity(row);
+  if (!actor.name) return [];
+  const peers = new Map<string, DirectedPeer>();
+  for (const [fieldName, value] of Object.entries(row)) {
+    const key = fieldName.replace(/^attributes\./, '').replace(/\.keyword$/, '');
+    const outbound = [
+      'upstream.cluster',
+      'upstream.service.name',
+      'destination.service.name',
+      'downstream.service.name',
+    ].includes(key);
+    const address = /(?:^|[._])service[._](?:addr|address|url|endpoint)$/.test(key);
+    if (!outbound && !address) continue;
+    let host = value;
+    let namespace: string | undefined;
+    if (address) {
+      try {
+        const url = new URL(value.includes('://') ? value : `http://${value}`);
+        if (url.username || url.password) continue;
+        host = url.hostname;
+      } catch {
+        continue;
+      }
+      const qualified = /^([a-z0-9-]+)\.([a-z0-9-]+)\.svc(?:\.|$)/i.exec(host);
+      if (qualified) {
+        host = qualified[1];
+        namespace = qualified[2];
+      }
+    }
+    if (!host || host === '-' || host === 'localhost' || /^[\d.:]+$/.test(host)) continue;
+    const matches = emitters.filter((candidate) => candidate.name === host);
+    const targetNamespace = namespace ?? actor.namespace;
+    const local = targetNamespace
+      ? matches.find((candidate) => candidate.namespace === targetNamespace)
+      : undefined;
+    const spaces = new Set(matches.map((candidate) => candidate.namespace));
+    const target = local ?? (!namespace && spaces.size === 1 ? matches[0] : undefined);
+    if (!target || (target.name === actor.name && target.namespace === actor.namespace)) continue;
+    const peer = {
+      sourceId,
+      source: actor.name,
+      sourceNamespace: actor.namespace,
+      target: target.name,
+      targetNamespace: target.namespace,
+      observedField: fieldName,
+      evidenceRef,
+    };
+    peers.set(JSON.stringify([peer.target, peer.targetNamespace]), peer);
+  }
+  return [...peers.values()];
+}

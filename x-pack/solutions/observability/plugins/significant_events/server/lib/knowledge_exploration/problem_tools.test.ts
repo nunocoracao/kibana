@@ -20,6 +20,7 @@ import { ProblemToolSession, PROBLEM_EVENT_PREFIX } from './problem_tools';
 const mockEvidenceChecks = jest.fn();
 const mockReadExecute = jest.fn();
 const mockExaminedSources = new Set<string>();
+const mockObservedPeerLinks = new Map<string, import('./dependency_evidence').DirectedPeer>();
 const mockEmittingServices: Array<{
   sourceId: string;
   name: string;
@@ -32,6 +33,7 @@ jest.mock('./tools', () => ({
     pendingCheckpoints: {},
     examined: mockExaminedSources,
     emittingServices: mockEmittingServices,
+    observedPeerLinks: mockObservedPeerLinks,
     blocked: false,
     execute: mockReadExecute,
     getEvidenceChecks: mockEvidenceChecks,
@@ -126,6 +128,7 @@ describe('unified problem lifecycle', () => {
     mockExaminedSources.clear();
     mockExaminedSources.add('source-a');
     mockEmittingServices.length = 0;
+    mockObservedPeerLinks.clear();
     getSourceToQueryLinksMap.mockResolvedValue({});
     mockReadExecute.mockReset();
     jest.clearAllMocks();
@@ -1333,6 +1336,46 @@ describe('unified problem lifecycle', () => {
       'Monitoring: No parsed operation-failure field was validated; broad keyword counts match benign JSON keys.'
     );
   });
+  it('offers each cold source a single review of directed peers missing from knowledge', async () => {
+    run.learningFocus = { mode: 'initial_learning', sources: [], note: 'Cold source' };
+    const peer = {
+      sourceId: 'source-a',
+      source: 'caller',
+      sourceNamespace: '',
+      target: 'target',
+      targetNamespace: '',
+      observedField: 'upstream.cluster',
+      evidenceRef: 'r1',
+    };
+    mockObservedPeerLinks.set(JSON.stringify(['source-a', 'caller', '', 'target', '']), peer);
+    const finish = {
+      outcome: 'partial',
+      summary: 'No incident',
+      coverageComplete: false,
+      remainingGaps: [],
+      monitoringBlocker: 'No validated measurement',
+    };
+    getFeatures.mockResolvedValue({ hits: [] });
+    const agent = session();
+    expect(await agent.execute('finish_exploration', finish)).toMatchObject({
+      finished: false,
+      observedPeers: [peer],
+    });
+    expect(await agent.execute('finish_exploration', finish)).not.toHaveProperty('observedPeers');
+    getFeatures.mockResolvedValue({
+      hits: [
+        {
+          source_id: 'source-a',
+          type: 'dependency',
+          properties: { source: 'caller', target: 'target' },
+        },
+      ],
+    });
+    expect(await session().execute('finish_exploration', finish)).not.toHaveProperty(
+      'observedPeers'
+    );
+  });
+
   it('learns a namespace-less service from the source census before any outcome is measured', async () => {
     run.learningFocus = { mode: 'initial_learning', sources: [], note: 'Cold source' };
     mockEmittingServices.push({

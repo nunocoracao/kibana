@@ -701,6 +701,35 @@ describe('source query planning and evidence', () => {
     });
     expect(() => session.getEvidenceChecks('source', ['r1'])).toThrow();
   });
+  it.each([
+    [10, true],
+    [10001, false],
+  ])('plans common access-log parsing from a measured volume of %i', async (documents, parse) => {
+    jest
+      .mocked(getEsqlColumnSchema)
+      .mockResolvedValue([
+        ...columns,
+        { name: 'message', type: 'keyword' },
+        { name: 'http.response.status_code', type: 'long' },
+      ]);
+    query.mockResolvedValue({
+      columns: [{ name: 'documents', type: 'long' }],
+      values: [[documents]],
+    });
+    await session.execute('source_esql', {
+      sourceIds: [source.id],
+      template: 'volume',
+      lookbackMinutes: 3,
+    });
+    await session.execute('source_esql', args);
+    const statement = query.mock.calls
+      .map(([call]) => String(call.query))
+      .find((text) => text.includes('BY service_name='));
+    expect(statement).toContain('http_5xx=COUNT(*) WHERE');
+    expect(statement?.includes('DISSECT')).toBe(parse);
+    expect(statement).toContain('http.response.status_code');
+  });
+
   it('surfaces bounded current emitters even when the first actual read targets an old incident', async () => {
     await session.execute('source_esql', args);
     query.mockImplementation(async ({ query: esql }: { query: string }) =>

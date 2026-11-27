@@ -27,7 +27,12 @@ import type { RouteHandlerScopedClients } from '../../routes/types';
 import type { SignificantEventsServer } from '../../types';
 import { validateEsqlQueryForSourceOrThrow } from '../significant_events/validate_esql_query';
 import type { ObservedEntity } from './dependency_evidence';
-import { dependencyCandidates, rowIdentity } from './dependency_evidence';
+import {
+  dependencyCandidates,
+  directedPeers,
+  rowIdentity,
+  type DirectedPeer,
+} from './dependency_evidence';
 import { esqlGuideTool, readEsqlGuide } from './esql_guide';
 import { pageSourceFields } from './source_paging';
 import {
@@ -493,7 +498,7 @@ export const technologyField = (name: string): boolean =>
   ) || /^(scope|instrumentation_scope)\.(name|version)$/.test(name);
 
 export const peerField = (name: string): boolean =>
-  /(^|\.)(peer\.service|server\.address|net\.peer\.name|network\.peer\.address|db\.system(\.name)?|db\.namespace|messaging\.system|messaging\.destination\.name|rpc\.system|rpc\.service|feature_flag\.provider\.name|feature_flag\.provider_name|url\.domain|http\.host|upstream\.(host|addr|address|cluster)|gen_ai\.(system|provider\.name))$/.test(
+  /(^|\.)(peer\.service|server\.address|net\.peer\.name|network\.peer\.address|db\.system(\.name)?|db\.namespace|messaging\.system|messaging\.destination\.name|rpc\.system|rpc\.service|feature_flag\.provider\.name|feature_flag\.provider_name|url\.domain|http\.host|upstream\.(host|addr|address|cluster|service\.name)|(?:downstream|destination)\.service\.name|gen_ai\.(system|provider\.name))$/.test(
     name
   ) || /(^|\.)[a-z0-9]+(_[a-z0-9]+)*_(addr|address|url|host|endpoint)$/.test(name);
 
@@ -642,11 +647,18 @@ export const normalizeSubtype = (
 const DOCUMENT_ROW_KEYS_IGNORED = new Set(['count', 'traces', 'size', 'link', 'services']);
 
 /** Re-reads the source's own FROM target with METADATA _id to cite real documents behind an evidence row. */
+interface EmitterWitness {
+  window: string;
+  predicate: string;
+  checkedAt: number;
+}
+
 export const documentIdQuery = (
   sourceEsql: string,
   referenceQuery: string,
   row: Record<string, string>,
-  columns: ReadonlySet<string>
+  columns: ReadonlySet<string>,
+  emitter?: EmitterWitness
 ): string | undefined => {
   const match = /^\s*FROM\s+([^|]+?)\s*(\|[\s\S]*)?$/i.exec(sourceEsql);
   if (!match) return undefined;
@@ -656,6 +668,7 @@ export const documentIdQuery = (
   } else from = `${from} METADATA _id`;
   const rest = match[2]?.trim();
   const window =
+    emitter?.window ??
     /WHERE `@timestamp` >= NOW\(\) - \d+ minutes(?: AND `@timestamp` < NOW\(\) - \d+ minutes)?/.exec(
       referenceQuery
     )?.[0];
@@ -673,6 +686,13 @@ export const documentIdQuery = (
     )
     .slice(0, 6)
     .map(([key, value]) => `TO_STRING(${field(key)}) == ${JSON.stringify(value)}`);
+  if (emitter) {
+    const at = `TO_DATETIME(${JSON.stringify(new Date(emitter.checkedAt).toISOString())})`;
+    return `FROM ${from}${rest ? ` ${rest}` : ''} | ${window.replaceAll(
+      'NOW()',
+      at
+    )} AND \`@timestamp\` <= ${at} | WHERE ${emitter.predicate} | KEEP _id | LIMIT 3`;
+  }
   if (!conditions.length) return undefined;
   return `FROM ${from}${rest ? ` ${rest}` : ''} | ${window} | WHERE ${conditions.join(
     ' AND '
@@ -935,6 +955,7 @@ export class ExplorationToolSession {
       query: string;
       checkedAt: number;
       raw?: { columns: estypes.EsqlEsqlColumnInfo[]; values: estypes.FieldValue[] };
+      emitter?: EmitterWitness;
     }
   >();
   private infrastructureInventories = new Map<
@@ -1173,6 +1194,7 @@ export class ExplorationToolSession {
   }
 
   private documentIdsByReference = new Map<string, string[]>();
+  readonly observedPeerLinks = new Map<string, DirectedPeer>();
   private firstLookSources = new Set<string>();
   private emissionInventories = new Set<string>();
   private currentEmitters = new Map<
@@ -1227,11 +1249,40 @@ export class ExplorationToolSession {
     const log = sourceLogExpression([...columns]);
     const triage =
       levels.length > 0 && Boolean(log) && !args.endOffsetMinutes && args.lookbackMinutes <= 3;
+    const currentLog =
+      source.type === 'logs' && !args.endOffsetMinutes && args.lookbackMinutes <= 3;
+    const structuredStatus = [
+      'http.response.status_code',
+      'attributes.http.response.status_code',
+      'http.status_code',
+      'attributes.http.status_code',
+    ].filter((name) => columns.has(name));
+    // Parsing access lines is only warranted for a window inside the measured low-volume budget.
+    const parseAccess =
+      currentLog &&
+      !!log &&
+      (this.exceptionWindowMinutes.get(source.id) ?? 0) >= args.lookbackMinutes;
+    const http = currentLog && (structuredStatus.length > 0 || parseAccess);
+    const statusFields = structuredStatus.map((name) => `TO_INTEGER(${field(name)})`);
+    if (parseAccess)
+      statusFields.push(
+        'CASE(ns_access_method IN ("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "CONNECT", "TRACE") AND ns_access_code RLIKE "[1-5][0-9]{2}", TO_INTEGER(ns_access_code))'
+      );
+    const gatherStatus = http
+      ? (parseAccess
+          ? `| DISSECT ${log} """%{}"%{ns_access_method} %{} HTTP/%{}" %{ns_access_code} %{}""" `
+          : '') +
+        `| EVAL ns_http_status=${
+          statusFields.length === 1 ? statusFields[0] : `COALESCE(${statusFields.join(', ')})`
+        } `
+      : '';
     const censusWindow = sourceTimeWindow(args.lookbackMinutes, args.endOffsetMinutes);
-    const lookback = triage
-      ? Math.max(args.lookbackMinutes, this.exceptionWindowMinutes.get(source.id) ?? 0)
-      : args.lookbackMinutes;
-    const recent = triage ? ` WHERE @timestamp >= NOW() - ${args.lookbackMinutes} minutes` : '';
+    const lookback =
+      triage || http
+        ? Math.max(args.lookbackMinutes, this.exceptionWindowMinutes.get(source.id) ?? 0)
+        : args.lookbackMinutes;
+    const recent =
+      triage || http ? ` WHERE @timestamp >= NOW() - ${args.lookbackMinutes} minutes` : '';
     const exceptionStats = triage
       ? [
           ['warning', '"warn", "warning"'],
@@ -1246,10 +1297,19 @@ export class ExplorationToolSession {
         })
       : [];
     const query = `FROM ${source.view_name} | ${
-      triage ? sourceTimeWindow(lookback, 0) : censusWindow
-    } ${triage ? `| EVAL level=TO_LOWER(TO_STRING(${expression(levels)})) ` : ''}| STATS ${[
+      triage || http ? sourceTimeWindow(lookback, 0) : censusWindow
+    } ${
+      triage ? `| EVAL level=TO_LOWER(TO_STRING(${expression(levels)})) ` : ''
+    }${gatherStatus}| STATS ${[
       `count=COUNT(*)${recent}`,
       ...exceptionStats,
+      ...(http
+        ? [
+            'http_responses=COUNT(*) WHERE ns_http_status >= 100 AND ns_http_status < 600',
+            'http_5xx=COUNT(*) WHERE ns_http_status >= 500 AND ns_http_status < 600',
+            'latest_http_5xx=MAX(@timestamp) WHERE ns_http_status >= 500 AND ns_http_status < 600',
+          ]
+        : []),
     ].join(', ')} BY service_name=${expression(services)}${
       namespaces.length ? `, namespace=${expression(namespaces)}` : ''
     } | WHERE service_name IS NOT NULL AND count > 0 | SORT count ASC, service_name ASC | LIMIT 201`;
@@ -1274,6 +1334,24 @@ export class ExplorationToolSession {
     for (const [index, row] of rows.slice(0, 200).entries()) {
       const identity = rowIdentity(row);
       if (!identity.name) continue;
+      // The inventory projects service_name/namespace aliases. Resolve document witnesses
+      // with the identical mapped grouping expressions and the original census interval.
+      const reference = this.references.get(refs[index]);
+      if (reference) {
+        const conditions = [`${expression(services)} == ${JSON.stringify(identity.name)}`];
+        if (namespaces.length) {
+          conditions.push(
+            row.namespace
+              ? `${expression(namespaces)} == ${JSON.stringify(row.namespace)}`
+              : `${expression(namespaces)} IS NULL`
+          );
+        }
+        reference.emitter = {
+          window: censusWindow,
+          predicate: conditions.join(' AND '),
+          checkedAt: reference.checkedAt,
+        };
+      }
       observed.add(identity.name);
       if (!args.endOffsetMinutes && args.lookbackMinutes <= 3) {
         this.currentEmitters.set(JSON.stringify([source.id, identity.name, identity.namespace]), {
@@ -1289,6 +1367,11 @@ export class ExplorationToolSession {
     return {
       window: { lookbackMinutes: args.lookbackMinutes, endOffsetMinutes: args.endOffsetMinutes },
       query,
+      ...(http && {
+        httpOutcomeLookbackMinutes: lookback,
+        httpOutcomeNote:
+          'HTTP response observations include structured status codes and, when the measured volume permits, standard HTTP access lines. Check even sparse 5xx records against the same operation in an ordinary window. Retries, duplicate logging and non-access logs limit denominator and cause claims.',
+      }),
       ...(triage && {
         exceptionLookbackMinutes: lookback,
         interpretation:
@@ -1336,7 +1419,13 @@ export class ExplorationToolSession {
         const reference = this.references.get(ref);
         if (reference?.row._id) found = [reference.row._id];
         else if (reference) {
-          const query = documentIdQuery(source.esql, reference.query, reference.row, columns);
+          const query = documentIdQuery(
+            source.esql,
+            reference.query,
+            reference.row,
+            columns,
+            reference.emitter
+          );
           if (query)
             try {
               const response = await this.clients.streamDataEsClient.esql.query(
@@ -1368,7 +1457,7 @@ export class ExplorationToolSession {
     columns: string[],
     fields: string[],
     args: z.infer<typeof sourceQuerySchema>,
-    guidance: { noFields: string; found: string; empty: string }
+    guidance: { noFields: string; found: string; empty: string; collectPeers?: boolean }
   ): Promise<object> {
     if (!fields.length)
       return { sourceId: source.id, fields: [], records: [], nextAction: guidance.noFields };
@@ -1408,6 +1497,23 @@ export class ExplorationToolSession {
     for (const [service, language] of languagesFromRows(rows))
       if (!reported.has(service)) reported.set(service, language);
     this.reportedLanguages.set(source.id, reported);
+    if (guidance.collectPeers) {
+      const emitters = (this.observations.get(source.id) ?? []).map(rowIdentity);
+      for (const [i, row] of rows.slice(args.offset, args.offset + args.maxRows).entries()) {
+        for (const peer of directedPeers(row, emitters, source.id, rowRefs[args.offset + i])) {
+          this.observedPeerLinks.set(
+            JSON.stringify([
+              source.id,
+              peer.source,
+              peer.sourceNamespace,
+              peer.target,
+              peer.targetNamespace,
+            ]),
+            peer
+          );
+        }
+      }
+    }
     const nextOffset = args.offset + args.maxRows;
     return {
       sourceId: source.id,
@@ -2261,10 +2367,11 @@ export class ExplorationToolSession {
                 'No populated SDK/runtime/language values in this interval and scope. Rotate the time stratum or inspect startup/error samples before concluding technologies are unobservable.',
             }
           : {
+              collectPeers: true,
               noFields:
                 'No structured peer/destination/provider fields are mapped in this interval. Use trace_links, relationships and samples sampleKind=dependencies, and enumerate target keys inside message bodies.',
               found:
-                'Each record is an emitting service with the populated peer-side fields its own logs name (peer.service, server.address, db.system, messaging.*, rpc.*, feature_flag.provider.name, url.domain...). A caller naming a component in these fields supports a directed dependency caller -> component; resolve addresses to known services only when the host part names that service. Save dependency KIs with evidence_refs, protocol and endpoint from the observed fields.',
+                'Each record is an emitting service with the populated peer-side fields its own logs name (peer.service, server.address, db.system, messaging.*, rpc.*, feature_flag.provider.name, url.domain...). A named outbound destination can support a directed dependency. A listening address, SDK provider or database engine alone does not identify a remote call. Resolve addresses to observed services and check direction. Save dependency KIs with evidence_refs, protocol and endpoint from the observed fields.',
               empty:
                 'No populated peer/destination/provider values in this interval and scope. Rotate the time stratum, try trace_links, or inspect message bodies before concluding dependencies are unobservable.',
             }
